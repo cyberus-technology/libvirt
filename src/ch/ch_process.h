@@ -23,6 +23,9 @@
 #include "ch_conf.h"
 #include "internal.h"
 
+int virCHProcessInit(virCHDriver *driver,
+                     virDomainObj *vm);
+
 int virCHProcessStart(virCHDriver *driver,
                       virDomainObj *vm,
                       virDomainRunningReason reason);
@@ -35,3 +38,6 @@ int virCHProcessStartRestore(virCHDriver *driver,
                          const char *from);
 
 int virCHProcessUpdateInfo(virDomainObj *vm);
+
+int virCHProcessInitNetwork(virCHDriver *driver,
+                            virDomainObj *vm);
