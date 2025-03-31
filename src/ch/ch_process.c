@@ -135,6 +135,7 @@ int
 virCHProcessUpdateInfo(virDomainObj *vm)
 {
     g_autoptr(virJSONValue) info = NULL;
+
     virCHDomainObjPrivate *priv = vm->privateData;
     if (virCHMonitorGetInfo(priv->monitor, &info) < 0)
         return -1;
@@ -654,8 +655,10 @@ chProcessAddNetworkDevices(virCHDriver *driver,
         return -1;
     }
 
-    if ((mon_sockfd = chMonitorSocketConnect(mon)) < 0)
+    if ((mon_sockfd = chMonitorSocketConnect(mon)) < 0) {
+        VIR_WARN("chProcessAddNetworkDevices failed");
         return -1;
+    }
 
     virBufferAddLit(&http_headers, "PUT /api/v1/vm.add-net HTTP/1.1\r\n");
     virBufferAddLit(&http_headers, "Host: localhost\r\n");
@@ -681,6 +684,7 @@ chProcessAddNetworkDevices(virCHDriver *driver,
         if (virCHDomainValidateActualNetDef(vmdef->nets[i]) < 0) {
             virReportError(VIR_ERR_INTERNAL_ERROR, "%s",
                            _("net definition failed validation"));
+            VIR_WARN("virCHDomainValidateActualNetDef failed.");
             return -1;
         }
 
@@ -689,12 +693,15 @@ chProcessAddNetworkDevices(virCHDriver *driver,
 
         /* Connect Guest interfaces */
         if (virCHConnetNetworkInterfaces(driver, vmdef, vmdef->nets[i], tapfds,
-                                         nicindexes, nnicindexes) < 0)
+                                         nicindexes, nnicindexes) < 0) {
+            VIR_WARN("chProcessAddNetworkDevices failed.");
             return -1;
+        }
 
         if (virCHMonitorBuildNetJson(vmdef->nets[i], i, &payload) < 0) {
             virReportError(VIR_ERR_INTERNAL_ERROR, "%s",
                            _("Failed to build net json"));
+            VIR_WARN("virCHMonitorBuildNetJson failed.");
             return -1;
         }
 
@@ -890,6 +897,122 @@ virCHProcessPrepareDomain(virDomainObj *vm)
         return -1;
 
     return 0;
+}
+
+int virCHProcessInitNetwork(virCHDriver *driver,
+                            virDomainObj *vm)
+{
+    int ret = -1;
+    virCHDomainObjPrivate *priv = vm->privateData;
+    g_autoptr(virCHDriverConfig) cfg = virCHDriverGetConfig(priv->driver);
+    g_autofree int *nicindexes = NULL;
+    size_t nnicindexes = 0;
+
+    if (chProcessAddNetworkDevices(driver, priv->monitor, vm->def,
+                                   &nicindexes, &nnicindexes) < 0) {
+        VIR_WARN("Failed chProcessAddNetworkDevices");
+        virReportError(VIR_ERR_INTERNAL_ERROR, "%s",
+                       _("Failed while adding guest interfaces"));
+        goto cleanup;
+    }
+
+    /* Bring up netdevs before starting CPUs */
+    if (virDomainInterfaceStartDevices(vm->def) < 0) {
+        VIR_WARN("Failed virDomainInterfaceStartDevices");
+        return -1;
+    }
+
+    return 0;
+
+ cleanup:
+
+    return ret;
+}
+
+/**
+ * A variant of virCHProcessStart that does not start the vCPU threads and the
+ * VM. Sets up the CH process along most configuration.
+ * Is used to setup CH in order to receive a live migration afterwards.
+ */
+int
+virCHProcessInit(virCHDriver *driver,
+                 virDomainObj *vm)
+{
+    int ret = -1;
+    virCHDomainObjPrivate *priv = vm->privateData;
+    g_autoptr(virCHDriverConfig) cfg = virCHDriverGetConfig(priv->driver);
+    g_autofree int *nicindexes = NULL;
+    size_t nnicindexes = 0;
+    g_autoptr(domainLogContext) logCtxt = NULL;
+    int logfile = -1;
+
+    if (virDomainObjIsActive(vm)) {
+        virReportError(VIR_ERR_OPERATION_INVALID, "%s",
+                       _("VM is already active"));
+        return -1;
+    }
+
+    if (virCHProcessStartValidate(driver, vm) < 0) {
+        return -1;
+    }
+
+    VIR_WARN("Creating domain log file for %s domain", vm->def->name);
+    if (!(logCtxt = domainLogContextNew(cfg->stdioLogD, cfg->logDir,
+                                        CH_DRIVER_NAME,
+                                        vm, driver->privileged,
+                                        vm->def->name))) {
+        virLastErrorPrefixMessage("%s", _("can't connect to virtlogd"));
+        return -1;
+    }
+    logfile = domainLogContextGetWriteFD(logCtxt);
+
+    if (virCHProcessPrepareDomain(vm) < 0) {
+        return -1;
+    }
+
+    if (virCHProcessPrepareHost(driver, vm) < 0)
+        return -1;
+
+    if (!priv->monitor) {
+        /* And we can get the first monitor connection now too */
+        if (!(priv->monitor = virCHProcessConnectMonitor(driver, vm, logfile))) {
+            virReportError(VIR_ERR_INTERNAL_ERROR, "%s",
+                           _("failed to create connection to CH socket"));
+            goto cleanup;
+        }
+
+        if (virCHMonitorCreateVM(driver, priv->monitor) < 0) {
+            VIR_WARN("Failed virCHMonitorCreateVM");
+            virReportError(VIR_ERR_INTERNAL_ERROR, "%s",
+                           _("failed to create guest VM"));
+            goto cleanup;
+        }
+    }
+
+    vm->def->id = vm->pid;
+    priv->machineName = virCHDomainGetMachineName(vm);
+
+    if (virDomainCgroupSetupCgroup("ch", vm,
+                                   nnicindexes, nicindexes,
+                                   &priv->cgroup,
+                                   cfg->cgroupControllers,
+                                   0, /*maxThreadsPerProc*/
+                                   priv->driver->privileged,
+                                   priv->machineName) < 0)
+    {
+        VIR_WARN("Failed virDomainCgroupSetupCgroup");
+        goto cleanup;
+    }
+
+    virDomainObjSetState(vm, VIR_DOMAIN_PAUSED, VIR_DOMAIN_PAUSED_MIGRATION);
+
+    return 0;
+
+ cleanup:
+    if (ret)
+        virCHProcessStop(driver, vm, VIR_DOMAIN_SHUTOFF_FAILED);
+
+    return ret;
 }
 
 /**

@@ -507,6 +507,7 @@ virCHMonitorBuildVMJson(virCHDriver *driver, virDomainDef *vmdef,
     if (!(*jsonstr = virJSONValueToString(content, false)))
         return -1;
 
+    VIR_DEBUG("Build VM JSON: \n %s \n", *jsonstr);
     return 0;
 }
 
@@ -642,6 +643,8 @@ virCHMonitorNew(virDomainObj *vm, virCHDriverConfig *cfg, int logfile)
                              _("Cannot create monitor FIFO"));
         return NULL;
     }
+
+    VIR_DEBUG("Start emulator with cmd: %s", vm->def->emulator);
 
     cmd = virCommandNew(vm->def->emulator);
     virCommandSetOutputFD(cmd, &logfile);
@@ -1112,6 +1115,159 @@ virCHMonitorSaveVM(virCHMonitor *mon,
         data.content = g_realloc(data.content, data.size + 1);
         data.content[data.size] = 0;
         virReportError(VIR_ERR_INTERNAL_ERROR, "%s",
+                       data.content);
+        g_free(data.content);
+    }
+
+    /* reset the libcurl handle to avoid leaking a stack pointer to data */
+    curl_easy_reset(mon->handle);
+    curl_slist_free_all(headers);
+    return ret;
+}
+
+int virCHMonitorRemoveDevice(virCHMonitor *mon,
+                             const char* device_id)
+{
+    g_autofree char *url = NULL;
+    int responseCode = 0;
+    int ret = -1;
+    g_autofree char *payload = NULL;
+    struct curl_slist *headers = NULL;
+    struct curl_data data = {0};
+
+    url = g_strdup_printf("%s/%s", URL_ROOT, URL_VM_REMOVE_DEVICE);
+
+    headers = curl_slist_append(headers, "Accept: application/json");
+    headers = curl_slist_append(headers, "Content-Type: application/json");
+
+    if (virCHMonitorBuildKeyValueStringJson(&payload, "id", device_id) != 0)
+        return -1;
+
+    VIR_DEBUG("Remove device id %s json %s", device_id, payload);
+
+    VIR_WITH_OBJECT_LOCK_GUARD(mon) {
+        /* reset all options of a libcurl session handle at first */
+        curl_easy_reset(mon->handle);
+
+        curl_easy_setopt(mon->handle, CURLOPT_UNIX_SOCKET_PATH, mon->socketpath);
+        curl_easy_setopt(mon->handle, CURLOPT_URL, url);
+        curl_easy_setopt(mon->handle, CURLOPT_CUSTOMREQUEST, "PUT");
+        curl_easy_setopt(mon->handle, CURLOPT_HTTPHEADER, headers);
+        curl_easy_setopt(mon->handle, CURLOPT_POSTFIELDS, payload);
+        curl_easy_setopt(mon->handle, CURLOPT_WRITEFUNCTION, curl_callback);
+        curl_easy_setopt(mon->handle, CURLOPT_WRITEDATA, (void *)&data);
+
+        responseCode = virCHMonitorCurlPerform(mon->handle);
+    }
+
+    if (responseCode == 200 || responseCode == 204) {
+        ret = 0;
+    } else {
+        data.content = g_realloc(data.content, data.size + 1);
+        data.content[data.size] = 0;
+        virReportError(VIR_ERR_INTERNAL_ERROR, "%s",
+                       data.content);
+        g_free(data.content);
+    }
+
+    /* reset the libcurl handle to avoid leaking a stack pointer to data */
+    curl_easy_reset(mon->handle);
+    curl_slist_free_all(headers);
+    return ret;
+}
+
+int virCHMonitorMigrationSend(virCHMonitor *mon,
+                              const char *dst_uri)
+{
+    g_autofree char *url = NULL;
+    int responseCode = 0;
+    int ret = -1;
+    g_autofree char *payload = NULL;
+    struct curl_slist *headers = NULL;
+    struct curl_data data = {0};
+
+    url = g_strdup_printf("%s/%s", URL_ROOT, URL_VM_SEND_MIGRATION);
+
+    headers = curl_slist_append(headers, "Accept: application/json");
+    headers = curl_slist_append(headers, "Content-Type: application/json");
+
+    if (virCHMonitorBuildKeyValueStringJson(&payload, "destination_url", dst_uri) != 0)
+        return -1;
+
+    VIR_DEBUG("Send VM to url %s json %s", dst_uri, payload);
+
+    VIR_WITH_OBJECT_LOCK_GUARD(mon) {
+        /* reset all options of a libcurl session handle at first */
+        curl_easy_reset(mon->handle);
+
+        curl_easy_setopt(mon->handle, CURLOPT_UNIX_SOCKET_PATH, mon->socketpath);
+        curl_easy_setopt(mon->handle, CURLOPT_URL, url);
+        curl_easy_setopt(mon->handle, CURLOPT_CUSTOMREQUEST, "PUT");
+        curl_easy_setopt(mon->handle, CURLOPT_HTTPHEADER, headers);
+        curl_easy_setopt(mon->handle, CURLOPT_POSTFIELDS, payload);
+        curl_easy_setopt(mon->handle, CURLOPT_WRITEFUNCTION, curl_callback);
+        curl_easy_setopt(mon->handle, CURLOPT_WRITEDATA, (void *)&data);
+
+        responseCode = virCHMonitorCurlPerform(mon->handle);
+    }
+
+    if (responseCode == 200 || responseCode == 204) {
+        ret = 0;
+    } else {
+        data.content = g_realloc(data.content, data.size + 1);
+        data.content[data.size] = 0;
+        virReportError(VIR_ERR_INTERNAL_ERROR, _("Error sending VM: '%1$s'"),
+                       data.content);
+        g_free(data.content);
+    }
+
+    /* reset the libcurl handle to avoid leaking a stack pointer to data */
+    curl_easy_reset(mon->handle);
+    curl_slist_free_all(headers);
+    return ret;
+}
+
+int virCHMonitorMigrationReceive(virCHMonitor *mon,
+                                 const char *rcv_uri)
+{
+    g_autofree char *url = NULL;
+    int responseCode = 0;
+    int ret = -1;
+    g_autofree char *payload = NULL;
+    struct curl_slist *headers = NULL;
+    struct curl_data data = {0};
+
+    url = g_strdup_printf("%s/%s", URL_ROOT, URL_VM_RECEIVE_MIGRATION);
+
+    headers = curl_slist_append(headers, "Accept: application/json");
+    headers = curl_slist_append(headers, "Content-Type: application/json");
+
+    if (virCHMonitorBuildKeyValueStringJson(&payload, "receiver_url", rcv_uri) != 0)
+        return -1;
+
+    VIR_DEBUG("Receive VM from url %s json: %s", rcv_uri, payload);
+
+    VIR_WITH_OBJECT_LOCK_GUARD(mon) {
+        /* reset all options of a libcurl session handle at first */
+        curl_easy_reset(mon->handle);
+
+        curl_easy_setopt(mon->handle, CURLOPT_UNIX_SOCKET_PATH, mon->socketpath);
+        curl_easy_setopt(mon->handle, CURLOPT_URL, url);
+        curl_easy_setopt(mon->handle, CURLOPT_CUSTOMREQUEST, "PUT");
+        curl_easy_setopt(mon->handle, CURLOPT_HTTPHEADER, headers);
+        curl_easy_setopt(mon->handle, CURLOPT_POSTFIELDS, payload);
+        curl_easy_setopt(mon->handle, CURLOPT_WRITEFUNCTION, curl_callback);
+        curl_easy_setopt(mon->handle, CURLOPT_WRITEDATA, (void *)&data);
+
+        responseCode = virCHMonitorCurlPerform(mon->handle);
+    }
+
+    if (responseCode == 200 || responseCode == 204) {
+        ret = 0;
+    } else {
+        data.content = g_realloc(data.content, data.size + 1);
+        data.content[data.size] = 0;
+        virReportError(VIR_ERR_INTERNAL_ERROR, _("Error receiving VM: '%1$s'"),
                        data.content);
         g_free(data.content);
     }
