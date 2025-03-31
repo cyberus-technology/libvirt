@@ -25,6 +25,7 @@
 #include "virchrdev.h"
 #include "vircgroup.h"
 #include "virdomainjob.h"
+#include "virthread.h"
 
 
 typedef struct _virCHDomainObjPrivate virCHDomainObjPrivate;
@@ -32,6 +33,7 @@ struct _virCHDomainObjPrivate {
     virChrdevs *chrdevs;
     virCHDriver *driver;
     virCHMonitor *monitor;
+    virThread *migrationDstReceiveThr;
     char *machineName;
     virBitmap *autoCpuset;
     virBitmap *autoNodeset;
