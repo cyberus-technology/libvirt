@@ -40,6 +40,9 @@
 #define URL_VM_INFO "vm.info"
 #define URL_VM_SAVE "vm.snapshot"
 #define URL_VM_RESTORE "vm.restore"
+#define URL_VM_RECEIVE_MIGRATION "vm.receive-migration"
+#define URL_VM_SEND_MIGRATION "vm.send-migration"
+#define URL_VM_REMOVE_DEVICE "vm.remove-device"
 
 #define VIRCH_THREAD_NAME_LEN   16
 
@@ -128,6 +131,11 @@ int virCHMonitorSuspendVM(virCHMonitor *mon);
 int virCHMonitorResumeVM(virCHMonitor *mon);
 int virCHMonitorSaveVM(virCHMonitor *mon,
                        const char *to);
+int virCHMonitorMigrationSend(virCHMonitor *mon,
+                              const char *dst_uri);
+int virCHMonitorMigrationReceive(virCHMonitor *mon,
+                                 const char *rcv_uri);
+int virCHMonitorRemoveDevice(virCHMonitor *mon, const char* device_id);
 int virCHMonitorGetInfo(virCHMonitor *mon, virJSONValue **info);
 
 size_t virCHMonitorGetThreadInfo(virCHMonitor *mon, bool refresh,
