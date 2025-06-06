@@ -149,3 +149,6 @@ virCHMonitorBuildNetJson(virDomainNetDef *netdef,
 int virCHMonitorBuildRestoreJson(virDomainDef *vmdef,
                                  const char *from,
                                  char **jsonstr);
+int
+virCHMonitorPut(virCHMonitor *mon, const char *endpoint,
+                const char *payload, domainLogContext *logCtxt);
