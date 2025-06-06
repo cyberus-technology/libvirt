@@ -2731,6 +2731,56 @@ chDomainMigrateConfirm3(virDomainPtr domain,
     return 0;
 }
 
+static int
+chDomainAttachDeviceLiveAndConfig(virDomainObj *,
+                                  virCHDriver *,
+                                  const char *,
+                                  unsigned int)
+{
+    return -1;
+}
+
+static int
+chDomainAttachDeviceFlags(virDomainPtr dom,
+                          const char *xml,
+                          unsigned int flags)
+{
+    virCHDriver *driver = dom->conn->privateData;
+    virDomainObj *vm = NULL;
+    int ret = -1;
+
+    if (!(vm = virCHDomainObjFromDomain(dom)))
+        goto cleanup;
+
+    if (virDomainAttachDeviceFlagsEnsureACL(dom->conn, vm->def, flags) < 0)
+        goto cleanup;
+
+    if (virDomainObjBeginJob(vm, VIR_JOB_MODIFY) < 0)
+        goto cleanup;
+
+    if (virDomainObjUpdateModificationImpact(vm, &flags) < 0)
+        goto endjob;
+
+    if (chDomainAttachDeviceLiveAndConfig(vm, driver, xml, flags) < 0)
+        goto endjob;
+
+    ret = 0;
+
+ endjob:
+    virDomainObjEndJob(vm);
+
+ cleanup:
+    virDomainObjEndAPI(&vm);
+    return ret;
+}
+
+static int
+chDomainAttachDevice(virDomainPtr dom,
+                     const char *xml)
+{
+    return chDomainAttachDeviceFlags(dom, xml, VIR_DOMAIN_AFFECT_LIVE);
+}
+
 /* Function Tables */
 static virHypervisorDriver chHypervisorDriver = {
     .name = "CH",
@@ -2797,6 +2847,8 @@ static virHypervisorDriver chHypervisorDriver = {
     .domainMigratePerform3 = chDomainMigratePerform3, /* 11.4.0 */
     .domainMigrateFinish3 = chDomainMigrateFinish3, /* 11.4.0 */
     .domainMigrateConfirm3 = chDomainMigrateConfirm3, /* 11.4.0 */
+    .domainAttachDevice = chDomainAttachDevice, /* 11.4.0 */
+    .domainAttachDeviceFlags = chDomainAttachDeviceFlags, /* 11.4.0 */
 };
 
 static virConnectDriver chConnectDriver = {
