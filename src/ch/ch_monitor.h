@@ -43,6 +43,7 @@
 #define URL_VM_RECEIVE_MIGRATION "vm.receive-migration"
 #define URL_VM_SEND_MIGRATION "vm.send-migration"
 #define URL_VM_REMOVE_DEVICE "vm.remove-device"
+#define URL_VM_ADD_DISK "vm.add-disk"
 
 #define VIRCH_THREAD_NAME_LEN   16
 
@@ -143,12 +144,15 @@ size_t virCHMonitorGetThreadInfo(virCHMonitor *mon, bool refresh,
 int virCHMonitorGetIOThreads(virCHMonitor *mon,
                              virDomainIOThreadInfo ***iothreads);
 int
+virCHMonitorBuildDiskJson(virJSONValue *disks, virDomainDiskDef *diskdef);
+
+int
 virCHMonitorBuildNetJson(virDomainNetDef *netdef,
                          int netindex,
                          char **jsonstr);
 int virCHMonitorBuildRestoreJson(virDomainDef *vmdef,
                                  const char *from,
                                  char **jsonstr);
-int
+virJSONValue*
 virCHMonitorPut(virCHMonitor *mon, const char *endpoint,
                 const char *payload, domainLogContext *logCtxt);

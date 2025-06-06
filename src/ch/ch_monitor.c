@@ -234,7 +234,7 @@ virCHMonitorBuildMemoryJson(virJSONValue *content, virDomainDef *vmdef)
     return 0;
 }
 
-static int
+int
 virCHMonitorBuildDiskJson(virJSONValue *disks, virDomainDiskDef *diskdef)
 {
     g_autoptr(virJSONValue) disk = virJSONValueNewObject();
@@ -850,6 +850,9 @@ virCHMonitorPutNoContent(virCHMonitor *mon, const char *endpoint,
         domainLogContextWrite(logCtxt, "HTTP response code from CH: %d\n", responseCode);
         domainLogContextWrite(logCtxt, "Response = %s\n", data.content);
     }
+    data.content = g_realloc(data.content, data.size + 1);
+    data.content[data.size] = 0;
+    VIR_WARN("HTTP Response: %s", data.content);
 
     if (responseCode == 200 || responseCode == 204)
         ret = 0;
@@ -859,14 +862,14 @@ virCHMonitorPutNoContent(virCHMonitor *mon, const char *endpoint,
     return ret;
 }
 
-int
+virJSONValue*
 virCHMonitorPut(virCHMonitor *mon, const char *endpoint,
                 const char *payload, domainLogContext *logCtxt)
 {
     VIR_LOCK_GUARD lock = virObjectLockGuard(mon);
     g_autofree char *url = NULL;
+    virJSONValue *retJson = NULL;
     int responseCode = 0;
-    int ret = -1;
     struct curl_data data = {0};
     struct curl_slist *headers = NULL;
 
@@ -891,20 +894,25 @@ virCHMonitorPut(virCHMonitor *mon, const char *endpoint,
 
     responseCode = virCHMonitorCurlPerform(mon->handle);
 
+    data.content = g_realloc(data.content, data.size + 1);
+    data.content[data.size] = 0;
+
+    VIR_WARN("Reponse code from CH: %d\n", responseCode);
+    VIR_WARN("HTTP Response: %s", data.content);
+    retJson = virJSONValueFromString(data.content);
+
     if (logCtxt && data.size) {
         /* Do this to append a NULL char at the end of data */
-        data.content = g_realloc(data.content, data.size + 1);
-        data.content[data.size] = 0;
         domainLogContextWrite(logCtxt, "HTTP response code from CH: %d\n", responseCode);
         domainLogContextWrite(logCtxt, "Response = %s\n", data.content);
     }
 
-    if (responseCode == 200 || responseCode == 204)
-        ret = 0;
-
     curl_slist_free_all(headers);
 
-    return ret;
+    if (responseCode != 200 && responseCode != 204)
+        return NULL;
+
+    return retJson;
 }
 
 static int
