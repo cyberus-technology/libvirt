@@ -2465,11 +2465,6 @@ chMigrationAnyPrepareDef(virCHDriver *driver,
     return def;
 }
 
-typedef struct _chMigrationDstArgs {
-    unsigned int port;
-    virCHDomainObjPrivate *priv;
-} chMigrationDstArgs;
-
 static void
 chDoMigrateDstReceive(void *opaque)
 {
@@ -2477,18 +2472,18 @@ chDoMigrateDstReceive(void *opaque)
     virCHDomainObjPrivate *priv = args->priv;
     g_autofree char* rcv_uri = NULL;
 
-    VIR_DEBUG("In thread. %u %p", args->port, args->priv);
+    VIR_WARN("In thread. %u %p %p %p", args->port, args->priv, args->def, args->driver);
     if (!priv->monitor) {
         VIR_ERROR(_("VMs monitor not initialized"));
     }
 
     rcv_uri = g_strdup_printf("tcp:0.0.0.0:%d", args->port);
 
-    if (virCHMonitorMigrationReceive(priv->monitor, rcv_uri) < 0) {
+    if (virCHMonitorMigrationReceive(priv->monitor, rcv_uri, args->def, args->driver, &args->cond) < 0) {
         VIR_WARN("Migration receive failed.");
     }
 
-    VIR_DEBUG("Migration thread finished its duty");
+    VIR_WARN("Migration thread finished its duty");
 }
 
 /**
@@ -2516,11 +2511,12 @@ chDomainMigratePrepare3(virConnectPtr dconn,
     unsigned short port = 0;
     g_autofree char *hostname = NULL;
     const char *threadname = "mig-ch";
-    g_autoptr(virDomainDef) def = NULL;
+    virDomainDef *def = NULL;
+    g_autoptr(virDomainDef) vmdef = NULL;
     int rc = 0;
     const char *incFormat = "%s:%s:%d"; // seems to differ for AF_INET6
 
-    VIR_INFO("chDomainMigratePrepare3 %p %s %u %p %p %s %p %lu %s %s",
+    VIR_WARN("chDomainMigratePrepare3 %p %s %u %p %p %s %p %lu %s %s",
               dconn, cookiein, cookieinlen, cookieout, cookieoutlen, uri_in, uri_out, flags, dname, dom_xml);
 
     if (virDomainMigratePrepare3EnsureACL(dconn, def) < 0)
@@ -2562,10 +2558,25 @@ chDomainMigratePrepare3(virConnectPtr dconn,
         goto cleanup;
     }
 
-    VIR_DEBUG("Try creating migration thread");
+    // VIR_WARN("dom_xml %s", dom_xml);
+    // if ((vmdef = virDomainDefParseString(dom_xml, driver->xmlopt,
+    //                                     NULL, VIR_DOMAIN_DEF_PARSE_INACTIVE)) == NULL)
+    //     goto cleanup;
+
+    VIR_WARN("Try creating migration thread %p %p %p", priv, vm->def, driver);
+
+    if (virMutexInit(&args->mutex) < 0)
+        VIR_WARN("MutexInit failed");
+
+    if (virCondInit(&args->cond) < 0)
+        VIR_WARN("MutexInit failed");
+
     priv = vm->privateData;
+    priv->args = args;
     args->port = port;
     args->priv = priv;
+    args->def = vm->def;
+    args->driver = driver;
 
     // VM receiving is blocking which we cannot do here, because it would block
     // the Libvirt migration protocol.
@@ -2582,10 +2593,13 @@ chDomainMigratePrepare3(virConnectPtr dconn,
         goto cleanup;
     }
 
-    VIR_DEBUG("Finished creating migration thread");
+    VIR_WARN("Finished creating migration thread");
+    // usleep(1000);
+    if (virCondWait(&args->cond, &args->mutex) < 0) {
+        VIR_WARN("CondWait returned failure. Keep going.");
+    }
 
-
-    VIR_DEBUG("Fin migrationPrepare");
+    VIR_WARN("Fin migrationPrepare");
 
 
  cleanup:
@@ -2606,9 +2620,7 @@ chDomainMigratePerform3(virDomainPtr dom,
                         const char *dname,
                         unsigned long resource)
 {
-    size_t i;
     virDomainObj *vm;
-    g_autoptr(virCHDriverConfig) cfg = virCHDriverGetConfig(dom->conn->privateData);
     virCHDomainObjPrivate *priv = NULL;
     g_autofree char *id = g_strdup_printf("bla");
     VIR_INFO("chDomainMigratePerform3 %p %s %s %u %p %p %s %s %lu %s %lu",
@@ -2626,21 +2638,6 @@ chDomainMigratePerform3(virDomainPtr dom,
 
     if (virDomainMigratePerform3EnsureACL(dom->conn, vm->def) < 0) {
         goto cleanup;
-    }
-
-    // Net device id hardcoded currently
-    // We need to remove network devices from the VM before live migration.
-    // Libvirt pre-allocates network devices and passes only the FD to CHV. CHV
-    // is not able to migrate those devices.
-    // See following CHV issue: https://github.com/cloud-hypervisor/cloud-hypervisor/issues/7054
-        /* de-activate netdevs after stopping vm */
-    ignore_value(virDomainInterfaceStopDevices(vm->def));
-    for (i = 0; i < vm->def->nnets; i++) {
-        virDomainInterfaceDeleteDevice(vm->def, vm->def->nets[i], false, cfg->stateDir);
-        id = g_strdup_printf("net_%lu", i);
-        if (virCHMonitorRemoveDevice(priv->monitor, id) < 0) {
-            VIR_WARN("Could not remove net device. Continue to migrate regardless.");
-        }
     }
 
     if (virCHMonitorMigrationSend(priv->monitor, uri) < 0) {
@@ -2668,6 +2665,7 @@ chDomainMigrateFinish3(virConnectPtr dconn,
     virCHDriver *driver = dconn->privateData;
     virDomainObj *vm = NULL;
     virDomainPtr dom = NULL;
+    virCHDomainObjPrivate *priv = NULL;
 
     VIR_INFO("chDomainMigrateFinish3 %p %s %s %d %p %p %lu %d",
               dconn, dname, cookiein, cookieinlen, cookieout, cookieoutlen, flags, cancelled);
@@ -2693,9 +2691,21 @@ chDomainMigrateFinish3(virConnectPtr dconn,
         VIR_WARN("Could not update console info. Consider that non-fatal.");
     }
 
-    if (virCHProcessInitNetwork(driver, vm) < 0) {
-        VIR_WARN("Could not updatenetwork info. Consider that non-fatal.");
+    priv = vm->privateData;
+    virThreadJoin(priv->migrationDstReceiveThr);
+    VIR_FREE(priv->migrationDstReceiveThr);
+
+    if (virPortAllocatorRelease(priv->args->port) < 0) {
+        VIR_WARN("Could not release migration port");
     }
+
+    virMutexDestroy(&priv->args->mutex);
+
+    if (virCondDestroy(&priv->args->cond) < 0) {
+        VIR_WARN("Failed to destroy migration condition variable");
+    }
+
+    VIR_FREE(priv->args);
 
     virDomainObjSetState(vm, VIR_DOMAIN_RUNNING, VIR_DOMAIN_RUNNING_MIGRATED);
 
@@ -2712,6 +2722,10 @@ chDomainMigrateConfirm3(virDomainPtr domain,
 {
     virCHDriver *driver = domain->conn->privateData;
     virObjectEvent *event = NULL;
+    // virObjectEvent *event = NULL;
+    g_autoptr(virCHDriverConfig) cfg = virCHDriverGetConfig(domain->conn->privateData);
+    // virCHDomainObjPrivate *priv = NULL;
+    // size_t i;
     virDomainObj *vm;
 
     VIR_INFO("chDomainMigrateConfirm3 %p %s %d %lu %d",
@@ -2720,18 +2734,26 @@ chDomainMigrateConfirm3(virDomainPtr domain,
     if (!(vm = virCHDomainObjFromDomain(domain)))
         return -1;
 
+    // priv = vm->privateData;
+
     if (virDomainMigrateConfirm3EnsureACL(domain->conn, vm->def) < 0) {
         virDomainObjEndAPI(&vm);
         return -1;
     }
 
-    // Code from chDestroyFlags
-    virDomainObjSetState(vm, VIR_DOMAIN_SHUTOFF, VIR_DOMAIN_SHUTOFF_MIGRATED);
-    virCHProcessStop(driver, vm, VIR_DOMAIN_SHUTOFF_DESTROYED);
-    virCHDomainRemoveInactive(driver, vm);
-    virDomainObjEndAPI(&vm);
+    virDomainObjEndJob(vm);
 
+    // Following call deletes network devices, cgroups and stops the cloud
+    // hypervisor process
+    virCHProcessStop(driver, vm, VIR_DOMAIN_SHUTOFF_MIGRATED);
+
+    virCHDomainRemoveInactive(driver, vm);
+
+    event = virDomainEventLifecycleNewFromObj(vm, VIR_DOMAIN_EVENT_STOPPED,
+                                              VIR_DOMAIN_EVENT_STOPPED_MIGRATED);
     virObjectEventStateQueue(driver->domainEventState, event);
+
+    virDomainObjEndAPI(&vm);
     return 0;
 }
 

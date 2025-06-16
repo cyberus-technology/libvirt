@@ -27,6 +27,7 @@ src/ch/ch_hostdev.c
 src/ch/ch_interface.c
 src/ch/ch_monitor.c
 src/ch/ch_process.c
+src/ch/ch_socket.c
 src/conf/backup_conf.c
 src/conf/capabilities.c
 src/conf/checkpoint_conf.c
