@@ -31,6 +31,7 @@
 #include "ch_events.h"
 #include "ch_interface.h"
 #include "ch_monitor.h"
+#include "ch_socket.h"
 #include "domain_interface.h"
 #include "viralloc.h"
 #include "vircommand.h"
@@ -1254,7 +1255,7 @@ int virCHMonitorMigrationSend(virCHMonitor *mon,
     if (virCHMonitorBuildKeyValueStringJson(&payload, "destination_url", dst_uri) != 0)
         return -1;
 
-    VIR_DEBUG("Send VM to url %s json %s", dst_uri, payload);
+    VIR_WARN("Send VM to url %s json %s", dst_uri, payload);
 
     VIR_WITH_OBJECT_LOCK_GUARD(mon) {
         /* reset all options of a libcurl session handle at first */
@@ -1287,55 +1288,176 @@ int virCHMonitorMigrationSend(virCHMonitor *mon,
     return ret;
 }
 
-int virCHMonitorMigrationReceive(virCHMonitor *mon,
-                                 const char *rcv_uri)
+// Copied from ch_process.c
+static int
+chMonitorSocketConnect(virCHMonitor *mon)
 {
-    g_autofree char *url = NULL;
-    int responseCode = 0;
-    int ret = -1;
+    struct sockaddr_un server_addr = { };
+    int sock;
+
+    sock = socket(AF_UNIX, SOCK_STREAM, 0);
+    if (sock < 0) {
+        virReportSystemError(errno, "%s", _("Failed to open a UNIX socket"));
+        return -1;
+    }
+
+    memset(&server_addr, 0, sizeof(server_addr));
+    server_addr.sun_family = AF_UNIX;
+    if (virStrcpyStatic(server_addr.sun_path, mon->socketpath) < 0) {
+        virReportError(VIR_ERR_INTERNAL_ERROR,
+                       _("UNIX socket path '%1$s' too long"),
+                       mon->socketpath);
+        goto error;
+    }
+
+    if (connect(sock, (struct sockaddr *)&server_addr,
+                sizeof(server_addr)) == -1) {
+        virReportSystemError(errno, "%s", _("Failed to connect to mon socket"));
+        goto error;
+    }
+
+    return sock;
+ error:
+    VIR_FORCE_CLOSE(sock);
+    return -1;
+}
+static int
+virCHRestoreCreateNetworkDevices(virCHDriver *driver,
+                                 virDomainDef *vmdef,
+                                 int **vmtapfds,
+                                 size_t *nvmtapfds,
+                                 int **nicindexes,
+                                 size_t *nnicindexes)
+{
+    size_t i, j;
+    size_t tapfd_len;
+    size_t index_vmtapfds;
+    for (i = 0; i < vmdef->nnets; i++) {
+        g_autofree int *tapfds = NULL;
+        tapfd_len = vmdef->nets[i]->driver.virtio.queues;
+        if (virCHDomainValidateActualNetDef(vmdef->nets[i]) < 0) {
+            virReportError(VIR_ERR_INTERNAL_ERROR, "%s",
+                           _("net definition failed validation"));
+            return -1;
+        }
+        tapfds = g_new0(int, tapfd_len);
+        memset(tapfds, -1, (tapfd_len) * sizeof(int));
+
+        /* Connect Guest interfaces */
+        if (virCHConnetNetworkInterfaces(driver, vmdef, vmdef->nets[i], tapfds,
+                                          nicindexes, nnicindexes) < 0)
+            return -1;
+
+        index_vmtapfds = *nvmtapfds;
+        VIR_EXPAND_N(*vmtapfds, *nvmtapfds, tapfd_len);
+        for (j = 0; j < tapfd_len; j++) {
+            VIR_APPEND_ELEMENT_INPLACE(*vmtapfds, index_vmtapfds, tapfds[j]);
+        }
+    }
+    return 0;
+}
+
+int virCHMonitorMigrationReceive(virCHMonitor *mon,
+                                 const char *rcv_uri,
+                                 virDomainDef *vmdef,
+                                 virCHDriver *driver,
+                                 virCond *cond)
+{
+    // int ret = 0;
+    size_t i = 0;
+    VIR_AUTOCLOSE mon_sockfd = -1;
     g_autofree char *payload = NULL;
-    struct curl_slist *headers = NULL;
-    struct curl_data data = {0};
+    g_autofree char *response = NULL;
+    g_autoptr(virJSONValue) content = virJSONValueNewObject();
+    g_autofree int *tapfds = NULL;
+    g_autofree int *nicindexes = NULL;
+    size_t ntapfds = 0;
+    size_t nnicindexes = 0;
+    g_auto(virBuffer) buf = VIR_BUFFER_INITIALIZER;
+    g_auto(virBuffer) http_headers = VIR_BUFFER_INITIALIZER;
+    size_t payload_len;
+    g_autoptr(virJSONValue) net_json = NULL;
+    g_autofree char *id = NULL;
 
-    url = g_strdup_printf("%s/%s", URL_ROOT, URL_VM_RECEIVE_MIGRATION);
+    VIR_WARN("In virCHMonitorMigrationReceive");
 
-    headers = curl_slist_append(headers, "Accept: application/json");
-    headers = curl_slist_append(headers, "Content-Type: application/json");
-
-    if (virCHMonitorBuildKeyValueStringJson(&payload, "receiver_url", rcv_uri) != 0)
+    if (virJSONValueObjectAppendString(content, "receiver_url", rcv_uri) < 0)
         return -1;
 
-    VIR_DEBUG("Receive VM from url %s json: %s", rcv_uri, payload);
+    /* Pass the netconfig needed to restore with new netfds */
+    if (vmdef->nnets) {
+        g_autoptr(virJSONValue) nets = virJSONValueNewArray();
+        for (i = 0; i < vmdef->nnets; i++) {
+            if (vmdef->nets[i]->driver.virtio.queues == 0) {
+                /* "queues" here refers to queue pairs. When 0, initialize
+                * queue pairs to 1.
+                */
+                vmdef->nets[i]->driver.virtio.queues = 1;
+            }
+            net_json = virJSONValueNewObject();
+            id = g_strdup_printf("%s_%zu", CH_NET_ID_PREFIX, i);
+            if (virJSONValueObjectAppendString(net_json, "id", id) < 0)
+                return -1;
+            if (virJSONValueObjectAppendNumberInt(net_json, "num_fds", vmdef->nets[i]->driver.virtio.queues))
+                return -1;
+            if (virJSONValueArrayAppend(nets, &net_json) < 0)
+                return -1;
+        }
+        if (virJSONValueObjectAppend(content, "net_fds", &nets))
+            return -1;
+    }
+    if (!(payload = virJSONValueToString(content, false)))
+        return -1;
 
-    VIR_WITH_OBJECT_LOCK_GUARD(mon) {
-        /* reset all options of a libcurl session handle at first */
-        curl_easy_reset(mon->handle);
+    VIR_WARN("Receive VM from url %s json: %s", rcv_uri, payload);
 
-        curl_easy_setopt(mon->handle, CURLOPT_UNIX_SOCKET_PATH, mon->socketpath);
-        curl_easy_setopt(mon->handle, CURLOPT_URL, url);
-        curl_easy_setopt(mon->handle, CURLOPT_CUSTOMREQUEST, "PUT");
-        curl_easy_setopt(mon->handle, CURLOPT_HTTPHEADER, headers);
-        curl_easy_setopt(mon->handle, CURLOPT_POSTFIELDS, payload);
-        curl_easy_setopt(mon->handle, CURLOPT_WRITEFUNCTION, curl_callback);
-        curl_easy_setopt(mon->handle, CURLOPT_WRITEDATA, (void *)&data);
-
-        responseCode = virCHMonitorCurlPerform(mon->handle);
+    if ((mon_sockfd = chMonitorSocketConnect(mon)) < 0) {
+        VIR_WARN("socket connect failed");
+        return -1;
     }
 
-    if (responseCode == 200 || responseCode == 204) {
-        ret = 0;
-    } else {
-        data.content = g_realloc(data.content, data.size + 1);
-        data.content[data.size] = 0;
-        virReportError(VIR_ERR_INTERNAL_ERROR, _("Error receiving VM: '%1$s'"),
-                       data.content);
-        g_free(data.content);
+    VIR_WARN("create network devices");
+    if (virCHRestoreCreateNetworkDevices(driver, vmdef, &tapfds, &ntapfds, &nicindexes, &nnicindexes) < 0) {
+        VIR_WARN("virCHRestoreCreateNetworkDevices failed");
+        return -1;
     }
 
-    /* reset the libcurl handle to avoid leaking a stack pointer to data */
-    curl_easy_reset(mon->handle);
-    curl_slist_free_all(headers);
-    return ret;
+    VIR_WARN("domain interface start devices");
+    /* Bring up netdevs before restoring vm */
+    if (virDomainInterfaceStartDevices(vmdef) < 0) {
+        VIR_WARN("virDomainInterfaceStartDevices failed");
+        return -1;
+    }
+
+    virBufferAddLit(&http_headers, "PUT /api/v1/vm.receive-migration HTTP/1.1\r\n");
+    virBufferAddLit(&http_headers, "Host: localhost\r\n");
+    virBufferAddLit(&http_headers, "Content-Type: application/json\r\n");
+    virBufferAsprintf(&buf, "%s", virBufferCurrentContent(&http_headers));
+    virBufferAsprintf(&buf, "Content-Length: %zu\r\n\r\n", strlen(payload));
+    virBufferAsprintf(&buf, "%s", payload);
+    payload_len = virBufferUse(&buf);
+    payload = virBufferContentAndReset(&buf);
+
+    // We setup all the network devices and stuff, so let the main thread
+    // continue Main thread will leave the chDomainMigratePrepare3 function so
+    // that the migration protocol can continue.
+    virCondSignal(cond);
+
+    VIR_WARN("socketsendmsgwithfds");
+    if (virSocketSendMsgWithFDs(mon_sockfd, payload, payload_len, tapfds, ntapfds) < 0) {
+        virReportSystemError(errno, "%s",
+                             _("Failed to send restore request to CH"));
+        return -1;
+    }
+
+    VIR_WARN("wait for response");
+    if (chSocketProcessHttpResponse(mon_sockfd, false) < 0) {
+        virReportSystemError(errno, "%s",
+                             _("Failed to recv http response from CHV"));
+        return -1;
+    }
+
+    return 0;
 }
 
 int

@@ -27,6 +27,7 @@
 #include "virdomainjob.h"
 #include "virthread.h"
 
+typedef struct _chMigrationDstArgs chMigrationDstArgs;
 
 typedef struct _virCHDomainObjPrivate virCHDomainObjPrivate;
 struct _virCHDomainObjPrivate {
@@ -34,11 +35,21 @@ struct _virCHDomainObjPrivate {
     virCHDriver *driver;
     virCHMonitor *monitor;
     virThread *migrationDstReceiveThr;
+    chMigrationDstArgs *args;
     char *machineName;
     virBitmap *autoCpuset;
     virBitmap *autoNodeset;
     virCgroup *cgroup;
     char *pidfile;
+};
+
+struct _chMigrationDstArgs {
+    unsigned int port;
+    virCHDomainObjPrivate *priv;
+    virDomainDef *def;
+    virCHDriver *driver;
+    virMutex mutex;
+    virCond cond;
 };
 
 #define CH_DOMAIN_PRIVATE(vm) \
