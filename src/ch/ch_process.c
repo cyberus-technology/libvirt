@@ -705,7 +705,7 @@ chProcessAddNetworkDevices(virCHDriver *driver,
             return -1;
         }
 
-        VIR_DEBUG("payload sent with net-add request to CH = %s", payload);
+        VIR_WARN("payload sent with net-add request to CH = %s", payload);
 
         virBufferAsprintf(&buf, "%s", virBufferCurrentContent(&http_headers));
         virBufferAsprintf(&buf, "Content-Length: %zu\r\n\r\n", strlen(payload));
