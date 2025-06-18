@@ -364,6 +364,8 @@ virCHMonitorBuildNetJson(virDomainNetDef *net,
     if (virJSONValueObjectAppendString(net_json, "id", id) < 0)
         return -1;
 
+    net->info.alias = g_strdup_printf("%s", id);
+
     if (actualType == VIR_DOMAIN_NET_TYPE_ETHERNET &&
         net->guestIP.nips == 1) {
         const virNetDevIPAddr *ip;

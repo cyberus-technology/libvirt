@@ -2760,10 +2760,11 @@ chDomainMigrateConfirm3(virDomainPtr domain,
 static int
 chDomainAttachDeviceLive(virDomainObj *vm,
                          virDomainDeviceDef *dev,
-                         virCHDriver */*driver*/)
+                         virCHDriver *driver)
 {
     int ret = -1;
     virCHDomainObjPrivate *priv = vm->privateData;
+    virCHMonitor *mon = priv->monitor;
     virJSONValue *response = NULL;
 
     switch (dev->type) {
@@ -2787,6 +2788,7 @@ chDomainAttachDeviceLive(virDomainObj *vm,
             VIR_WARN("Attach disk failed. Invalid CH response.");
             break;
         }
+
         if (response) {
             // We need to save the id of the response in order to be able to
             // address the right disk when doing a detach hotplug later on.
@@ -2805,9 +2807,16 @@ chDomainAttachDeviceLive(virDomainObj *vm,
         ret = 0;
         break;
     }
+    case VIR_DOMAIN_DEVICE_NET:
+    {
+        VIR_WARN("Try to insert net device");
+        virDomainNetInsert(vm->def, dev->data.net);
+        ret = chProcessAddNetworkDevice(driver, mon, vm->def, dev->data.net);
+        dev->data.net = NULL;
+        break;
+    }
     case VIR_DOMAIN_DEVICE_LEASE:
     case VIR_DOMAIN_DEVICE_FS:
-    case VIR_DOMAIN_DEVICE_NET:
     case VIR_DOMAIN_DEVICE_INPUT:
     case VIR_DOMAIN_DEVICE_HOSTDEV:
     case VIR_DOMAIN_DEVICE_WATCHDOG:
@@ -2879,6 +2888,11 @@ chDomainAttachDeviceConfig(virDomainDef *vmdef,
         dev->data.disk = NULL;
         break;
     case VIR_DOMAIN_DEVICE_NET:
+    {
+        VIR_WARN("virDomainNetInsert");
+        virDomainNetInsert(vmdef, dev->data.net);
+        break;
+    }
     case VIR_DOMAIN_DEVICE_SOUND:
     case VIR_DOMAIN_DEVICE_HOSTDEV:
     case VIR_DOMAIN_DEVICE_LEASE:
@@ -3058,6 +3072,36 @@ chDomainAttachDeviceFlags(virDomainPtr dom,
 }
 
 static int
+chFindNet(virDomainDef *def, const char *dst)
+{
+    size_t i;
+
+    for (i = 0; i < def->nnets; i++) {
+        if (STREQ(def->nets[i]->ifname, dst))
+            return i;
+    }
+
+    return -1;
+}
+
+static int
+chDomainDetachPrepNet(virDomainObj *vm,
+                      virDomainNetDef *match,
+                      virDomainNetDef **detach)
+{
+    int idx;
+
+    if ((idx = chFindNet(vm->def, match->ifname)) < 0) {
+        virReportError(VIR_ERR_DEVICE_MISSING,
+                       _("net %1$s not found"), match->ifname);
+        return -1;
+    }
+    *detach = vm->def->nets[idx];
+
+    return 0;
+}
+
+static int
 chFindDisk(virDomainDef *def, const char *dst)
 {
     size_t i;
@@ -3101,17 +3145,26 @@ chDomainDetachDeviceLive(virDomainObj *vm,
     // int ret = -1;
     // int rc;
 
-    if (match->type != VIR_DOMAIN_DEVICE_DISK) {
+    if (match->type != VIR_DOMAIN_DEVICE_DISK && match->type != VIR_DOMAIN_DEVICE_NET) {
         virReportError(VIR_ERR_OPERATION_UNSUPPORTED,
                        _("live detach of device '%1$s' is not supported"),
                        virDomainDeviceTypeToString(match->type));
         return -1;
     }
 
-    if (chDomainDetachPrepDisk(vm, match->data.disk,
-                               &detach.data.disk) < 0) {
-        VIR_WARN("chDomainDetachPrepDisk failed");
-        return -1;
+    if (match->type == VIR_DOMAIN_DEVICE_DISK) {
+        if (chDomainDetachPrepDisk(vm, match->data.disk,
+                                &detach.data.disk) < 0) {
+            VIR_WARN("chDomainDetachPrepDisk failed");
+            return -1;
+        }
+    } else if (match->type == VIR_DOMAIN_DEVICE_NET) {
+        if (chDomainDetachPrepNet(vm, match->data.net,
+                                 &detach.data.net) < 0) {
+            VIR_WARN("chDomainDetachPrepNet failed");
+            return -1;
+        }
+
     }
 
 
@@ -3153,10 +3206,21 @@ chDomainDetachDeviceLive(virDomainObj *vm,
         return -1;
     }
 
-    idx = chFindDisk(vm->def, match->data.disk->dst);
-    if (idx >= 0) {
-        VIR_WARN("Remove device from libvirt xml state %d", idx);
-        virDomainDiskRemove(vm->def, idx);
+    if (match->type == VIR_DOMAIN_DEVICE_DISK) {
+        idx = chFindDisk(vm->def, match->data.disk->dst);
+        if (idx >= 0) {
+            VIR_WARN("Remove device from libvirt xml state %d", idx);
+            virDomainDiskRemove(vm->def, idx);
+        }
+    } else if (match->type == VIR_DOMAIN_DEVICE_NET) {
+        virDomainInterfaceStopDevice(detach.data.net);
+        virDomainInterfaceDeleteDevice(vm->def, detach.data.net, false, NULL);
+        if ((idx = virDomainNetFindIdx(vm->def, detach.data.net)) < 0)
+            return -1;
+
+        /* this is guaranteed to succeed */
+        virDomainNetDefFree(virDomainNetRemove(vm->def, idx));
+        // virDomainNetDefFree(detach.data.net);
     }
 
 //  cleanup:
