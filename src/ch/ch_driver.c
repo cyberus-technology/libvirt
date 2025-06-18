@@ -3030,7 +3030,7 @@ chDomainAttachDeviceFlags(virDomainPtr dom,
     virDomainObj *vm = NULL;
     int ret = -1;
 
-    VIR_WARN("chDomainAttachDeviceFlags");
+    VIR_WARN("chDomainAttachDeviceFlags \n%s\n", xml);
 
     if (!(vm = virCHDomainObjFromDomain(dom)))
         goto cleanup;
