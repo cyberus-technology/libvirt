@@ -44,3 +44,9 @@ int virCHProcessUpdateInfo(virDomainObj *vm);
 
 int virCHProcessInitNetwork(virCHDriver *driver,
                             virDomainObj *vm);
+
+int
+chProcessAddNetworkDevice(virCHDriver *driver,
+                          virCHMonitor *mon,
+                          virDomainDef *vmdef,
+                          virDomainNetDef *net);
