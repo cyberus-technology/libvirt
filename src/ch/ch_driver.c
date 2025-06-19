@@ -353,6 +353,7 @@ chDomainDefineXMLFlags(virConnectPtr conn, const char *xml, unsigned int flags)
     virDomainPtr dom = NULL;
     virObjectEvent *event = NULL;
     g_autofree char *managed_save_path = NULL;
+    g_autoptr(virCHDriverConfig) cfg = virCHDriverGetConfig(driver);
     unsigned int parse_flags = VIR_DOMAIN_DEF_PARSE_INACTIVE;
 
     virCheckFlags(VIR_DOMAIN_DEFINE_VALIDATE, NULL);
@@ -379,6 +380,10 @@ chDomainDefineXMLFlags(virConnectPtr conn, const char *xml, unsigned int flags)
     if (!(vm = virDomainObjListAdd(driver->domains, &vmdef,
                                    driver->xmlopt,
                                    0, &oldDef)))
+        goto cleanup;
+
+    if (virDomainDefSave(vm->newDef ? vm->newDef : vm->def,
+                         driver->xmlopt, cfg->configDir) < 0)
         goto cleanup;
 
     /* cleanup if there's any stale managedsave dir */
@@ -483,7 +488,7 @@ chDomainShutdownFlags(virDomainPtr dom,
     virDomainObj *vm;
     virDomainState state;
     int ret = -1;
-
+    VIR_WARN("chDomainShutdown");
     virCheckFlags(VIR_DOMAIN_SHUTDOWN_ACPI_POWER_BTN, -1);
 
     if (!(vm = virCHDomainObjFromDomain(dom)))
@@ -1450,6 +1455,23 @@ static int chStateCleanup(void)
     return 0;
 }
 
+static int
+chDomainReattach(virDomainObj *vm, void*data) {
+    virCHDriver *driver = data;
+    virCHDomainObjPrivate *priv = vm->privateData;
+    // virCHMonitor *mon = priv->monitor;
+    g_autoptr(virCHDriverConfig) cfg = virCHDriverGetConfig(ch_driver);
+
+    VIR_WARN("chDomainReattach %p %p", vm, driver);
+    VIR_WARN("cfg %p", cfg);
+    VIR_WARN("statedir %s", cfg->stateDir);
+    VIR_WARN("vm->def->name %s", vm->def->name);
+
+    priv->monitor = virCHMonitorReattach(vm, cfg);
+
+    return 0;
+}
+
 static virDrvStateInitResult
 chStateInitialize(bool privileged,
                   const char *root,
@@ -1458,6 +1480,7 @@ chStateInitialize(bool privileged,
                   void *opaque G_GNUC_UNUSED)
 {
     int ret = VIR_DRV_STATE_INIT_ERROR;
+    g_autoptr(virCHDriverConfig) cfg = NULL;
     int rv;
 
     if (root != NULL) {
@@ -1514,7 +1537,31 @@ chStateInitialize(bool privileged,
 
     ch_driver->chCaps = virCHCapsInitCHVersionCaps(ch_driver->version);
 
+    /* Get all the running persistent or transient configs first */
+    VIR_WARN("Loading old configs\n");
+    cfg = virCHDriverGetConfig(ch_driver);
+    if (virDomainObjListLoadAllConfigs(ch_driver->domains,
+                                       cfg->stateDir,
+                                       NULL, true,
+                                       ch_driver->xmlopt,
+                                       NULL, NULL) < 0)
+        goto cleanup;
+
+    /* Then inactive persistent configs */
+    if (virDomainObjListLoadAllConfigs(ch_driver->domains,
+                                       cfg->configDir,
+                                       cfg->autostartDir, false,
+                                       ch_driver->xmlopt,
+                                       NULL, NULL) < 0)
+        goto cleanup;
+
     ch_driver->privileged = privileged;
+
+    virDomainObjListForEach(ch_driver->domains,
+                            true,
+                            chDomainReattach,
+                            ch_driver);
+
     ret = VIR_DRV_STATE_INIT_COMPLETE;
 
  cleanup:
@@ -3359,6 +3406,75 @@ static int chDomainDetachDevice(virDomainPtr dom, const char *xml)
                                      VIR_DOMAIN_AFFECT_LIVE);
 }
 
+/* static void chNotifyLoadDomain(virDomainObj *vm, int newVM, void *opaque) */
+/* { */
+    /* virCHDriver *driver = opaque; */
+
+    /* if (newVM) { */
+        /* virObjectEvent *event = */
+            /* virDomainEventLifecycleNewFromObj(vm, */
+                                     /* VIR_DOMAIN_EVENT_DEFINED, */
+                                     /* VIR_DOMAIN_EVENT_DEFINED_ADDED); */
+        /* virObjectEventStateQueue(driver->domainEventState, event); */
+    /* } */
+/* } */
+static int
+chStateReload(void)
+{
+    /* g_autoptr(virCHDriverConfig) cfg = NULL; */
+
+    VIR_WARN("in chStateReload\n");
+
+    /* if (!ch_driver) */
+        /* return 0; */
+
+    /* cfg = virCHDriverGetConfig(ch_driver); */
+    /* virDomainObjListLoadAllConfigs(ch_driver->domains, */
+                                   /* cfg->configDir, */
+                                   /* cfg->autostartDir, false, */
+                                   /* ch_driver->xmlopt, */
+                                   /* chNotifyLoadDomain, ch_driver); */
+    return 0;
+}
+
+static int
+chStateStop(void)
+{
+    VIR_WARN("in chStateStop\n");
+    /* g_autoptr(virCHDriverConfig) cfg = virCHDriverGetConfig(qemu_driver); */
+    /* virDomainDriverAutoShutdownConfig ascfg = { */
+        /* .uri = cfg->uri, */
+        /* .trySave = cfg->autoShutdownTrySave, */
+        /* .tryShutdown = cfg->autoShutdownTryShutdown, */
+        /* .poweroff = cfg->autoShutdownPoweroff, */
+        /* .waitShutdownSecs = cfg->autoShutdownWait, */
+        /* .saveBypassCache = cfg->autoSaveBypassCache, */
+        /* .autoRestore = cfg->autoShutdownRestore, */
+    /* }; */
+
+    /* virDomainDriverAutoShutdown(&ascfg); */
+
+    return 0;
+}
+
+static int
+chStateShutdownPrepare(void)
+{
+    VIR_WARN("in chStateShutdownPrepare\n");
+    /* virThreadPoolStop(qemu_driver->workerPool); */
+    return 0;
+}
+
+static int
+chStateShutdownWait(void)
+{
+    VIR_WARN("in chStateShutdownWait\n");
+    /* virDomainObjListForEach(ch_driver->domains, false, */
+                            /* qemuDomainObjStopWorkerIter, NULL); */
+    /* virThreadPoolDrain(ch_driver->workerPool); */
+    return 0;
+}
+
 /* Function Tables */
 static virHypervisorDriver chHypervisorDriver = {
     .name = "CH",
@@ -3441,6 +3557,10 @@ static virStateDriver chStateDriver = {
     .name = "cloud-hypervisor",
     .stateInitialize = chStateInitialize,
     .stateCleanup = chStateCleanup,
+    .stateReload = chStateReload,
+    .stateStop = chStateStop,
+    .stateShutdownPrepare = chStateShutdownPrepare,
+    .stateShutdownWait = chStateShutdownWait,
 };
 
 int chRegister(void)

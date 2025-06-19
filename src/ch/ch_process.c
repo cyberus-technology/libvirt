@@ -509,7 +509,7 @@ virCHProcessSetup(virDomainObj *vm)
  *
  * Returns socket fd on success, -1 on error
  */
-static int
+int
 chMonitorSocketConnect(virCHMonitor *mon)
 {
     struct sockaddr_un server_addr = { };
