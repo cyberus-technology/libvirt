@@ -38,6 +38,9 @@ typedef struct _virCHDriverConfig virCHDriverConfig;
 struct _virCHDriverConfig {
     GObject parent;
 
+    char *configDir;
+    char *autostartDir;
+
     char *stateDir;
     char *logDir;
     char *saveDir;
