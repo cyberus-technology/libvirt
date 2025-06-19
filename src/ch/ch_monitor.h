@@ -120,6 +120,9 @@ struct _virCHMonitor {
 
 virCHMonitor *virCHMonitorNew(virDomainObj *vm, virCHDriverConfig *cfg,
                               int logfile);
+virCHMonitor *
+virCHMonitorReattach(virDomainObj *vm, virCHDriverConfig *cfg);
+
 void virCHMonitorClose(virCHMonitor *mon);
 G_DEFINE_AUTOPTR_CLEANUP_FUNC(virCHMonitor, virCHMonitorClose);
 
