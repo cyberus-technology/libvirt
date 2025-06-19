@@ -50,3 +50,6 @@ chProcessAddNetworkDevice(virCHDriver *driver,
                           virCHMonitor *mon,
                           virDomainDef *vmdef,
                           virDomainNetDef *net);
+
+int
+chMonitorSocketConnect(virCHMonitor *mon);
