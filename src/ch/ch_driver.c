@@ -413,6 +413,9 @@ chDomainUndefineFlags(virDomainPtr dom,
     virDomainObj *vm;
     virObjectEvent *event = NULL;
     int ret = -1;
+    g_autoptr(virCHDriverConfig) cfg = NULL;
+
+    cfg = virCHDriverGetConfig(driver);
 
     virCheckFlags(0, -1);
 
@@ -427,9 +430,15 @@ chDomainUndefineFlags(virDomainPtr dom,
                        "%s", _("Cannot undefine transient domain"));
         goto cleanup;
     }
+
+    if (virDomainDeleteConfig(cfg->configDir, cfg->autostartDir, vm) < 0)
+        goto endjob;
+
     event = virDomainEventLifecycleNewFromObj(vm,
                                               VIR_DOMAIN_EVENT_UNDEFINED,
                                               VIR_DOMAIN_EVENT_UNDEFINED_REMOVED);
+
+    VIR_WARN("Undefining domain '%s'", vm->def->name);
 
     vm->persistent = 0;
     if (!virDomainObjIsActive(vm)) {
@@ -437,6 +446,9 @@ chDomainUndefineFlags(virDomainPtr dom,
     }
 
     ret = 0;
+
+ endjob:
+    virDomainObjEndJob(vm);
 
  cleanup:
     virDomainObjEndAPI(&vm);
