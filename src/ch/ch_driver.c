@@ -500,6 +500,11 @@ chDomainShutdownFlags(virDomainPtr dom,
     virDomainObj *vm;
     virDomainState state;
     int ret = -1;
+    g_autoptr(virCHDriverConfig) cfg = NULL;
+    virCHDriver *driver = dom->conn->privateData;
+
+    cfg = virCHDriverGetConfig(driver);
+
     VIR_WARN("chDomainShutdown");
     virCheckFlags(VIR_DOMAIN_SHUTDOWN_ACPI_POWER_BTN, -1);
 
@@ -534,6 +539,11 @@ chDomainShutdownFlags(virDomainPtr dom,
     if (virDomainObjSave(vm, priv->driver->xmlopt, virCHDriverGetConfig(priv->driver)->stateDir) < 0) {
         VIR_WARN("Failed to save status on vm %s", vm->def->name);
     }
+
+    if (virDomainDeleteConfig(cfg->stateDir, cfg->autostartDir, vm) < 0)
+        goto endjob;
+
+    VIR_WARN("chDomainShutdown %d", __LINE__);
 
     ret = 0;
 
