@@ -222,8 +222,6 @@ chDomainCreateXML(virConnectPtr conn,
 
     cfg = virCHDriverGetConfig(driver);
 
-    VIR_WARN("Starting process");
-
     virCheckFlags(VIR_DOMAIN_START_VALIDATE, NULL);
 
     if (flags & VIR_DOMAIN_START_VALIDATE)
@@ -260,7 +258,6 @@ chDomainCreateXML(virConnectPtr conn,
     if (virCHProcessStart(driver, vm, VIR_DOMAIN_RUNNING_BOOTED) < 0)
         goto endjob;
 
-    VIR_WARN("Writing config to %s", cfg->stateDir);
     if (virDomainObjSave(vm, driver->xmlopt, cfg->stateDir) < 0)
         VIR_WARN("Failed to save status on vm %s", vm->def->name);
 
@@ -285,6 +282,9 @@ chDomainCreateWithFlags(virDomainPtr dom, unsigned int flags)
     virCHDomainObjPrivate *priv;
     g_autofree char *managed_save_path = NULL;
     int ret = -1;
+    g_autoptr(virCHDriverConfig) cfg = NULL;
+
+    cfg = virCHDriverGetConfig(driver);
 
     virCheckFlags(0, -1);
 
@@ -332,6 +332,9 @@ chDomainCreateWithFlags(virDomainPtr dom, unsigned int flags)
                                                   VIR_DOMAIN_EVENT_STARTED_BOOTED);
         virObjectEventStateQueue(driver->domainEventState, event);
     }
+
+    if (virDomainObjSave(vm, driver->xmlopt, cfg->stateDir) < 0)
+        VIR_WARN("Failed to save status on vm %s", vm->def->name);
 
  endjob:
     virDomainObjEndJob(vm);
