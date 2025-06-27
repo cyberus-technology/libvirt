@@ -1586,6 +1586,9 @@ int virCHMonitorMigrationReceive(virCHMonitor *mon,
         return -1;
     }
 
+    if (tapfds)
+        chCloseFDs(tapfds, ntapfds);
+
     return 0;
 }
 
