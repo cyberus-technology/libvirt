@@ -641,6 +641,7 @@ chProcessAddNetworkDevice(virCHDriver *driver,
     size_t nnicindexes = 0;
     size_t tapfd_len;
     size_t payload_len;
+    size_t new_net_id = 0;
     int saved_errno;
     int rc;
 
@@ -685,7 +686,8 @@ chProcessAddNetworkDevice(virCHDriver *driver,
         return -1;
     }
 
-    if (virCHMonitorBuildNetJson(net, vmdef->nnets, &payload) < 0) {
+    new_net_id = vmdef->nnets - 1; // IDs start at 0
+    if (virCHMonitorBuildNetJson(net, new_net_id, &payload) < 0) {
         virReportError(VIR_ERR_INTERNAL_ERROR, "%s",
                         _("Failed to build net json"));
         VIR_WARN("virCHMonitorBuildNetJson failed.");
