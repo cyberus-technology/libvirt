@@ -3138,7 +3138,7 @@ chDomainAttachDeviceLiveAndConfig(virDomainObj *vm,
     }
 
     if (flags & VIR_DOMAIN_AFFECT_CONFIG) {
-        if (virDomainDefSave(vmdef, driver->xmlopt, cfg->stateDir) < 0) {
+        if (virDomainDefSave(vmdef, driver->xmlopt, cfg->configDir) < 0) {
             VIR_WARN("virDomainDefSave failed");
             return -1;
         }
