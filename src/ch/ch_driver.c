@@ -3415,7 +3415,7 @@ chDomainDetachDeviceLiveAndConfig(virCHDriver *driver,
 
     /* Finally, if no error until here, we can save config. */
     if (flags & VIR_DOMAIN_AFFECT_CONFIG) {
-        if (virDomainDefSave(vmdef, driver->xmlopt, cfg->stateDir) < 0)
+        if (virDomainDefSave(vmdef, driver->xmlopt, cfg->configDir) < 0)
             return -1;
 
         virDomainObjAssignDef(vm, &vmdef, false, NULL);
