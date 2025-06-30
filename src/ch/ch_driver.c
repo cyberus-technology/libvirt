@@ -3209,6 +3209,11 @@ chDomainDetachPrepNet(virDomainObj *vm,
 {
     int idx;
 
+    if (!match->ifname) {
+        virReportError(VIR_ERR_DEVICE_MISSING,
+                       _("no interface name specified"));
+        return -1;
+    }
     if ((idx = chFindNet(vm->def, match->ifname)) < 0) {
         virReportError(VIR_ERR_DEVICE_MISSING,
                        _("net %1$s not found"), match->ifname);
