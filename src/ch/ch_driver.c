@@ -2616,6 +2616,7 @@ chDomainMigratePrepare3(virConnectPtr dconn,
     const char *threadname = "mig-ch";
     virDomainDef *def = NULL;
     g_autoptr(virDomainDef) vmdef = NULL;
+    g_autoptr(virCHDriverConfig) cfg = virCHDriverGetConfig(driver);
     int rc = 0;
     const char *incFormat = "%s:%s:%d"; // seems to differ for AF_INET6
 
@@ -2702,6 +2703,9 @@ chDomainMigratePrepare3(virConnectPtr dconn,
         VIR_WARN("CondWait returned failure. Keep going.");
     }
 
+    if (virDomainObjSave(vm, driver->xmlopt, cfg->stateDir) < 0)
+        VIR_WARN("Failed to save status on vm %s", vm->def->name);
+
     VIR_WARN("Fin migrationPrepare");
 
 
@@ -2725,7 +2729,12 @@ chDomainMigratePerform3(virDomainPtr dom,
 {
     virDomainObj *vm;
     virCHDomainObjPrivate *priv = NULL;
+    virCHDriver *driver = dom->conn->privateData;
     g_autofree char *id = g_strdup_printf("bla");
+    g_autoptr(virCHDriverConfig) cfg = NULL;
+
+    cfg = virCHDriverGetConfig(driver);
+
     VIR_INFO("chDomainMigratePerform3 %p %s %s %u %p %p %s %s %lu %s %lu",
               dom, xmlin, cookiein, cookieinlen, cookieout, cookieoutlen, dconnuri, uri, flags, dname, resource);
 
@@ -2748,6 +2757,8 @@ chDomainMigratePerform3(virDomainPtr dom,
         goto cleanup;
     }
 
+    virDomainDeleteConfig(cfg->stateDir, cfg->autostartDir, vm);
+
  cleanup:
     virDomainObjEndAPI(&vm);
     return 0;
@@ -2769,6 +2780,7 @@ chDomainMigrateFinish3(virConnectPtr dconn,
     virDomainObj *vm = NULL;
     virDomainPtr dom = NULL;
     virCHDomainObjPrivate *priv = NULL;
+    g_autoptr(virCHDriverConfig) cfg = virCHDriverGetConfig(driver);
 
     VIR_INFO("chDomainMigrateFinish3 %p %s %s %d %p %p %lu %d",
               dconn, dname, cookiein, cookieinlen, cookieout, cookieoutlen, flags, cancelled);
@@ -2811,6 +2823,9 @@ chDomainMigrateFinish3(virConnectPtr dconn,
     VIR_FREE(priv->args);
 
     virDomainObjSetState(vm, VIR_DOMAIN_RUNNING, VIR_DOMAIN_RUNNING_MIGRATED);
+
+    if (virDomainObjSave(vm, driver->xmlopt, cfg->stateDir) < 0)
+        VIR_WARN("Failed to save status on vm %s", vm->def->name);
 
     virDomainObjEndAPI(&vm);
     return dom;
