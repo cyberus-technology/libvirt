@@ -1525,6 +1525,7 @@ int virCHMonitorMigrationReceive(virCHMonitor *mon,
             }
             net_json = virJSONValueNewObject();
             id = g_strdup_printf("%s_%zu", CH_NET_ID_PREFIX, i);
+			vmdef->nets[i]->info.alias = g_strdup_printf("%s", id);
             if (virJSONValueObjectAppendString(net_json, "id", id) < 0)
                 return -1;
             if (virJSONValueObjectAppendNumberInt(net_json, "num_fds", vmdef->nets[i]->driver.virtio.queues))
