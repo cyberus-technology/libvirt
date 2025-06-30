@@ -285,6 +285,7 @@ int virNetDevTapDelete(const char *ifname,
     struct ifreq try = { 0 };
     int fd;
     int ret = -1;
+    unsigned int retry_count = 0;
 
     if (!tunpath)
         tunpath = "/dev/net/tun";
@@ -305,7 +306,13 @@ int virNetDevTapDelete(const char *ifname,
         goto cleanup;
     }
 
+retry:
     if (ioctl(fd, TUNSETIFF, &try) < 0) {
+        if (retry_count++ < 60) {
+            sleep(1);
+            VIR_WARN("retry %d/60", retry_count);
+            goto retry;
+        }
         virReportSystemError(errno, "%s",
                              _("Unable to associate TAP device"));
         goto cleanup;
