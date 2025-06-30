@@ -1197,6 +1197,9 @@ chDomainRestoreFlags(virConnectPtr conn,
     virCHDomainObjPrivate *priv;
     g_autoptr(virDomainDef) def = NULL;
     int ret = -1;
+    g_autoptr(virCHDriverConfig) cfg = NULL;
+
+    cfg = virCHDriverGetConfig(driver);
 
     virCheckFlags(0, -1);
 
@@ -1234,6 +1237,10 @@ chDomainRestoreFlags(virConnectPtr conn,
         goto endjob;
     }
     virDomainObjSetState(vm, VIR_DOMAIN_RUNNING, VIR_DOMAIN_RUNNING_RESTORED);
+
+    if (virDomainObjSave(vm, driver->xmlopt, cfg->stateDir) < 0)
+        VIR_WARN("Failed to save status on vm %s", vm->def->name);
+
     ret = 0;
 
  endjob:
