@@ -3383,6 +3383,7 @@ chDomainDetachDeviceLiveAndConfig(virCHDriver *driver,
 
     /* Finally, if no error until here, we can save config. */
     if (flags & VIR_DOMAIN_AFFECT_CONFIG) {
+#if 0 // Causes nullptr exception
         if (virDomainDefSave(vmdef, driver->xmlopt, cfg->configDir) < 0)
             return -1;
 
@@ -3393,6 +3394,7 @@ chDomainDetachDeviceLiveAndConfig(virCHDriver *driver,
                                                   VIR_DOMAIN_EVENT_DEFINED,
                                                   VIR_DOMAIN_EVENT_DEFINED_UPDATED);
         virObjectEventStateQueue(driver->domainEventState, event);
+#endif
     }
 
     return 0;
