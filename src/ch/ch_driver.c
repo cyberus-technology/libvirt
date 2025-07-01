@@ -504,6 +504,25 @@ static int chDomainIsActive(virDomainPtr dom)
     return ret;
 }
 
+static int chDomainIsPersistent(virDomainPtr dom)
+{
+    virDomainObj *obj;
+    int ret = -1;
+
+    if (!(obj = virCHDomainObjFromDomain(dom)))
+        goto cleanup;
+
+    if (virDomainIsPersistentEnsureACL(dom->conn, obj->def) < 0)
+        goto cleanup;
+
+    ret = obj->persistent;
+
+ cleanup:
+    virDomainObjEndAPI(&obj);
+    return ret;
+}
+
+
 static int
 chDomainShutdownFlags(virDomainPtr dom,
                       unsigned int flags)
@@ -3588,6 +3607,7 @@ static virHypervisorDriver chHypervisorDriver = {
     .domainGetXMLDesc = chDomainGetXMLDesc,                 /* 7.5.0 */
     .domainGetInfo = chDomainGetInfo,                       /* 7.5.0 */
     .domainIsActive = chDomainIsActive,                     /* 7.5.0 */
+    .domainIsPersistent = chDomainIsPersistent,             /* 7.5.0 */
     .domainOpenConsole = chDomainOpenConsole,               /* 7.8.0 */
     .nodeGetInfo = chNodeGetInfo,                           /* 7.5.0 */
     .domainGetVcpus = chDomainGetVcpus,                     /* 8.0.0 */
