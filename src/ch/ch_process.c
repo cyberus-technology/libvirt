@@ -1285,9 +1285,6 @@ virCHProcessStop(virCHDriver *driver,
 
     virDomainObjSetState(vm, VIR_DOMAIN_SHUTOFF, reason);
 
-    if (virDomainObjSave(vm, driver->xmlopt, cfg->stateDir) < 0)
-        VIR_WARN("Failed to save status on vm %s", vm->def->name);
-
     virHostdevReAttachDomainDevices(driver->hostdevMgr, CH_DRIVER_NAME, def,
                                     hostdev_flags);
 
