@@ -573,12 +573,13 @@ chDomainShutdownFlags(virDomainPtr dom,
     }
 
     virDomainObjSetState(vm, VIR_DOMAIN_SHUTDOWN, VIR_DOMAIN_SHUTDOWN_USER);
-    if (virDomainObjSave(vm, priv->driver->xmlopt, virCHDriverGetConfig(priv->driver)->stateDir) < 0) {
-        VIR_WARN("Failed to save status on vm %s", vm->def->name);
-    }
 
-    if (virDomainDeleteConfig(cfg->stateDir, cfg->autostartDir, vm) < 0)
+    virDomainObjRemoveTransientDef(vm);
+
+    if (virDomainDeleteConfig(cfg->stateDir, cfg->autostartDir, vm) < 0) {
+        VIR_WARN("deletion failed");
         goto endjob;
+    }
 
     VIR_WARN("chDomainShutdown %d", __LINE__);
 
