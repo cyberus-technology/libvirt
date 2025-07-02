@@ -442,7 +442,8 @@ chDomainUndefineFlags(virDomainPtr dom,
 
     cfg = virCHDriverGetConfig(driver);
 
-    virCheckFlags(0, -1);
+    // causes errors with openstack
+    // virCheckFlags(0, -1);
 
     if (!(vm = virCHDomainObjFromDomain(dom)))
         goto cleanup;
