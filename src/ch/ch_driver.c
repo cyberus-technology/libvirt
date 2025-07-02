@@ -341,6 +341,8 @@ chDomainCreateWithFlags(virDomainPtr dom, unsigned int flags)
     if (virDomainObjSave(vm, driver->xmlopt, cfg->stateDir) < 0)
         VIR_WARN("Failed to save status on vm %s", vm->def->name);
 
+    vm->newDef = virDomainObjCopyPersistentDef(vm, driver->xmlopt, NULL);
+
  endjob:
     virDomainObjEndJob(vm);
 
