@@ -130,6 +130,7 @@ G_DEFINE_AUTOPTR_CLEANUP_FUNC(virCHMonitor, virCHMonitorClose);
 int virCHMonitorCreateVM(virCHDriver *driver, virCHMonitor *mon);
 int virCHMonitorBootVM(virCHMonitor *mon, domainLogContext *logCtxt);
 int virCHMonitorShutdownVM(virCHMonitor *mon);
+int virCHMonitorShutdownVMM(virCHMonitor *mon);
 int virCHMonitorRebootVM(virCHMonitor *mon);
 int virCHMonitorSuspendVM(virCHMonitor *mon);
 int virCHMonitorResumeVM(virCHMonitor *mon);
