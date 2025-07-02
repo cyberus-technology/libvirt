@@ -765,12 +765,16 @@ chDomainDestroyFlags(virDomainPtr dom, unsigned int flags)
     virCHDriver *driver = dom->conn->privateData;
     virDomainObj *vm;
     virObjectEvent *event = NULL;
+    virCHDomainObjPrivate *priv = NULL;
+    g_autoptr(virCHDriverConfig) cfg = virCHDriverGetConfig(driver);
     int ret = -1;
 
     virCheckFlags(0, -1);
 
     if (!(vm = virCHDomainObjFromDomain(dom)))
         goto cleanup;
+
+    priv = vm->privateData;
 
     if (virDomainDestroyFlagsEnsureACL(dom->conn, vm->def) < 0)
         goto cleanup;
@@ -790,6 +794,12 @@ chDomainDestroyFlags(virDomainPtr dom, unsigned int flags)
 
     if (virCHProcessStop(driver, vm, VIR_DOMAIN_SHUTOFF_DESTROYED) < 0)
         goto endjob;
+
+    virDomainObjRemoveTransientDef(vm);
+
+    if (virDomainDeleteConfig(cfg->stateDir, cfg->autostartDir, vm) < 0) {
+        goto endjob;
+    }
 
     event = virDomainEventLifecycleNewFromObj(vm,
                                               VIR_DOMAIN_EVENT_STOPPED,
