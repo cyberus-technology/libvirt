@@ -3218,7 +3218,7 @@ chDomainAttachDeviceLiveAndConfig(virDomainObj *vm,
             VIR_WARN("virDomainDefSave failed");
             return -1;
         }
-        virDomainObjAssignDef(vm, &vmdef, false, NULL);
+        virDomainObjAssignDef(vm, &vmdef, virDomainObjIsActive(vm) ? true : false, NULL);
         /* Event sending if persistent config has changed */
         event = virDomainEventLifecycleNewFromObj(vm,
                                                   VIR_DOMAIN_EVENT_DEFINED,
