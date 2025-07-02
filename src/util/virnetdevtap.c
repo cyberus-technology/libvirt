@@ -308,9 +308,9 @@ int virNetDevTapDelete(const char *ifname,
 
 retry:
     if (ioctl(fd, TUNSETIFF, &try) < 0) {
-        if (retry_count++ < 60) {
+        if (retry_count++ < 20) {
             sleep(1);
-            VIR_WARN("retry %d/60", retry_count);
+            VIR_WARN("retry %d/20", retry_count);
             goto retry;
         }
         virReportSystemError(errno, "%s",
