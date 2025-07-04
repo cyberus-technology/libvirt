@@ -20,6 +20,7 @@
 
 #include <config.h>
 
+#include <assert.h>
 #include <fcntl.h>
 #include <stdio.h>
 #include <unistd.h>
@@ -367,6 +368,14 @@ virCHMonitorBuildNetJson(virDomainNetDef *net,
         return -1;
 
     net->info.alias = g_strdup_printf("%s", id);
+
+    // Populate the <interface type="pci"> XML tag, relevant for OpenStack
+    // Currently not needed to have sane values here.
+	net->info.type = VIR_DOMAIN_DEVICE_ADDRESS_TYPE_PCI;
+    net->info.addr.pci.bus = 0;
+    assert(netindex <= 7);
+    net->info.addr.pci.slot = netindex + 1;
+    net->info.addr.pci.function = 0;
 
     if (actualType == VIR_DOMAIN_NET_TYPE_ETHERNET &&
         net->guestIP.nips == 1) {
@@ -1526,6 +1535,15 @@ int virCHMonitorMigrationReceive(virCHMonitor *mon,
             net_json = virJSONValueNewObject();
             id = g_strdup_printf("%s_%zu", CH_NET_ID_PREFIX, i);
 			vmdef->nets[i]->info.alias = g_strdup_printf("%s", id);
+
+			// Populate the <interface type="pci"> XML tag, relevant for OpenStack
+			// Currently not needed to have sane values here.
+			vmdef->nets[i]->info.type = VIR_DOMAIN_DEVICE_ADDRESS_TYPE_PCI;
+			vmdef->nets[i]->info.addr.pci.bus = 0;
+			assert(i <= 7);
+			vmdef->nets[i]->info.addr.pci.slot = i + 1;
+			vmdef->nets[i]->info.addr.pci.function = 0;
+
             if (virJSONValueObjectAppendString(net_json, "id", id) < 0)
                 return -1;
             if (virJSONValueObjectAppendNumberInt(net_json, "num_fds", vmdef->nets[i]->driver.virtio.queues))
