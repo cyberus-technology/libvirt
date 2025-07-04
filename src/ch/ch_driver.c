@@ -1693,9 +1693,9 @@ chConnectSupportsFeature(virConnectPtr conn,
                            feature);
             return -1;
         case VIR_DRV_FEATURE_MIGRATION_V3:
-        case VIR_DRV_FEATURE_MIGRATION_P2P:
             return 1;
         case VIR_DRV_FEATURE_MIGRATION_V2:
+        case VIR_DRV_FEATURE_MIGRATION_P2P:
         case VIR_DRV_FEATURE_MIGRATE_CHANGE_PROTECTION:
         case VIR_DRV_FEATURE_XML_MIGRATABLE:
         case VIR_DRV_FEATURE_MIGRATION_OFFLINE:
