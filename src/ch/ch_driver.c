@@ -421,7 +421,7 @@ chDomainDefineXML(virConnectPtr conn, const char *xml)
 
 static int
 chDomainUndefineFlags(virDomainPtr dom,
-                      unsigned int flags)
+                      unsigned int)
 {
     virCHDriver *driver = dom->conn->privateData;
     virDomainObj *vm;
@@ -2978,6 +2978,7 @@ chDomainAttachDeviceLive(virDomainObj *vm,
     return ret;
 }
 
+#if 0
 static int
 chDomainAttachDeviceConfig(virDomainDef *vmdef,
                            virDomainDeviceDef *dev,
@@ -3062,6 +3063,7 @@ chDomainAttachDeviceConfig(virDomainDef *vmdef,
 
     return 0;
 }
+#endif
 
 static void
 chDomainAttachDeviceLiveAndConfigHomogenize(const virDomainDeviceDef *devConf,
@@ -3099,7 +3101,9 @@ chDomainAttachDeviceLiveAndConfig(virDomainObj *vm,
     // virCHDomainObjPrivate *priv = vm->privateData;
     unsigned int parse_flags = VIR_DOMAIN_DEF_PARSE_INACTIVE |
                                VIR_DOMAIN_DEF_PARSE_ABI_UPDATE;
+#if 0
     virObjectEvent *event = NULL;
+#endif
     g_autoptr(virDomainDeviceDef) devLive = NULL;
     g_autoptr(virDomainDef) vmdef = NULL;
     g_autoptr(virCHDriverConfig) cfg = NULL;
@@ -3399,7 +3403,9 @@ chDomainDetachDeviceLiveAndConfig(virCHDriver *driver,
                                   unsigned int flags)
 {
     // qemuDomainObjPrivate *priv = vm->privateData;
+#if 0
     virObjectEvent *event = NULL;
+#endif
     g_autoptr(virCHDriverConfig) cfg = NULL;
     g_autoptr(virDomainDeviceDef) dev_config = NULL;
     g_autoptr(virDomainDeviceDef) dev_live = NULL;
