@@ -21,6 +21,7 @@
 #include <config.h>
 #include <fcntl.h>
 
+#include "ch_alias.h"
 #include "ch_capabilities.h"
 #include "ch_conf.h"
 #include "ch_domain.h"
@@ -2934,7 +2935,12 @@ chDomainAttachDeviceLive(virDomainObj *vm,
         g_autoptr(virJSONValue) disks = NULL;
         g_autofree char *payload = NULL;
         g_autofree char *idTmp = NULL;
-        char* id = NULL;
+
+        if (chAssignDeviceDiskAlias(vm->def, dev->data.disk) < 0) {
+            VIR_WARN("assigning disk alias failed");
+            break;
+        }
+
         disks = virJSONValueNewArray();
         if (virCHMonitorBuildDiskJson(disks, dev->data.disk) < 0) {
             VIR_WARN("Attach disk failed");
@@ -2949,16 +2955,6 @@ chDomainAttachDeviceLive(virDomainObj *vm,
         if (!response) {
             VIR_WARN("Attach disk failed. Invalid CH response.");
             break;
-        }
-
-        if (response) {
-            // We need to save the id of the response in order to be able to
-            // address the right disk when doing a detach hotplug later on.
-            idTmp = virJSONValueToString(virJSONValueObjectGet(response, "id"), false);
-            // Strangely, the resulting id looks like "_disk1". We strip the ".
-            id = virStringReplace(idTmp, "\"", "");
-            VIR_WARN("Got id: %s", id);
-            dev->data.disk->info.alias = id;
         }
 
         VIR_WARN("Disk : dst: %s drivername: %s alias: %s", dev->data.disk->dst, dev->data.disk->driverName, dev->data.disk->info.alias);
