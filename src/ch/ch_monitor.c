@@ -364,6 +364,7 @@ virCHMonitorBuildNetJson(virDomainNetDef *net,
     g_autoptr(virJSONValue) net_json = virJSONValueNewObject();
     virDomainNetType actualType = virDomainNetGetActualType(net);
 
+    // TODO switch to chAssignDeviceNetAlias from ch_alias.c
     g_autofree char *id = g_strdup_printf("%s_%d", CH_NET_ID_PREFIX, netindex);
     if (virJSONValueObjectAppendString(net_json, "id", id) < 0)
         return -1;
@@ -1535,6 +1536,7 @@ int virCHMonitorMigrationReceive(virCHMonitor *mon,
                 vmdef->nets[i]->driver.virtio.queues = 1;
             }
             net_json = virJSONValueNewObject();
+            // TODO switch to chAssignDeviceNetAlias from ch_alias.c
             id = g_strdup_printf("%s_%zu", CH_NET_ID_PREFIX, i);
 			vmdef->nets[i]->info.alias = g_strdup_printf("%s", id);
 
