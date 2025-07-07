@@ -1523,6 +1523,7 @@ int virCHMonitorMigrationReceive(virCHMonitor *mon,
         return -1;
 
     /* Pass the netconfig needed to restore with new netfds */
+	// TODO we need to do the same with disk devices I think!
     if (vmdef->nnets) {
         g_autoptr(virJSONValue) nets = virJSONValueNewArray();
         for (i = 0; i < vmdef->nnets; i++) {
