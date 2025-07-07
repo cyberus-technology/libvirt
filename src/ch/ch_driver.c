@@ -563,10 +563,8 @@ chDomainShutdownFlags(virDomainPtr dom,
                        _("only can shutdown running/paused domain"));
         goto endjob;
     } else {
-        /* if (virCHMonitorShutdownVM(priv->monitor) < 0) { */
-        // FIXME: we currently have to shutdown the VMM instead of "only" the VM
-        // here because CHV does not release the network file descriptors
-        // when we send vm.shutdown. We need to fix this in CHV.
+        // We not only shut down the VM but the whole VMM. This aligns with
+        // the libvirt VM and VMM lifecycle.
         if (virCHMonitorShutdownVMM(priv->monitor) < 0) {
             virReportError(VIR_ERR_INTERNAL_ERROR, "%s",
                         _("failed to shutdown guest VM"));
