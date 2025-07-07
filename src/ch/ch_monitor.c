@@ -259,6 +259,8 @@ virCHMonitorBuildDiskJson(virJSONValue *disks, virDomainDiskDef *diskdef)
                            diskdef->src->path);
             return -1;
         }
+        if (virJSONValueObjectAppendString(disk, "id", diskdef->info.alias) < 0)
+            return -1;
         if (virJSONValueObjectAppendString(disk, "path", diskdef->src->path) < 0)
             return -1;
         if (diskdef->src->readonly) {
