@@ -3138,9 +3138,7 @@ chDomainAttachDeviceLiveAndConfig(virDomainObj *vm,
     // virCHDomainObjPrivate *priv = vm->privateData;
     unsigned int parse_flags = VIR_DOMAIN_DEF_PARSE_INACTIVE |
                                VIR_DOMAIN_DEF_PARSE_ABI_UPDATE;
-#if 0
     virObjectEvent *event = NULL;
-#endif
     g_autoptr(virDomainDeviceDef) devLive = NULL;
     g_autoptr(virDomainDef) vmdef = NULL;
     g_autoptr(virCHDriverConfig) cfg = NULL;
@@ -3154,7 +3152,6 @@ chDomainAttachDeviceLiveAndConfig(virDomainObj *vm,
     cfg = virCHDriverGetConfig(driver);
 
     if (flags & VIR_DOMAIN_AFFECT_CONFIG) {
-#if 0
         vmdef = virDomainObjCopyPersistentDef(vm, driver->xmlopt,
                                               NULL/*priv->qemuCaps*/);
         if (!vmdef)
@@ -3184,7 +3181,6 @@ chDomainAttachDeviceLiveAndConfig(virDomainObj *vm,
                                          parse_flags,
                                          driver->xmlopt) < 0)
             return -1;
-#endif
     }
 
     if (flags & VIR_DOMAIN_AFFECT_LIVE) {
@@ -3218,7 +3214,6 @@ chDomainAttachDeviceLiveAndConfig(virDomainObj *vm,
     }
 
     if (flags & VIR_DOMAIN_AFFECT_CONFIG) {
-#if 0
         if (virDomainDefSave(vmdef, driver->xmlopt, cfg->configDir) < 0) {
             VIR_WARN("virDomainDefSave failed");
             return -1;
@@ -3229,7 +3224,6 @@ chDomainAttachDeviceLiveAndConfig(virDomainObj *vm,
                                                   VIR_DOMAIN_EVENT_DEFINED,
                                                   VIR_DOMAIN_EVENT_DEFINED_UPDATED);
         virObjectEventStateQueue(driver->domainEventState, event);
-#endif
     }
 
     return 0;
