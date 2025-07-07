@@ -576,11 +576,6 @@ chDomainShutdownFlags(virDomainPtr dom,
 
     virDomainObjRemoveTransientDef(vm);
 
-    if (virDomainDeleteConfig(cfg->stateDir, cfg->autostartDir, vm) < 0) {
-        VIR_WARN("deletion failed");
-        goto endjob;
-    }
-
     VIR_WARN("chDomainShutdown %d", __LINE__);
 
     ret = 0;
