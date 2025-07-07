@@ -3041,7 +3041,13 @@ chDomainAttachDeviceConfig(virDomainDef *vmdef,
     case VIR_DOMAIN_DEVICE_NET:
     {
         VIR_WARN("virDomainNetInsert");
-        virDomainNetInsert(vmdef, dev->data.net);
+        /*
+         * Calling g_steal_pointer here has the same effect as setting the
+         * pointer to null like in the disk case. Not doing so leads to errors
+         * in some cases e.g. hotplugging a persistant device and shutting down
+         * and starting the domain.
+         */
+        virDomainNetInsert(vmdef, g_steal_pointer(&dev->data.net));
         break;
     }
     case VIR_DOMAIN_DEVICE_SOUND:
