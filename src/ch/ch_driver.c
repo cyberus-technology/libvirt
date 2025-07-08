@@ -1687,7 +1687,6 @@ chConnectSupportsFeature(virConnectPtr conn,
                            feature);
             return -1;
         case VIR_DRV_FEATURE_MIGRATION_V3:
-        case VIR_DRV_FEATURE_MIGRATION_DIRECT:
         case VIR_DRV_FEATURE_MIGRATION_P2P:
             return 1;
         case VIR_DRV_FEATURE_MIGRATION_V2:
@@ -1695,6 +1694,7 @@ chConnectSupportsFeature(virConnectPtr conn,
         case VIR_DRV_FEATURE_XML_MIGRATABLE:
         case VIR_DRV_FEATURE_MIGRATION_OFFLINE:
         case VIR_DRV_FEATURE_MIGRATION_PARAMS:
+        case VIR_DRV_FEATURE_MIGRATION_DIRECT:
         case VIR_DRV_FEATURE_MIGRATION_V1:
         default:
             return 0;
