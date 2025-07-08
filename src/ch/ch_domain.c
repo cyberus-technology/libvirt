@@ -423,3 +423,153 @@ virCHDomainValidateActualNetDef(virDomainNetDef *net)
 
     return 0;
 }
+
+#define MAX_PCI_SLOTS 32
+
+static bool
+chDomainPCISlotIsAvailable(virDomainDef *def, size_t slot) {
+    size_t i;
+
+    /* virtio-blk disks */
+    for (i = 0; i < def->ndisks; i++) {
+        const virDomainDiskDef *disk = def->disks[i];
+
+        if (disk->info.addr.pci.slot == slot) {
+            return false;
+        }
+    }
+
+    /* virtio-net devices */
+    for (i = 0; i < def->nnets; i++) {
+        const virDomainNetDef *net = def->nets[i];
+
+        if (net->info.addr.pci.slot == slot) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+// TODO make this more robust; there are a few PCI slots occupied by
+//  pre-existing devices
+#define CHV_MIN_PCI_SLOT 4
+
+/*
+ * Finds the next PCI slot that is available.
+ *
+ * Only `MAX_PCI_SLOTS` slots/devices in total are supported for now.
+ */
+static int
+chDomainFindNextPCISlot(virDomainDef *def) {
+    size_t i;
+    int slot_candidate = -1;
+
+    for (i = CHV_MIN_PCI_SLOT; i < MAX_PCI_SLOTS; i++) {
+        if (chDomainPCISlotIsAvailable(def, i)) {
+            slot_candidate = (int) i;
+            break;
+        }
+    }
+
+    if (slot_candidate == -1) {
+        VIR_ERROR("didn't find a free PCI slot for device");
+    }
+
+    return slot_candidate;
+}
+
+/*
+ * Assigns a PCI slot to a device. For simplicity, only `MAX_PCI_SLOTS` PCI slots
+ * in total are supported at the moment. This function can be used for static
+ * devices and hotplugged devices.
+ */
+int
+chDomainAssignDevicePCISlot(virDomainDef *def, virDomainDeviceInfo* info, int slot) {
+    if (slot == -1) {
+        slot = chDomainFindNextPCISlot(def);
+        if (slot == -1) {
+            VIR_ERROR("Couldn't find a free slot for PCI device %s", info->alias);
+            return -1;
+        }
+    }
+
+    // Populate the <interface type="pci"> XML tag, relevant for OpenStack
+    // Currently not needed to have sane values here.
+    info->type = VIR_DOMAIN_DEVICE_ADDRESS_TYPE_PCI;
+    info->addr.pci.bus = 0;
+    info->addr.pci.slot = slot;
+    info->addr.pci.function = 0;
+
+    VIR_WARN("assigned PCI address 0:%d:0 to device %s", slot, info->alias);
+
+    return 0;
+}
+
+/*
+ * This assigns static PCI slots to all configured devices.
+ *
+ * Respects PCI addresses that are already in the XML.
+ */
+// TODO I'm not sure if the handling here is already graceful and mature enough.
+// Especially when it comes to statically assigning values or keeping them if
+// they are already configured.
+static int
+chDomainAssignDevicePCISlots(virDomainDef *def)
+{
+    size_t i, slot = 0;
+
+    /* virtio-blk disks */
+    for (i = 0; i < def->ndisks; i++) {
+        virDomainDiskDef *disk = def->disks[i];
+
+        // Skip in case an address comes already from the XML.
+        if (disk->info.type == VIR_DOMAIN_DEVICE_ADDRESS_TYPE_PCI && disk->info.addr.pci.slot != 0) {
+            VIR_WARN("keeping already assigned PCI address 0:%ld:0 for device %s", slot, disk->info.alias);
+            continue;
+        }
+
+        if (chDomainAssignDevicePCISlot(def, &disk->info, -1) < 0) {
+            VIR_ERROR("failed to assign PCI slot to disk device %s", disk->info.alias);
+            return -1;
+        }
+        slot += 1;
+    }
+
+    /* virtio-net devices */
+    for (i = 0; i < def->nnets; i++) {
+        virDomainNetDef *net = def->nets[i];
+
+        // Skip in case an address comes already from the XML.
+        if (net->info.type == VIR_DOMAIN_DEVICE_ADDRESS_TYPE_PCI && net->info.addr.pci.slot != 0) {
+            VIR_WARN("keeping already assigned PCI address 0:%ld:0 for device %s", slot, net->info.alias);
+            continue;
+        }
+
+        if (chDomainAssignDevicePCISlot(def, &net->info, -1) < 0) {
+            VIR_ERROR("failed to assign PCI slot to net device %s", net->info.alias);
+            return -1;
+        }
+        slot += 1;
+    }
+
+    return 0;
+}
+
+static int
+chDomainAssignPCIAddresses(virDomainDef *def)
+{
+    if (chDomainAssignDevicePCISlots(def) < 0)
+        return -1;
+
+    return 0;
+}
+
+int
+chDomainAssignAddresses(virDomainDef *def)
+{
+    if (chDomainAssignPCIAddresses(def) < 0)
+        return -1;
+
+    return 0;
+}
