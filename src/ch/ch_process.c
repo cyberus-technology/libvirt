@@ -1334,6 +1334,10 @@ virCHProcessStartRestore(virCHDriver *driver, virDomainObj *vm, const char *from
     }
     logfile = domainLogContextGetWriteFD(logCtxt);
 
+    if (virCHProcessPrepareDomain(vm) < 0) {
+        return -1;
+    }
+
     if (virCHProcessPrepareHost(driver, vm) < 0)
         return -1;
 
