@@ -366,14 +366,6 @@ virCHMonitorBuildNetJson(virDomainNetDef *net,
     if (virJSONValueObjectAppendString(net_json, "id", net->info.alias) < 0)
         return -1;
 
-    /*// Populate the <interface type="pci"> XML tag, relevant for OpenStack
-    // Currently not needed to have sane values here.
-	net->info.type = VIR_DOMAIN_DEVICE_ADDRESS_TYPE_PCI;
-    net->info.addr.pci.bus = 0;
-    assert(netindex <= 7);
-    net->info.addr.pci.slot = netindex + 1;
-    net->info.addr.pci.function = 0;*/
-
     if (actualType == VIR_DOMAIN_NET_TYPE_ETHERNET &&
         net->guestIP.nips == 1) {
         const virNetDevIPAddr *ip;
@@ -1623,11 +1615,11 @@ virCHMonitorBuildRestoreJson(virDomainDef *vmdef,
     if (vmdef->nnets) {
         g_autoptr(virJSONValue) nets = virJSONValueNewArray();
         for (i = 0; i < vmdef->nnets; i++) {
+            virDomainNetDef *net = vmdef->nets[i];
             g_autoptr(virJSONValue) net_json = virJSONValueNewObject();
-            g_autofree char *id = g_strdup_printf("%s_%zu", CH_NET_ID_PREFIX, i);
-            if (virJSONValueObjectAppendString(net_json, "id", id) < 0)
+            if (virJSONValueObjectAppendString(net_json, "id", net->info.alias) < 0)
                 return -1;
-            if (virJSONValueObjectAppendNumberInt(net_json, "num_fds", vmdef->nets[i]->driver.virtio.queues))
+            if (virJSONValueObjectAppendNumberInt(net_json, "num_fds", (int) net->driver.virtio.queues))
                 return -1;
             if (virJSONValueArrayAppend(nets, &net_json) < 0)
                 return -1;

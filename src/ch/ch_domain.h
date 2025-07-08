@@ -92,3 +92,9 @@ virCHDomainObjFromDomain(virDomainPtr domain);
 
 int
 virCHDomainValidateActualNetDef(virDomainNetDef *net);
+
+int
+chDomainAssignAddresses(virDomainDef *def);
+
+int
+chDomainAssignDevicePCISlot(virDomainDef *def, virDomainDeviceInfo* info, int slot);
