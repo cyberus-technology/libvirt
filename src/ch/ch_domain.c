@@ -427,12 +427,17 @@ virCHDomainValidateActualNetDef(virDomainNetDef *net)
 #define MAX_PCI_SLOTS 32
 
 static bool
-chDomainPCISlotIsAvailable(virDomainDef *def, size_t slot) {
+chDomainPCISlotIsAvailable(virDomainDef *def, virDomainDeviceInfo *info /* nullable */, size_t slot) {
     size_t i;
 
     /* virtio-blk disks */
     for (i = 0; i < def->ndisks; i++) {
         const virDomainDiskDef *disk = def->disks[i];
+
+        // Prevent that we consider the address is taken by ourselves.
+        if (info && STREQ(disk->info.alias, info->alias)) {
+            continue;
+        }
 
         if (disk->info.addr.pci.slot == slot) {
             return false;
@@ -442,6 +447,11 @@ chDomainPCISlotIsAvailable(virDomainDef *def, size_t slot) {
     /* virtio-net devices */
     for (i = 0; i < def->nnets; i++) {
         const virDomainNetDef *net = def->nets[i];
+
+        // Prevent that we consider the address is taken by ourselves.
+        if (info && STREQ(net->info.alias, info->alias)) {
+            continue;
+        }
 
         if (net->info.addr.pci.slot == slot) {
             return false;
@@ -466,7 +476,7 @@ chDomainFindNextPCISlot(virDomainDef *def) {
     int slot_candidate = -1;
 
     for (i = CHV_MIN_PCI_SLOT; i < MAX_PCI_SLOTS; i++) {
-        if (chDomainPCISlotIsAvailable(def, i)) {
+        if (chDomainPCISlotIsAvailable(def, NULL, i)) {
             slot_candidate = (int) i;
             break;
         }
@@ -483,14 +493,28 @@ chDomainFindNextPCISlot(virDomainDef *def) {
  * Assigns a PCI slot to a device. For simplicity, only `MAX_PCI_SLOTS` PCI slots
  * in total are supported at the moment. This function can be used for static
  * devices and hotplugged devices.
+ *
+ * This function respects if there is already a desired slot specified.
  */
 int
 chDomainAssignDevicePCISlot(virDomainDef *def, virDomainDeviceInfo* info, int slot) {
     if (slot == -1) {
-        slot = chDomainFindNextPCISlot(def);
-        if (slot == -1) {
-            VIR_ERROR("Couldn't find a free slot for PCI device %s", info->alias);
-            return -1;
+        // TODO the whole codepath with keeping PCI slots from XML file doesn't really work according to the logs?!
+        // but transient and persistent XML seems to be.. fine?! Investigate!
+        //
+        // Is there a desired slot from the XML?
+        // We need this check here for hotplugging.
+        //
+        // This path is used for hot attachment.
+        if (virDeviceInfoPCIAddressIsPresent(info)) {
+            slot = (int) info->addr.pci.slot;
+            VIR_WARN("Trying to use desired PCI slot %d of device %s", slot, info->alias);
+        } else {
+            slot = chDomainFindNextPCISlot(def);
+            if (slot == -1) {
+                VIR_ERROR("Couldn't find a free slot for PCI device %s", info->alias);
+                return -1;
+            }
         }
     }
 
@@ -523,8 +547,11 @@ chDomainAssignDevicePCISlots(virDomainDef *def)
     for (i = 0; i < def->ndisks; i++) {
         virDomainDiskDef *disk = def->disks[i];
 
+        // TODO the whole codepath with keeping PCI slots from XML file doesn't really work according to the logs?!
+        //
+        // but transient and persistent XML seems to be.. fine?! Investigate!
         // Skip in case an address comes already from the XML.
-        if (disk->info.type == VIR_DOMAIN_DEVICE_ADDRESS_TYPE_PCI && disk->info.addr.pci.slot != 0) {
+        if (virDeviceInfoPCIAddressIsPresent(&disk->info)) {
             VIR_WARN("keeping already assigned PCI address 0:%ld:0 for device %s", slot, disk->info.alias);
             continue;
         }
@@ -541,7 +568,7 @@ chDomainAssignDevicePCISlots(virDomainDef *def)
         virDomainNetDef *net = def->nets[i];
 
         // Skip in case an address comes already from the XML.
-        if (net->info.type == VIR_DOMAIN_DEVICE_ADDRESS_TYPE_PCI && net->info.addr.pci.slot != 0) {
+        if (virDeviceInfoPCIAddressIsPresent(&net->info)) {
             VIR_WARN("keeping already assigned PCI address 0:%ld:0 for device %s", slot, net->info.alias);
             continue;
         }
