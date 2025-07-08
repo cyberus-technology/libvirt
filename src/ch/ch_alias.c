@@ -22,12 +22,9 @@ chAssignDeviceDiskAlias(virDomainDef *def,
     int controllerModel = -1;
 
     if (!disk->info.alias) {
-        VIR_WARN("%s:%d:  WAH", __FUNCTION__, __LINE__);
         if (disk->info.type == VIR_DOMAIN_DEVICE_ADDRESS_TYPE_DRIVE) {
-            VIR_WARN("%s:%d:  WAH", __FUNCTION__, __LINE__);
             if (disk->bus == VIR_DOMAIN_DISK_BUS_SCSI) {
                 virDomainControllerDef *cont;
-                VIR_WARN("%s:%d:  WAH", __FUNCTION__, __LINE__);
 
                 if (!(cont = virDomainDeviceFindSCSIController(def, &disk->info.addr.drive))) {
                     virReportError(VIR_ERR_INTERNAL_ERROR,
@@ -35,7 +32,6 @@ chAssignDeviceDiskAlias(virDomainDef *def,
                                    disk->info.addr.drive.controller);
                     return -1;
                 }
-                VIR_WARN("%s:%d:  WAH", __FUNCTION__, __LINE__);
 
                 controllerModel = cont->model;
 
@@ -43,30 +39,24 @@ chAssignDeviceDiskAlias(virDomainDef *def,
                     return -1;
             }
 
-            VIR_WARN("%s:%d:  WAH", __FUNCTION__, __LINE__);
             if (disk->bus != VIR_DOMAIN_DISK_BUS_SCSI ||
                 controllerModel == VIR_DOMAIN_CONTROLLER_MODEL_SCSI_LSILOGIC) {
                 disk->info.alias = g_strdup_printf("%s%d-%d-%d", prefix,
                                                    disk->info.addr.drive.controller,
                                                    disk->info.addr.drive.bus,
                                                    disk->info.addr.drive.unit);
-                VIR_WARN("%s:%d:  WAH", __FUNCTION__, __LINE__);
             } else {
                 disk->info.alias = g_strdup_printf("%s%d-%d-%d-%d", prefix,
                                                    disk->info.addr.drive.controller,
                                                    disk->info.addr.drive.bus,
                                                    disk->info.addr.drive.target,
                                                    disk->info.addr.drive.unit);
-                VIR_WARN("%s:%d:  WAH", __FUNCTION__, __LINE__);
             }
         } else {
             int idx = virDiskNameToIndex(disk->dst);
-            VIR_WARN("%s:%d:  WAH", __FUNCTION__, __LINE__);
             disk->info.alias = g_strdup_printf("%s-disk%d", prefix, idx);
         }
     }
-
-    VIR_WARN("%s:%d:  WAH alias=%s", __FUNCTION__, __LINE__, disk->info.alias);
 
     return 0;
 }
