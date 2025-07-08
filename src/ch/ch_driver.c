@@ -2753,6 +2753,61 @@ chDomainMigratePrepare3(virConnectPtr dconn,
 }
 
 static int
+chDomainMigrateConfirm3(virDomainPtr domain,
+                        const char *cookiein,
+                        int cookieinlen,
+                        unsigned long flags,
+                        int cancelled)
+{
+    virCHDriver *driver = domain->conn->privateData;
+    virObjectEvent *event = NULL;
+    // virObjectEvent *event = NULL;
+    g_autoptr(virCHDriverConfig) cfg = virCHDriverGetConfig(domain->conn->privateData);
+    // virCHDomainObjPrivate *priv = NULL;
+    // size_t i;
+    virDomainObj *vm;
+
+    VIR_INFO("chDomainMigrateConfirm3 %p %s %d %lu %d",
+              domain, cookiein, cookieinlen, flags, cancelled);
+
+    if (!(vm = virCHDomainObjFromDomain(domain)))
+        return -1;
+
+    // priv = vm->privateData;
+
+    if (virDomainMigrateConfirm3EnsureACL(domain->conn, vm->def) < 0) {
+        virDomainObjEndAPI(&vm);
+        return -1;
+    }
+
+    virDomainObjEndJob(vm);
+
+    // Following call deletes network devices, cgroups and stops the cloud
+    // hypervisor process
+    virCHProcessStop(driver, vm, VIR_DOMAIN_SHUTOFF_MIGRATED);
+
+    virCHDomainRemoveInactive(driver, vm);
+
+    event = virDomainEventLifecycleNewFromObj(vm, VIR_DOMAIN_EVENT_STOPPED,
+                                              VIR_DOMAIN_EVENT_STOPPED_MIGRATED);
+    virObjectEventStateQueue(driver->domainEventState, event);
+
+    virDomainObjEndAPI(&vm);
+    return 0;
+}
+
+static int virConnectCredType[] = {
+    VIR_CRED_AUTHNAME,
+    VIR_CRED_PASSPHRASE,
+};
+
+
+static virConnectAuth virConnectAuthConfig = {
+    .credtype = virConnectCredType,
+    .ncredtype = G_N_ELEMENTS(virConnectCredType),
+};
+
+static int
 chDomainMigratePerform3(virDomainPtr dom,
                         const char *xmlin,
                         const char *cookiein,
@@ -2770,6 +2825,9 @@ chDomainMigratePerform3(virDomainPtr dom,
     virCHDriver *driver = dom->conn->privateData;
     g_autofree char *id = g_strdup_printf("bla");
     g_autoptr(virCHDriverConfig) cfg = NULL;
+    g_autoptr(virConnect) dconn = NULL;
+    char *uri_out = NULL;
+    g_autofree char *dom_xml = NULL;
 
     cfg = virCHDriverGetConfig(driver);
 
@@ -2790,12 +2848,52 @@ chDomainMigratePerform3(virDomainPtr dom,
         goto cleanup;
     }
 
+    /**
+     * If the dconnuri is set we are (most likely) in the P2P/direct case. In this
+     * case, the libvirt migration protocol (begin, prepare, perform, finish,
+     * confirm) is not handled by libvirt, but must be driven by us.
+     * Libvirt only calls the perform API call and the rest must be done in this function.
+     * We can obtain a connection to the remote libvirt via the
+     * `virConnectOpenAuth` call and call all the migration functions in the
+     * right order from here.
+     */
+    if (dconnuri) {
+        VIR_WARN("Got dconnuri. Probably p2p/direct migration. Do special extra handling");
+        // dom_xml = chDomainMigrateBegin3(dom, xmlin, cookieout, cookieoutlen, flags, dname, 0);
+        dom_xml = virDomainDefFormat(vm->def, driver->xmlopt, VIR_DOMAIN_DEF_FORMAT_SECURE);
+
+        VIR_WARN("Got domain xml: %s", dom_xml);
+
+        dconn = virConnectOpenAuth(dconnuri, &virConnectAuthConfig, 0);
+        if (dconn == NULL) {
+            VIR_WARN("Could not open connection to remote libvirt daemon");
+            return -1;
+        }
+
+        // if (virConnectSetKeepAlive(dconn, 100/*cfg->keepAliveInterval*/, 100/*cfg->keepAliveCount*/) < 0)
+        //     goto cleanup;
+
+        dconn->driver->domainMigratePrepare3(dconn, cookiein, cookieinlen, cookieout, cookieoutlen, uri, &uri_out, flags, dname, 0 /*bandwidth*/, dom_xml);
+
+        VIR_WARN("Got uri_out: %s", uri_out);
+        uri = uri_out;
+    }
+
     if (virCHMonitorMigrationSend(priv->monitor, uri) < 0) {
         VIR_WARN("Migration send failed.");
         goto cleanup;
     }
 
     virDomainDeleteConfig(cfg->stateDir, cfg->autostartDir, vm);
+
+    if (dconnuri) {
+        VIR_WARN("P2P: Call finish on remote context");
+        dconn->driver->domainMigrateFinish3(dconn, vm->def->name, NULL, 0, NULL, NULL, NULL, uri, flags, 0);
+        virDomainObjEndAPI(&vm);
+        VIR_WARN("P2P: Call confirm on our context");
+        chDomainMigrateConfirm3(dom, cookiein, cookieinlen, flags, 0);
+        return 0;
+    }
 
  cleanup:
     virDomainObjEndAPI(&vm);
@@ -2867,50 +2965,6 @@ chDomainMigrateFinish3(virConnectPtr dconn,
 
     virDomainObjEndAPI(&vm);
     return dom;
-}
-
-static int
-chDomainMigrateConfirm3(virDomainPtr domain,
-                        const char *cookiein,
-                        int cookieinlen,
-                        unsigned long flags,
-                        int cancelled)
-{
-    virCHDriver *driver = domain->conn->privateData;
-    virObjectEvent *event = NULL;
-    // virObjectEvent *event = NULL;
-    g_autoptr(virCHDriverConfig) cfg = virCHDriverGetConfig(domain->conn->privateData);
-    // virCHDomainObjPrivate *priv = NULL;
-    // size_t i;
-    virDomainObj *vm;
-
-    VIR_INFO("chDomainMigrateConfirm3 %p %s %d %lu %d",
-              domain, cookiein, cookieinlen, flags, cancelled);
-
-    if (!(vm = virCHDomainObjFromDomain(domain)))
-        return -1;
-
-    // priv = vm->privateData;
-
-    if (virDomainMigrateConfirm3EnsureACL(domain->conn, vm->def) < 0) {
-        virDomainObjEndAPI(&vm);
-        return -1;
-    }
-
-    virDomainObjEndJob(vm);
-
-    // Following call deletes network devices, cgroups and stops the cloud
-    // hypervisor process
-    virCHProcessStop(driver, vm, VIR_DOMAIN_SHUTOFF_MIGRATED);
-
-    virCHDomainRemoveInactive(driver, vm);
-
-    event = virDomainEventLifecycleNewFromObj(vm, VIR_DOMAIN_EVENT_STOPPED,
-                                              VIR_DOMAIN_EVENT_STOPPED_MIGRATED);
-    virObjectEventStateQueue(driver->domainEventState, event);
-
-    virDomainObjEndAPI(&vm);
-    return 0;
 }
 
 static int
