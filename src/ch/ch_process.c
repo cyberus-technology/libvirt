@@ -657,6 +657,8 @@ chProcessAddNetworkDevice(virCHDriver *driver,
         return -1;
     }
 
+    chAssignDeviceNetAlias(vmdef, net, -1);
+
     virBufferAddLit(&http_headers, "PUT /api/v1/vm.add-net HTTP/1.1\r\n");
     virBufferAddLit(&http_headers, "Host: localhost\r\n");
     virBufferAddLit(&http_headers, "Content-Type: application/json\r\n");
@@ -687,8 +689,7 @@ chProcessAddNetworkDevice(virCHDriver *driver,
         return -1;
     }
 
-    new_net_id = vmdef->nnets - 1; // IDs start at 0
-    if (virCHMonitorBuildNetJson(net, new_net_id, &payload) < 0) {
+    if (virCHMonitorBuildNetJson(net, &payload) < 0) {
         virReportError(VIR_ERR_INTERNAL_ERROR, "%s",
                         _("Failed to build net json"));
         VIR_WARN("virCHMonitorBuildNetJson failed.");
@@ -796,7 +797,7 @@ chProcessAddNetworkDevices(virCHDriver *driver,
             return -1;
         }
 
-        if (virCHMonitorBuildNetJson(vmdef->nets[i], i, &payload) < 0) {
+        if (virCHMonitorBuildNetJson(vmdef->nets[i], &payload) < 0) {
             virReportError(VIR_ERR_INTERNAL_ERROR, "%s",
                            _("Failed to build net json"));
             VIR_WARN("virCHMonitorBuildNetJson failed.");
