@@ -642,7 +642,6 @@ chProcessAddNetworkDevice(virCHDriver *driver,
     size_t nnicindexes = 0;
     size_t tapfd_len;
     size_t payload_len;
-    size_t new_net_id = 0;
     int saved_errno;
     int rc;
 
@@ -658,6 +657,7 @@ chProcessAddNetworkDevice(virCHDriver *driver,
     }
 
     chAssignDeviceNetAlias(vmdef, net, -1);
+    chDomainAssignDevicePCISlot(vmdef, &net->info, -1);
 
     virBufferAddLit(&http_headers, "PUT /api/v1/vm.add-net HTTP/1.1\r\n");
     virBufferAddLit(&http_headers, "Host: localhost\r\n");
@@ -996,6 +996,9 @@ virCHProcessPrepareDomain(virDomainObj *vm)
         return -1;
 
     if (chAssignDeviceAliases(vm->def) < 0)
+        return -1;
+
+    if (chDomainAssignAddresses(vm->def) < 0)
         return -1;
 
     return 0;
