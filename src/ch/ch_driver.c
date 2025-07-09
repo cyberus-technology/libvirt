@@ -3019,8 +3019,6 @@ chDomainAttachDeviceLive(virDomainObj *vm,
             break;
         }
 
-        chDomainAssignDevicePCISlot(vm->def, &dev->data.disk->info, -1);
-
         disks = virJSONValueNewArray();
         if (virCHMonitorBuildDiskJson(disks, dev->data.disk) < 0) {
             VIR_WARN("Attach disk failed");
