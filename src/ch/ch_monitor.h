@@ -47,6 +47,8 @@
 
 #define VIRCH_THREAD_NAME_LEN   16
 
+#define CH_NET_ID_PREFIX "net"
+
 typedef enum {
     virCHThreadTypeEmulator,
     virCHThreadTypeVcpu,
