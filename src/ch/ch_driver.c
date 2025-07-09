@@ -1688,12 +1688,12 @@ chConnectSupportsFeature(virConnectPtr conn,
             return -1;
         case VIR_DRV_FEATURE_MIGRATION_V3:
         case VIR_DRV_FEATURE_MIGRATION_P2P:
+        case VIR_DRV_FEATURE_MIGRATION_PARAMS:
             return 1;
         case VIR_DRV_FEATURE_MIGRATION_V2:
         case VIR_DRV_FEATURE_MIGRATE_CHANGE_PROTECTION:
         case VIR_DRV_FEATURE_XML_MIGRATABLE:
         case VIR_DRV_FEATURE_MIGRATION_OFFLINE:
-        case VIR_DRV_FEATURE_MIGRATION_PARAMS:
         case VIR_DRV_FEATURE_MIGRATION_DIRECT:
         case VIR_DRV_FEATURE_MIGRATION_V1:
         default:
@@ -2901,6 +2901,36 @@ chDomainMigratePerform3(virDomainPtr dom,
     return 0;
 }
 
+static int
+chDomainMigratePerform3Params(virDomainPtr dom,
+                              const char *dconnuri,
+                              virTypedParameterPtr params,
+                              int nparams,
+                              const char *cookiein,
+                              int cookieinlen,
+                              char **cookieout,
+                              int *cookieoutlen,
+                              unsigned int flags)
+{
+    const char *dname = NULL;
+
+    virTypedParamsGetString(params, nparams, VIR_MIGRATE_PARAM_DEST_NAME, &dname);
+
+    VIR_WARN("chDomainMigratePerform3Params dconnuri: %s dname: %s", dconnuri, dname);
+
+    return chDomainMigratePerform3(dom,
+                                   NULL /*const char *xmlin*/,
+                                   cookiein,
+                                   cookieinlen,
+                                   cookieout,
+                                   cookieoutlen,
+                                   dconnuri,
+                                   NULL /*const char *uri*/,
+                                   flags,
+                                   dname,
+                                   0 /*unsigned long resource*/);
+}
+
 static virDomainPtr
 chDomainMigrateFinish3(virConnectPtr dconn,
                        const char *dname,
@@ -3829,6 +3859,7 @@ static virHypervisorDriver chHypervisorDriver = {
     .domainMigrateBegin3 = chDomainMigrateBegin3, /* 11.4.0 */
     .domainMigratePrepare3 = chDomainMigratePrepare3, /* 11.4.0 */
     .domainMigratePerform3 = chDomainMigratePerform3, /* 11.4.0 */
+    .domainMigratePerform3Params = chDomainMigratePerform3Params, /* 11.4.0 */
     .domainMigrateFinish3 = chDomainMigrateFinish3, /* 11.4.0 */
     .domainMigrateConfirm3 = chDomainMigrateConfirm3, /* 11.4.0 */
     .domainAttachDevice = chDomainAttachDevice, /* 11.4.0 */
