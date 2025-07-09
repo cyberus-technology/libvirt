@@ -357,22 +357,27 @@ virCHMonitorBuildRngJson(virJSONValue *content, virDomainDef *vmdef)
  */
 int
 virCHMonitorBuildNetJson(virDomainNetDef *net,
+                         int netindex,
                          char **jsonstr)
 {
     char macaddr[VIR_MAC_STRING_BUFLEN];
     g_autoptr(virJSONValue) net_json = virJSONValueNewObject();
     virDomainNetType actualType = virDomainNetGetActualType(net);
 
-    if (virJSONValueObjectAppendString(net_json, "id", net->info.alias) < 0)
+    // TODO switch to chAssignDeviceNetAlias from ch_alias.c
+    g_autofree char *id = g_strdup_printf("%s_%d", CH_NET_ID_PREFIX, netindex);
+    if (virJSONValueObjectAppendString(net_json, "id", id) < 0)
         return -1;
 
-    /*// Populate the <interface type="pci"> XML tag, relevant for OpenStack
+    net->info.alias = g_strdup_printf("%s", id);
+
+    // Populate the <interface type="pci"> XML tag, relevant for OpenStack
     // Currently not needed to have sane values here.
 	net->info.type = VIR_DOMAIN_DEVICE_ADDRESS_TYPE_PCI;
     net->info.addr.pci.bus = 0;
     assert(netindex <= 7);
     net->info.addr.pci.slot = netindex + 1;
-    net->info.addr.pci.function = 0;*/
+    net->info.addr.pci.function = 0;
 
     if (actualType == VIR_DOMAIN_NET_TYPE_ETHERNET &&
         net->guestIP.nips == 1) {
@@ -1531,6 +1536,9 @@ int virCHMonitorMigrationReceive(virCHMonitor *mon,
                 vmdef->nets[i]->driver.virtio.queues = 1;
             }
             net_json = virJSONValueNewObject();
+            // TODO switch to chAssignDeviceNetAlias from ch_alias.c
+            id = g_strdup_printf("%s_%zu", CH_NET_ID_PREFIX, i);
+			vmdef->nets[i]->info.alias = g_strdup_printf("%s", id);
 
 			// Populate the <interface type="pci"> XML tag, relevant for OpenStack
 			// Currently not needed to have sane values here.
