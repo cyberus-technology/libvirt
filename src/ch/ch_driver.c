@@ -2892,6 +2892,7 @@ chDomainMigratePerform3(virDomainPtr dom,
         virDomainObjEndAPI(&vm);
         VIR_WARN("P2P: Call confirm on our context");
         chDomainMigrateConfirm3(dom, cookiein, cookieinlen, flags, 0);
+        virConnectClose(dconn);
         return 0;
     }
 
