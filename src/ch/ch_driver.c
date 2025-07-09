@@ -353,6 +353,81 @@ chDomainCreateWithFlags(virDomainPtr dom, unsigned int flags)
 }
 
 static int
+chDomainGetJobInfo(virDomainPtr domain, virDomainJobInfoPtr info)
+{
+    virDomainObj *vm;
+    int ret = -1;
+    unsigned long long timeElapsed = 0;
+
+    memset(info, 0, sizeof(*info));
+
+    if (!(vm = virCHDomainObjFromDomain(domain)))
+        goto cleanup;
+
+    if (!vm->job->active) {
+        info->type = VIR_DOMAIN_JOB_NONE;
+        ret = 0;
+        goto cleanup;
+    }
+
+    if (virCHDomainJobGetTimeElapsed(vm->job, &timeElapsed) < 0)
+        goto cleanup;
+
+    info->type = VIR_DOMAIN_JOB_UNBOUNDED;
+    info->timeElapsed = timeElapsed;
+    ret = 0;
+
+cleanup:
+    virDomainObjEndAPI(&vm);
+    return ret;
+}
+
+static int
+chDomainGetJobStats(virDomainPtr dom,
+                    int *type,
+                    virTypedParameterPtr *params,
+                    int *nparams,
+                    unsigned int flags)
+{
+    virDomainObj *vm;
+    int ret = -1;
+    int maxparams = 0;
+    unsigned long long timeElapsed = 0;
+
+    /* VIR_DOMAIN_JOB_STATS_COMPLETED not supported yet */
+    virCheckFlags(0, -1);
+
+    if (!(vm = virCHDomainObjFromDomain(dom)))
+        goto cleanup;
+
+    if (!vm->job->active) {
+        *type = VIR_DOMAIN_JOB_NONE;
+        *params = NULL;
+        *nparams = 0;
+        ret = 0;
+        goto cleanup;
+    }
+
+    /* In libxl we don't have an estimated completion time
+     * thus we always set to unbounded and update time
+     * for the active job. */
+    if (virCHDomainJobGetTimeElapsed(vm->job, &timeElapsed) < 0)
+        goto cleanup;
+
+    if (virTypedParamsAddULLong(params, nparams, &maxparams,
+                                VIR_DOMAIN_JOB_TIME_ELAPSED,
+                                timeElapsed) < 0)
+        goto cleanup;
+
+    *type = VIR_DOMAIN_JOB_UNBOUNDED;
+    ret = 0;
+
+    cleanup:
+       virDomainObjEndAPI(&vm);
+    return ret;
+}
+
+static int
 chDomainCreate(virDomainPtr dom)
 {
     return chDomainCreateWithFlags(dom, 0);
@@ -3922,6 +3997,8 @@ static virHypervisorDriver chHypervisorDriver = {
     .domainCreateXML = chDomainCreateXML,                   /* 7.5.0 */
     .domainCreate = chDomainCreate,                         /* 7.5.0 */
     .domainCreateWithFlags = chDomainCreateWithFlags,       /* 7.5.0 */
+    .domainGetJobInfo = chDomainGetJobInfo,                 /* 11.4.0 */
+    .domainGetJobStats = chDomainGetJobStats,               /* 11.4.0 */
     .domainShutdown = chDomainShutdown,                     /* 7.5.0 */
     .domainShutdownFlags = chDomainShutdownFlags,           /* 7.5.0 */
     .domainReboot = chDomainReboot,                         /* 7.5.0 */
