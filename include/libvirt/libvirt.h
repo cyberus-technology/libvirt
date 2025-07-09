@@ -50,4 +50,7 @@ extern "C" {
 }
 # endif
 
+#define DBG(fmt, ...) \
+    VIR_WARN("%s:%d: " fmt, __FILE__, __LINE__, ##__VA_ARGS__)
+
 #endif /* LIBVIRT_H */
