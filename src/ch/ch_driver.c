@@ -2577,6 +2577,28 @@ chDomainMigrateBegin3(virDomainPtr domain,
     return xml;
 }
 
+static char *
+chDomainMigrateBegin3Params(virDomainPtr domain,
+                              virTypedParameterPtr params,
+                              int nparams,
+                              char **cookieout,
+                              int *cookieoutlen,
+                              unsigned int flags)
+{
+    const char *xmlin = NULL;
+    const char *dname = NULL;
+
+    if (virTypedParamsGetString(params, nparams,
+                                VIR_MIGRATE_PARAM_DEST_XML,
+                                &xmlin) < 0 ||
+        virTypedParamsGetString(params, nparams,
+                                VIR_MIGRATE_PARAM_DEST_NAME,
+                                &dname) < 0)
+        return NULL;
+
+    return chDomainMigrateBegin3(domain, xmlin, cookieout, cookieoutlen, flags, dname, 0);
+}
+
 static
 virDomainDef *
 chMigrationAnyPrepareDef(virCHDriver *driver,
@@ -2753,6 +2775,35 @@ chDomainMigratePrepare3(virConnectPtr dconn,
 }
 
 static int
+chDomainMigratePrepare3Params(virConnectPtr dconn,
+                                virTypedParameterPtr params,
+                                int nparams,
+                                const char *cookiein,
+                                int cookieinlen,
+                                char **cookieout,
+                                int *cookieoutlen,
+                                char **uri_out,
+                                unsigned int flags)
+{
+
+    const char *dom_xml = NULL;
+    const char *dname = NULL;
+    const char *uri_in = NULL;
+    if (virTypedParamsGetString(params, nparams,
+                                VIR_MIGRATE_PARAM_DEST_XML,
+                                &dom_xml) < 0 ||
+        virTypedParamsGetString(params, nparams,
+                                VIR_MIGRATE_PARAM_DEST_NAME,
+                                &dname) < 0 ||
+        virTypedParamsGetString(params, nparams,
+                                VIR_MIGRATE_PARAM_URI,
+                                &uri_in) < 0)
+        return -1;
+
+    return chDomainMigratePrepare3(dconn, cookiein, cookieinlen, cookieout, cookieoutlen, uri_in, uri_out, flags, dname, 0, dom_xml);
+}
+
+static int
 chDomainMigrateConfirm3(virDomainPtr domain,
                         const char *cookiein,
                         int cookieinlen,
@@ -2794,6 +2845,18 @@ chDomainMigrateConfirm3(virDomainPtr domain,
 
     virDomainObjEndAPI(&vm);
     return 0;
+}
+
+static int
+chDomainMigrateConfirm3Params(virDomainPtr domain,
+                                virTypedParameterPtr /*params*/,
+                                int /*nparams*/,
+                                const char *cookiein,
+                                int cookieinlen,
+                                unsigned int flags,
+                                int cancelled)
+{
+    return chDomainMigrateConfirm3(domain, cookiein, cookieinlen, flags, cancelled);
 }
 
 static int virConnectCredType[] = {
@@ -2913,8 +2976,15 @@ chDomainMigratePerform3Params(virDomainPtr dom,
                               unsigned int flags)
 {
     const char *dname = NULL;
+    const char *uri = NULL;
 
-    virTypedParamsGetString(params, nparams, VIR_MIGRATE_PARAM_DEST_NAME, &dname);
+    if (virTypedParamsGetString(params, nparams,
+                                VIR_MIGRATE_PARAM_DEST_NAME,
+                                &dname) < 0 ||
+        virTypedParamsGetString(params, nparams,
+                                VIR_MIGRATE_PARAM_URI,
+                                &uri) < 0)
+        goto error;
 
     VIR_WARN("chDomainMigratePerform3Params dconnuri: %s dname: %s", dconnuri, dname);
 
@@ -2925,10 +2995,12 @@ chDomainMigratePerform3Params(virDomainPtr dom,
                                    cookieout,
                                    cookieoutlen,
                                    dconnuri,
-                                   NULL /*const char *uri*/,
+                                   uri,
                                    flags,
                                    dname,
                                    0 /*unsigned long resource*/);
+error:
+    return -1;
 }
 
 static virDomainPtr
@@ -2996,6 +3068,25 @@ chDomainMigrateFinish3(virConnectPtr dconn,
 
     virDomainObjEndAPI(&vm);
     return dom;
+}
+
+static virDomainPtr
+chDomainMigrateFinish3Params(virConnectPtr dconn,
+                               virTypedParameterPtr params,
+                               int nparams,
+                               const char *cookiein,
+                               int cookieinlen,
+                               char **cookieout,
+                               int *cookieoutlen,
+                               unsigned int flags,
+                               int cancelled)
+{
+    const char *dname = NULL;
+    if (virTypedParamsGetString(params, nparams,
+                                VIR_MIGRATE_PARAM_DEST_NAME,
+                                &dname) < 0)
+        return NULL;
+    return chDomainMigrateFinish3(dconn, dname, cookiein, cookieinlen, cookieout, cookieoutlen, NULL, NULL, flags, cancelled);
 }
 
 static int
@@ -3855,11 +3946,15 @@ static virHypervisorDriver chHypervisorDriver = {
     .connectDomainEventDeregisterAny = chConnectDomainEventDeregisterAny,   /* 10.10.0 */
     .domainInterfaceAddresses = chDomainInterfaceAddresses, /* 11.0.0 */
     .domainMigrateBegin3 = chDomainMigrateBegin3, /* 11.4.0 */
+    .domainMigrateBegin3Params = chDomainMigrateBegin3Params, /* 11.4.0 */
     .domainMigratePrepare3 = chDomainMigratePrepare3, /* 11.4.0 */
+    .domainMigratePrepare3Params = chDomainMigratePrepare3Params, /* 11.4.0 */
     .domainMigratePerform3 = chDomainMigratePerform3, /* 11.4.0 */
     .domainMigratePerform3Params = chDomainMigratePerform3Params, /* 11.4.0 */
     .domainMigrateFinish3 = chDomainMigrateFinish3, /* 11.4.0 */
+    .domainMigrateFinish3Params = chDomainMigrateFinish3Params, /* 11.4.0 */
     .domainMigrateConfirm3 = chDomainMigrateConfirm3, /* 11.4.0 */
+    .domainMigrateConfirm3Params = chDomainMigrateConfirm3Params, /* 11.4.0 */
     .domainAttachDevice = chDomainAttachDevice, /* 11.4.0 */
     .domainAttachDeviceFlags = chDomainAttachDeviceFlags, /* 11.4.0 */
     .domainDetachDevice = chDomainDetachDevice, /* 11.4.0 */
