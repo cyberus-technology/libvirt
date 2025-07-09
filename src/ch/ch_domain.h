@@ -92,3 +92,7 @@ virCHDomainObjFromDomain(virDomainPtr domain);
 
 int
 virCHDomainValidateActualNetDef(virDomainNetDef *net);
+
+int
+virCHDomainJobGetTimeElapsed(virDomainJobObj *job,
+                             unsigned long long *timeElapsed);
