@@ -2941,7 +2941,10 @@ chDomainMigratePerform3(virDomainPtr dom,
         goto cleanup;
     }
 
-    virDomainDeleteConfig(cfg->stateDir, cfg->autostartDir, vm);
+    if (flags & VIR_MIGRATE_UNDEFINE_SOURCE) {
+        virDomainDeleteConfig(cfg->configDir, cfg->autostartDir, vm);
+        vm->persistent = 0;
+    }
     rc = 0;
 
     if (dconnuri) {
@@ -3016,6 +3019,7 @@ chDomainMigrateFinish3(virConnectPtr dconn,
     virCHDriver *driver = dconn->privateData;
     virDomainObj *vm = NULL;
     virDomainPtr dom = NULL;
+    virDomainDef *vmdef = NULL;
     virCHDomainObjPrivate *priv = NULL;
     g_autoptr(virCHDriverConfig) cfg = virCHDriverGetConfig(driver);
 
@@ -3064,6 +3068,16 @@ chDomainMigrateFinish3(virConnectPtr dconn,
     if (virDomainObjSave(vm, driver->xmlopt, cfg->stateDir) < 0)
         VIR_WARN("Failed to save status on vm %s", vm->def->name);
 
+    if (flags & VIR_MIGRATE_PERSIST_DEST) {
+        VIR_WARN("Persisting domain at destination");
+        vm->persistent = 1;
+        if (!(vmdef = virDomainObjGetPersistentDef(driver->xmlopt, vm, NULL)))
+            goto error;
+
+        if (virDomainDefSave(vmdef, driver->xmlopt, cfg->configDir) < 0)
+            goto error;
+    }
+error:
     virDomainObjEndAPI(&vm);
     return dom;
 }
