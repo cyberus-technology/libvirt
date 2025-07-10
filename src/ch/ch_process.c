@@ -771,6 +771,8 @@ chProcessAddNetworkDevices(virCHDriver *driver,
         int saved_errno;
         int rc;
 
+        // This is set to 0 in domain_conf.c always. Figure out how to
+        // handle this properly!
         if (vmdef->nets[i]->driver.virtio.queues == 0) {
             /* "queues" here refers to queue pairs. When 0, initialize
              * queue pairs to 1.
@@ -858,6 +860,15 @@ virCHRestoreCreateNetworkDevices(virCHDriver *driver,
     size_t index_vmtapfds;
     for (i = 0; i < vmdef->nnets; i++) {
         g_autofree int *tapfds = NULL;
+
+        // This is set to 0 in domain_conf.c always. Figure out how to
+        // handle this properly!
+        if (vmdef->nets[i]->driver.virtio.queues == 0) {
+            /* "queues" here refers to queue pairs. When 0, initialize
+             * queue pairs to 1.
+             */
+            vmdef->nets[i]->driver.virtio.queues = 1;
+        }
         tapfd_len = vmdef->nets[i]->driver.virtio.queues;
         if (virCHDomainValidateActualNetDef(vmdef->nets[i]) < 0) {
             virReportError(VIR_ERR_INTERNAL_ERROR, "%s",

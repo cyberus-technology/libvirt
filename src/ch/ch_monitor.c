@@ -1530,6 +1530,8 @@ int virCHMonitorMigrationReceive(virCHMonitor *mon,
     if (vmdef->nnets) {
         g_autoptr(virJSONValue) nets = virJSONValueNewArray();
         for (i = 0; i < vmdef->nnets; i++) {
+            // This is set to 0 in domain_conf.c always. Figure out how to
+            // handle this properly!
             if (vmdef->nets[i]->driver.virtio.queues == 0) {
                 /* "queues" here refers to queue pairs. When 0, initialize
                 * queue pairs to 1.
@@ -1632,6 +1634,15 @@ virCHMonitorBuildRestoreJson(virDomainDef *vmdef,
     if (vmdef->nnets) {
         g_autoptr(virJSONValue) nets = virJSONValueNewArray();
         for (i = 0; i < vmdef->nnets; i++) {
+            // This is set to 0 in domain_conf.c always. Figure out how to
+            // handle this properly!
+            if (vmdef->nets[i]->driver.virtio.queues == 0) {
+                /* "queues" here refers to queue pairs. When 0, initialize
+                 * queue pairs to 1.
+                 */
+                vmdef->nets[i]->driver.virtio.queues = 1;
+            }
+
             g_autoptr(virJSONValue) net_json = virJSONValueNewObject();
             g_autofree char *id = g_strdup_printf("%s_%zu", CH_NET_ID_PREFIX, i);
             if (virJSONValueObjectAppendString(net_json, "id", id) < 0)
