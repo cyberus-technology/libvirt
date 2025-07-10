@@ -403,7 +403,10 @@ chDomainDefineXMLFlags(virConnectPtr conn, const char *xml, unsigned int flags)
 
     /* cleanup if there's any stale managedsave dir */
     managed_save_path = chDomainManagedSavePath(driver, vm);
-    if (virFileDeleteTree(managed_save_path) < 0) {
+
+    /* Do not delete the saved states if there was a previous definition of that
+     * domain. In that case, the saved state is probably to be reused. */
+    if (!oldDef && virFileDeleteTree(managed_save_path) < 0) {
         virReportSystemError(errno,
                              _("Failed to cleanup stale managed save dir '%1$s'"),
                              managed_save_path);
