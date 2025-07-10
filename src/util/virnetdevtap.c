@@ -203,6 +203,11 @@ int virNetDevTapCreate(char **ifname,
     if (!tunpath)
         tunpath = "/dev/net/tun";
 
+    if (tapfdSize == 0) {
+        VIR_ERROR("tapfdSize is 0, Tap device %s won't be created!");
+        return -1;
+    }
+
     for (i = 0; i < tapfdSize; i++) {
         struct ifreq ifr = { 0 };
 
