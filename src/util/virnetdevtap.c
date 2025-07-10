@@ -204,7 +204,7 @@ int virNetDevTapCreate(char **ifname,
         tunpath = "/dev/net/tun";
 
     if (tapfdSize == 0) {
-        VIR_ERROR("tapfdSize is 0, Tap device %s won't be created!");
+        VIR_ERROR("tapfdSize is 0, Tap device %s won't be created!", *ifname);
         return -1;
     }
 
