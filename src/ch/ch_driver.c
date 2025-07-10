@@ -2891,6 +2891,7 @@ chDomainMigratePerform3(virDomainPtr dom,
     g_autoptr(virConnect) dconn = NULL;
     char *uri_out = NULL;
     g_autofree char *dom_xml = NULL;
+    int rc = -1;
 
     cfg = virCHDriverGetConfig(driver);
 
@@ -2930,7 +2931,7 @@ chDomainMigratePerform3(virDomainPtr dom,
         dconn = virConnectOpenAuth(dconnuri, &virConnectAuthConfig, 0);
         if (dconn == NULL) {
             VIR_WARN("Could not open connection to remote libvirt daemon");
-            return -1;
+            goto cleanup;
         }
 
         // if (virConnectSetKeepAlive(dconn, 100/*cfg->keepAliveInterval*/, 100/*cfg->keepAliveCount*/) < 0)
@@ -2948,6 +2949,7 @@ chDomainMigratePerform3(virDomainPtr dom,
     }
 
     virDomainDeleteConfig(cfg->stateDir, cfg->autostartDir, vm);
+    rc = 0;
 
     if (dconnuri) {
         VIR_WARN("P2P: Call finish on remote context");
@@ -2959,9 +2961,12 @@ chDomainMigratePerform3(virDomainPtr dom,
         return 0;
     }
 
- cleanup:
+cleanup:
+    if (dconn) {
+        virConnectClose(dconn);
+    }
     virDomainObjEndAPI(&vm);
-    return 0;
+    return rc;
 }
 
 static int
