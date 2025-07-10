@@ -1261,12 +1261,6 @@ virCHProcessStop(virCHDriver *driver,
     virErrorPreserveLast(&orig_err);
 
     if (priv->monitor) {
-        // Release network FDs.
-        if (virCHMonitorShutdownVMM(priv->monitor) < 0) {
-            virReportError(VIR_ERR_INTERNAL_ERROR, "%s",
-                    _("failed to shutdown VMM"));
-        }
-
         virProcessAbort(vm->pid);
         g_clear_pointer(&priv->monitor, virCHMonitorClose);
     }
@@ -1423,9 +1417,9 @@ virCHProcessStartRestore(virCHDriver *driver, virDomainObj *vm, const char *from
     ret = 0;
 
  cleanup:
-    if (ret)
-        virCHProcessStop(driver, vm, VIR_DOMAIN_SHUTOFF_FAILED);
     if (tapfds)
         chCloseFDs(tapfds, ntapfds);
+    if (ret)
+        virCHProcessStop(driver, vm, VIR_DOMAIN_SHUTOFF_FAILED);
     return ret;
 }

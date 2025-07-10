@@ -781,6 +781,13 @@ chDomainDestroyFlags(virDomainPtr dom, unsigned int flags)
     if (virDomainObjCheckActive(vm) < 0)
         goto endjob;
 
+    // FIXME: we currently have to shutdown the VMM here
+    // because CHV does not release the network file descriptors
+    if (virCHMonitorShutdownVMM(priv->monitor) < 0) {
+        virReportError(VIR_ERR_INTERNAL_ERROR, "%s",
+                _("failed to shutdown VMM"));
+    }
+
     if (virCHProcessStop(driver, vm, VIR_DOMAIN_SHUTOFF_DESTROYED) < 0)
         goto endjob;
 
