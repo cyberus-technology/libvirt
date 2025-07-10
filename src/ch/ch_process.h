@@ -29,10 +29,6 @@ int virCHProcessInit(virCHDriver *driver,
 int virCHProcessStart(virCHDriver *driver,
                       virDomainObj *vm,
                       virDomainRunningReason reason);
-
-// Stops and terminates the Cloud Hypervisor process.
-//
-// This is not pausing the VM.
 int virCHProcessStop(virCHDriver *driver,
                      virDomainObj *vm,
                      virDomainShutoffReason reason);
