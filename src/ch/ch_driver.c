@@ -2941,7 +2941,18 @@ chDomainMigrateConfirm3(virDomainPtr domain,
     // hypervisor process
     virCHProcessStop(driver, vm, VIR_DOMAIN_SHUTOFF_MIGRATED);
 
+
+    virDomainObjRemoveTransientDef(vm);
+
+    if (flags & VIR_MIGRATE_UNDEFINE_SOURCE) {
+
+        virDomainDeleteConfig(cfg->configDir, cfg->autostartDir, vm);
+        vm->persistent = 0;
+    }
+
+
     virCHDomainRemoveInactive(driver, vm);
+
 
     event = virDomainEventLifecycleNewFromObj(vm, VIR_DOMAIN_EVENT_STOPPED,
                                               VIR_DOMAIN_EVENT_STOPPED_MIGRATED);
@@ -3058,10 +3069,6 @@ chDomainMigratePerform3(virDomainPtr dom,
         goto cleanup;
     }
 
-    if (flags & VIR_MIGRATE_UNDEFINE_SOURCE) {
-        virDomainDeleteConfig(cfg->configDir, cfg->autostartDir, vm);
-        vm->persistent = 0;
-    }
     rc = 0;
 
     if (dconnuri) {
