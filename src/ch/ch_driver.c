@@ -2727,6 +2727,27 @@ chDoMigrateDstReceive(void *opaque)
     VIR_WARN("Migration thread finished its duty");
 }
 
+static virURI *
+chMigrationAnyParseURI(const char *uri, bool *wellFormed)
+{
+    char *tmp = NULL;
+    virURI *parsed;
+
+    /* For compatibility reasons tcp://... URIs are sent as tcp:...
+     * We need to transform them to a well-formed URI before parsing. */
+    if (STRPREFIX(uri, "tcp:") && !STRPREFIX(uri + 4, "//")) {
+        tmp = g_strdup_printf("tcp://%s", uri + 4);
+        uri = tmp;
+    }
+
+    parsed = virURIParse(uri);
+    if (parsed && wellFormed)
+        *wellFormed = !tmp;
+    VIR_FREE(tmp);
+
+    return parsed;
+}
+
 /**
  * Runs on the destination and prepares the empty cloud hypervisor process to
  * receive the migration.
@@ -2750,7 +2771,7 @@ chDomainMigratePrepare3(virConnectPtr dconn,
     virCHDomainObjPrivate *priv = NULL;
     chMigrationDstArgs *args = g_new0(chMigrationDstArgs, 1);
     unsigned short port = 0;
-    g_autofree char *hostname = NULL;
+    g_autofree char *server_addr = NULL;
     const char *threadname = "mig-ch";
     virDomainDef *def = NULL;
     g_autoptr(virDomainDef) vmdef = NULL;
@@ -2775,12 +2796,17 @@ chDomainMigratePrepare3(virConnectPtr dconn,
     }
     VIR_DEBUG("Got port %i", port);
 
-    if ((hostname = virGetHostname()) == NULL) {
+    // The dname contains the server address (e.g. IP address) that got passed
+    // to the libvirt API. This is the correct target address for the
+    // migration. If we haven't got one here, we use the hostname instead.
+    if (uri_in) {
+        server_addr = g_strdup_printf("%s", uri_in);
+    } else if ((server_addr = virGetHostname()) == NULL) {
         rc = -1;
         goto cleanup;
     }
 
-    *uri_out = g_strdup_printf(incFormat, "tcp", hostname, port);
+    *uri_out = g_strdup_printf(incFormat, "tcp", server_addr, port);
     VIR_DEBUG("uri out %s", *uri_out);
 
     if (!(vm = virDomainObjListAdd(driver->domains, &def,
@@ -2967,6 +2993,7 @@ chDomainMigratePerform3(virDomainPtr dom,
     g_autofree char *id = g_strdup_printf("bla");
     g_autoptr(virCHDriverConfig) cfg = NULL;
     g_autoptr(virConnect) dconn = NULL;
+    g_autoptr(virURI) uri_parsed = NULL;
     char *uri_out = NULL;
     g_autofree char *dom_xml = NULL;
     int rc = -1;
@@ -3015,9 +3042,14 @@ chDomainMigratePerform3(virDomainPtr dom,
         // if (virConnectSetKeepAlive(dconn, 100/*cfg->keepAliveInterval*/, 100/*cfg->keepAliveCount*/) < 0)
         //     goto cleanup;
 
-        dconn->driver->domainMigratePrepare3(dconn, cookiein, cookieinlen, cookieout, cookieoutlen, uri, &uri_out, flags, dname, 0 /*bandwidth*/, dom_xml);
+        if (!(uri_parsed = chMigrationAnyParseURI(dconnuri, NULL))) {
+            VIR_WARN("Parse dconnuri failed.");
+        }
 
-        VIR_WARN("Got uri_out: %s", uri_out);
+        dconn->driver->domainMigratePrepare3(dconn, cookiein, cookieinlen, cookieout, cookieoutlen, uri_parsed ? uri_parsed->server : NULL, &uri_out, flags, dname, 0 /*bandwidth*/, dom_xml);
+
+
+        VIR_WARN("Got uri_out that will be used for CHV migration: %s", uri_out);
         uri = uri_out;
     }
 
