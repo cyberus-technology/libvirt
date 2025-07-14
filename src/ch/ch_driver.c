@@ -2870,6 +2870,13 @@ chDomainMigratePrepare3(virConnectPtr dconn,
     if (virDomainObjSave(vm, driver->xmlopt, cfg->stateDir) < 0)
         VIR_WARN("Failed to save status on vm %s", vm->def->name);
 
+    if (flags & VIR_MIGRATE_PERSIST_DEST) {
+        VIR_WARN("persist domain on receiving side");
+        if (virDomainDefSave(vm->newDef ? vm->newDef : vm->def,
+                            driver->xmlopt, cfg->configDir) < 0) {
+            VIR_WARN("Failed to persist domain on receiving side");
+        }
+    }
     VIR_WARN("Fin migrationPrepare");
 
 
@@ -2935,14 +2942,9 @@ chDomainMigrateConfirm3(virDomainPtr domain,
         return -1;
     }
 
-    virDomainObjEndJob(vm);
-
     // Following call deletes network devices, cgroups and stops the cloud
     // hypervisor process
     virCHProcessStop(driver, vm, VIR_DOMAIN_SHUTOFF_MIGRATED);
-
-
-    virDomainObjRemoveTransientDef(vm);
 
     if (flags & VIR_MIGRATE_UNDEFINE_SOURCE) {
 
@@ -2950,15 +2952,14 @@ chDomainMigrateConfirm3(virDomainPtr domain,
         vm->persistent = 0;
     }
 
-
     virCHDomainRemoveInactive(driver, vm);
-
 
     event = virDomainEventLifecycleNewFromObj(vm, VIR_DOMAIN_EVENT_STOPPED,
                                               VIR_DOMAIN_EVENT_STOPPED_MIGRATED);
-    virObjectEventStateQueue(driver->domainEventState, event);
 
+    virDomainObjEndJob(vm);
     virDomainObjEndAPI(&vm);
+    virObjectEventStateQueue(driver->domainEventState, event);
     return 0;
 }
 
@@ -3074,10 +3075,33 @@ chDomainMigratePerform3(virDomainPtr dom,
     if (dconnuri) {
         VIR_WARN("P2P: Call finish on remote context");
         dconn->driver->domainMigrateFinish3(dconn, vm->def->name, NULL, 0, NULL, NULL, NULL, uri, flags, 0);
-        virDomainObjEndAPI(&vm);
-        VIR_WARN("P2P: Call confirm on our context");
-        chDomainMigrateConfirm3(dom, cookiein, cookieinlen, flags, 0);
         virConnectClose(dconn);
+
+
+        VIR_WARN("P2P: Call confirm on our context");
+
+        // Instead of calling DomainMigrateConfirm3 here, we reimplement the
+        // interesting part. We do so, because we have observed some strange
+        // locking issues and removing the domain infinitely hang.
+        // We probably want to call some function that is also called from
+        // chDomainMigrateConfirm3 here which implements the right logic.
+        // chDomainMigrateConfirm3(dom, cookiein, cookieinlen, flags, 0);
+
+        virCHProcessStop(driver, vm, VIR_DOMAIN_SHUTOFF_MIGRATED);
+
+        if (flags & VIR_MIGRATE_UNDEFINE_SOURCE) {
+            virDomainDeleteConfig(cfg->configDir, cfg->autostartDir, vm);
+            vm->persistent = 0;
+        }
+
+        // We have seen strange issues with removing the domain via the
+        // virCHDomainRemoveInactive function. This has shown to run better in
+        // some manual tests.
+        if (!vm->persistent)
+            virDomainObjListRemoveLocked(driver->domains, vm);
+
+        virDomainObjEndAPI(&vm);
+        VIR_WARN("P2P: Migration finished");
         return 0;
     }
 
