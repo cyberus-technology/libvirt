@@ -99,6 +99,71 @@ virCHMonitorBuildCPUJson(virJSONValue *content, virDomainDef *vmdef)
     return 0;
 }
 
+/**
+ * CHV example NUMA cmdline:
+ *--numa guest_numa_id=0,cpus=[0,1],memory_zones=[fast_mem] \
+  --numa guest_numa_id=1,cpus=[2,3],memory_zones=[bulk_mem] \
+  --memory-zone id=fast_mem,size=2G,host_numa_node=0,hugepages=on,hugepage_size=1G,prefault=on \
+  --memory-zone id=bulk_mem,size=6G,host_numa_node=1,hugepages=on,hugepage_size=2M \
+ */
+static int
+virCHMonitorBuildNumaJson(virJSONValue *content, virDomainDef *def)
+{
+    size_t ncells = virDomainNumaGetNodeCount(def->numa);
+    size_t i = 0;
+    size_t j = 0;
+    virBitmap *cpus = NULL;
+    g_auto(virBuffer) buf = VIR_BUFFER_INITIALIZER;
+    g_autoptr(virJSONValue) numas = virJSONValueNewArray();
+
+    if (ncells == 0) {
+        return 0;
+    }
+
+    for (i = 0; i < ncells; i++) {
+        ssize_t lastcpu = 0;
+        g_autoptr(virJSONValue) numa = virJSONValueNewObject();
+        g_autoptr(virJSONValue) mem_zones = virJSONValueNewArray();
+        char *mem_zone_str = g_strdup_printf("zone%lu", i);
+        g_autoptr(virJSONValue) mem_zone_id = virJSONValueNewString(mem_zone_str);
+        g_autoptr(virJSONValue) cpu_arr = virJSONValueNewArray();
+
+        cpus = virDomainNumaGetNodeCpumask(def->numa, i);
+        lastcpu = virBitmapLastSetBit(cpus);
+
+        // Go through bitmap and check set bits which correspond to CPUs
+        // We create an array of vCPU IDs: [1,2,3] of CPUs belonging to the
+        // respective NUMA node.
+        for (j = 0; j < lastcpu + 1; j++) {
+            if (virBitmapIsBitSet(cpus, j)) {
+                g_autoptr(virJSONValue) cpu_id = virJSONValueNewNumberUint(j);
+                if (virJSONValueArrayAppend(cpu_arr, &cpu_id) < 0)
+                    return -1;
+            }
+
+        }
+
+        if (virJSONValueObjectAppendNumberUlong(numa, "guest_numa_id", i) < 0)
+            return -1;
+
+        if (virJSONValueArrayAppend(mem_zones, &mem_zone_id) < 0)
+            return -1;
+
+        if (virJSONValueObjectAppend(numa, "memory_zones", &mem_zones) < 0)
+            return -1;
+
+        if (virJSONValueObjectAppend(numa, "cpus", &cpu_arr) < 0)
+            return -1;
+
+        if (virJSONValueArrayAppend(numas, &numa) < 0)
+            return -1;
+    }
+
+    if (virJSONValueObjectAppend(content, "numa", &numas) < 0)
+        return -1;
+    return 0;
+}
+
 static int
 virCHMonitorBuildConsoleJson(virJSONValue *content,
                              virDomainDef *vmdef)
@@ -222,16 +287,84 @@ virCHMonitorBuildKernelRelatedJson(virJSONValue *content, virDomainDef *vmdef)
     return 0;
 }
 
+/**
+ * CHV example NUMA cmdline:
+ *--numa guest_numa_id=0,cpus=[0,1],memory_zones=[fast_mem] \
+  --numa guest_numa_id=1,cpus=[2,3],memory_zones=[bulk_mem] \
+  --memory-zone id=fast_mem,size=2G,host_numa_node=0,hugepages=on,hugepage_size=1G,prefault=on \
+  --memory-zone id=bulk_mem,size=6G,host_numa_node=1,hugepages=on,hugepage_size=2M \
+
+  In this function we only define the memory zones
+ */
+static int
+virCHMonitorBuildMemoryZonesJson(virJSONValue *content, virDomainDef *def)
+{
+    size_t ncells = virDomainNumaGetNodeCount(def->numa);
+    size_t i = 0;
+    g_autoptr(virJSONValue) zones = virJSONValueNewArray();
+
+    VIR_WARN("Found NUMA cell configuration. Creating %ld NUMA nodes for guest VM.", ncells);
+
+    for (i = 0; i < ncells; i++) {
+        g_autofree char *id = g_strdup_printf("zone%zu", i);
+        // Memory returned is in KiB, so we multiply by 1024
+        unsigned long long memsize = virDomainNumaGetNodeMemorySize(def->numa, i) * 1024;
+        g_autoptr(virJSONValue) zone = virJSONValueNewObject();
+        virBitmap *nodes = virDomainNumatuneGetNodeset(def->numa, NULL, i);
+        g_autofree char *nodeset = virBitmapFormat(nodes);
+        size_t hostNodeCount = virBitmapCountBits(nodes);
+        size_t hostNode = virBitmapLastSetBit(nodes);
+
+        if (hostNodeCount > 1) {
+            VIR_WARN("There are %ld host nodes specified but Cloud Hypervisor only supports 1", hostNodeCount);
+            VIR_WARN("The host node mapping is dropped.");
+        }
+
+        if (virJSONValueObjectAppendString(zone, "id", id) < 0)
+            return -1;
+
+        if (virJSONValueObjectAppendNumberUlong(zone, "size", memsize) < 0)
+            return -1;
+
+        if (hostNodeCount == 1) {
+            VIR_WARN("Associating guest node %lu with host node %s", i , nodeset);
+
+            if (virJSONValueObjectAppendNumberUlong(zone, "host_numa_node", hostNode) < 0)
+                return -1;
+        }
+
+        if (virJSONValueArrayAppend(zones, &zone) < 0)
+            return -1;
+    }
+    if (virJSONValueObjectAppend(content, "zones", &zones) < 0)
+        return -1;
+
+    return 0;
+}
+
 static int
 virCHMonitorBuildMemoryJson(virJSONValue *content, virDomainDef *vmdef)
 {
     unsigned long long total_memory = virDomainDefGetMemoryInitial(vmdef) * 1024;
+    size_t ncells = virDomainNumaGetNodeCount(vmdef->numa);
 
     if (total_memory != 0) {
         g_autoptr(virJSONValue) memory = virJSONValueNewObject();
 
-        if (virJSONValueObjectAppendNumberUlong(memory, "size", total_memory) < 0)
-            return -1;
+        // If we have multiple NUMA nodes, then we define memory zones. When
+        // memory zones are defined, the "size" field in the CHV memory config
+        // must be 0
+        if (ncells >= 1) {
+            if (virCHMonitorBuildMemoryZonesJson(memory, vmdef) < 0) {
+                return -1;
+            }
+            if (virJSONValueObjectAppendNumberUlong(memory, "size", 0) < 0) {
+                return -1;
+            }
+        } else {
+            if (virJSONValueObjectAppendNumberUlong(memory, "size", total_memory) < 0)
+                return -1;
+        }
 
         if (virJSONValueObjectAppend(content, "memory", &memory) < 0)
             return -1;
@@ -553,6 +686,11 @@ virCHMonitorBuildVMJson(virCHDriver *driver, virDomainDef *vmdef,
 
     if (virCHMonitorBuildMemoryJson(content, vmdef) < 0)
         return -1;
+
+    if (virCHMonitorBuildNumaJson(content, vmdef) < 0) {
+        VIR_WARN("Failed building NUMA json");
+        return -1;
+    }
 
     if (virBitmapIsBitSet(driver->chCaps, CH_KERNEL_API_DEPRCATED)) {
         if (virCHMonitorBuildPayloadJson(content, vmdef) < 0)
