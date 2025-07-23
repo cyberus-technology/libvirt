@@ -838,6 +838,7 @@ chDomainDestroyFlags(virDomainPtr dom, unsigned int flags)
 {
     virCHDriver *driver = dom->conn->privateData;
     virDomainObj *vm;
+    virDomainState state;
     virObjectEvent *event = NULL;
     virCHDomainObjPrivate *priv = NULL;
     g_autoptr(virCHDriverConfig) cfg = virCHDriverGetConfig(driver);
@@ -861,9 +862,12 @@ chDomainDestroyFlags(virDomainPtr dom, unsigned int flags)
 
     // FIXME: we currently have to shutdown the VMM here
     // because CHV does not release the network file descriptors
-    if (virCHMonitorShutdownVMM(priv->monitor) < 0) {
-        virReportError(VIR_ERR_INTERNAL_ERROR, "%s",
-                _("failed to shutdown VMM"));
+    state = virDomainObjGetState(vm, NULL);
+    if (state == VIR_DOMAIN_RUNNING || state == VIR_DOMAIN_PAUSED) {
+        if (virCHMonitorShutdownVMM(priv->monitor) < 0) {
+            virReportError(VIR_ERR_INTERNAL_ERROR, "%s",
+                    _("failed to shutdown VMM"));
+        }
     }
 
     if (virCHProcessStop(driver, vm, VIR_DOMAIN_SHUTOFF_DESTROYED) < 0)
