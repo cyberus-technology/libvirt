@@ -1224,6 +1224,8 @@ virCHProcessStart(virCHDriver *driver,
         goto cleanup;
     }
 
+    virInhibitorHold(driver->inhibitor);
+
     if (virCHProcessSetup(vm) < 0)
         goto cleanup;
 
@@ -1263,6 +1265,10 @@ virCHProcessStop(virCHDriver *driver,
         virProcessAbort(vm->pid);
         g_clear_pointer(&priv->monitor, virCHMonitorClose);
     }
+
+    // Release the inhibitor, which leads to virtchd shutting down after 120
+    // secs if no running domain is remaining.
+    virInhibitorRelease(driver->inhibitor);
 
     /* de-activate netdevs after stopping vm */
     ignore_value(virDomainInterfaceStopDevices(vm->def));
