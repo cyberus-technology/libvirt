@@ -1634,13 +1634,17 @@ chDomainReattach(virDomainObj *vm, void*data) {
     virCHDomainObjPrivate *priv = vm->privateData;
     // virCHMonitor *mon = priv->monitor;
     g_autoptr(virCHDriverConfig) cfg = virCHDriverGetConfig(ch_driver);
+    virDomainState state = virDomainObjGetState(vm, NULL);
 
     VIR_WARN("chDomainReattach %p %p", vm, driver);
+    VIR_WARN("Domain info: state: %d", state);
     VIR_WARN("cfg %p", cfg);
     VIR_WARN("statedir %s", cfg->stateDir);
     VIR_WARN("vm->def->name %s", vm->def->name);
 
-    priv->monitor = virCHMonitorReattach(vm, cfg);
+    if (state == VIR_DOMAIN_RUNNING || state == VIR_DOMAIN_PAUSED) {
+        priv->monitor = virCHMonitorReattach(vm, cfg);
+    }
 
     return 0;
 }
@@ -1711,8 +1715,8 @@ chStateInitialize(bool privileged,
     ch_driver->chCaps = virCHCapsInitCHVersionCaps(ch_driver->version);
 
     /* Get all the running persistent or transient configs first */
-    VIR_WARN("Loading old configs\n");
     cfg = virCHDriverGetConfig(ch_driver);
+    VIR_WARN("Loading old configs. state dir %s config dir: %s\n", cfg->stateDir, cfg->configDir);
     if (virDomainObjListLoadAllConfigs(ch_driver->domains,
                                        cfg->stateDir,
                                        NULL, true,
