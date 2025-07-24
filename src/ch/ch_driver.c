@@ -40,6 +40,7 @@
 #include "virchrdev.h"
 #include "virerror.h"
 #include "virjson.h"
+#include "virinhibitor.h"
 #include "virlog.h"
 #include "virobject.h"
 #include "virfile.h"
@@ -1702,6 +1703,14 @@ chStateInitialize(bool privileged,
 
     if (!(ch_driver->domainEventState = virObjectEventStateNew()))
         goto cleanup;
+
+    ch_driver->inhibitor = virInhibitorNew(
+        VIR_INHIBITOR_WHAT_SHUTDOWN,
+        _("Libvirt CHV"),
+        _("CHV virtual machines are running"),
+        VIR_INHIBITOR_MODE_DELAY,
+        callback,
+        opaque);
 
         /* Allocate bitmap for migration port reservation */
     if (!(ch_driver->migrationPorts =
