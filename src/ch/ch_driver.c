@@ -654,6 +654,10 @@ chDomainShutdownFlags(virDomainPtr dom,
 
     virDomainObjRemoveTransientDef(vm);
 
+    if (virDomainDeleteConfig(cfg->stateDir, cfg->autostartDir, vm) < 0) {
+        goto endjob;
+    }
+
     VIR_WARN("chDomainShutdown %d", __LINE__);
 
     ret = 0;
