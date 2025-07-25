@@ -3110,6 +3110,9 @@ chDomainMigratePerform3(virDomainPtr dom,
 
         virCHProcessStop(driver, vm, VIR_DOMAIN_SHUTOFF_MIGRATED);
 
+        if (virDomainDeleteConfig(cfg->stateDir, cfg->autostartDir, vm) < 0) {
+            VIR_WARN("Failed to delete transient config");
+        }
         if (flags & VIR_MIGRATE_UNDEFINE_SOURCE) {
             virDomainDeleteConfig(cfg->configDir, cfg->autostartDir, vm);
             vm->persistent = 0;
