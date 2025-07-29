@@ -70,9 +70,27 @@ int virCHMonitorPutNoContent(virCHMonitor *mon, const char *endpoint,
                              domainLogContext *logCtxt);
 
 static int
+virCHMonitorBuildCPUTopologyJson(virJSONValue *content, virDomainDef *vmdef)
+{
+    if (virDomainDefGetVcpusTopology(vmdef, NULL) != 0) {
+        return -1;
+    }
+    if (virJSONValueObjectAppendNumberInt(content, "threads_per_core", vmdef->cpu->threads) < 0)
+        return -1;
+    if (virJSONValueObjectAppendNumberInt(content, "cores_per_die", vmdef->cpu->cores) < 0)
+        return -1;
+    if (virJSONValueObjectAppendNumberInt(content, "dies_per_package", vmdef->cpu->dies) < 0)
+        return -1;
+    if (virJSONValueObjectAppendNumberInt(content, "packages", vmdef->cpu->sockets) < 0)
+        return -1;
+    return 0;
+}
+
+static int
 virCHMonitorBuildCPUJson(virJSONValue *content, virDomainDef *vmdef)
 {
     g_autoptr(virJSONValue) cpus = NULL;
+    g_autoptr(virJSONValue) topology = virJSONValueNewObject();
     unsigned int maxvcpus = 0;
     unsigned int nvcpus = 0;
     virDomainVcpuDef *vcpu;
@@ -92,6 +110,11 @@ virCHMonitorBuildCPUJson(virJSONValue *content, virDomainDef *vmdef)
             return -1;
         if (virJSONValueObjectAppendNumberInt(cpus, "max_vcpus", vmdef->maxvcpus) < 0)
             return -1;
+        if (virCHMonitorBuildCPUTopologyJson(topology, vmdef) == 0) {
+            VIR_WARN("Using CPU topology: %d:%d:%d:%d", vmdef->cpu->sockets, vmdef->cpu->dies, vmdef->cpu->cores, vmdef->cpu->threads);
+            if (virJSONValueObjectAppend(cpus, "topology", &topology) < 0)
+                return -1;
+        }
         if (virJSONValueObjectAppend(content, "cpus", &cpus) < 0)
             return -1;
     }
