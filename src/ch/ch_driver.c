@@ -28,6 +28,7 @@
 #include "ch_driver.h"
 #include "ch_monitor.h"
 #include "ch_process.h"
+#include "domain_capabilities.h"
 #include "domain_cgroup.h"
 #include "domain_event.h"
 #include "domain_interface.h"
@@ -4067,6 +4068,67 @@ chStateShutdownWait(void)
     return 0;
 }
 
+static
+virDomainCaps *
+virCHDriverGetDomainCapabilities(virCHDriver *driver,
+                                 const char *machine,
+                                 virArch arch,
+                                 virDomainVirtType virttype)
+{
+    g_autoptr(virCHDriverConfig) cfg = virCHDriverGetConfig(driver);
+    g_autoptr(virDomainCaps) domCaps = NULL;
+
+    if (!(domCaps = virDomainCapsNew(NULL, machine, arch, virttype)))
+        return NULL;
+
+    // We initialize the mininum to make Nova happy and announce that we only support CPU pass-through
+    domCaps->cpu.hostPassthrough = true;
+    domCaps->cpu.hostPassthroughMigratable.report = true;
+    domCaps->os.supported = VIR_TRISTATE_BOOL_YES;
+    domCaps->os.firmware.report = false;
+    VIR_DOMAIN_CAPS_ENUM_SET(domCaps->os.firmware, VIR_DOMAIN_OS_DEF_FIRMWARE_EFI);
+    domCaps->os.loader.supported = VIR_TRISTATE_BOOL_YES;
+    domCaps->os.loader.type.report = false;
+    domCaps->os.loader.readonly.report = false;
+    domCaps->os.loader.secure.report = true;
+    VIR_DOMAIN_CAPS_ENUM_SET(domCaps->os.loader.secure,
+                             VIR_TRISTATE_BOOL_NO);
+    domCaps->video.supported = VIR_TRISTATE_BOOL_YES;
+    domCaps->video.modelType.report = true;
+    VIR_DOMAIN_CAPS_ENUM_SET(domCaps->video.modelType, VIR_DOMAIN_VIDEO_TYPE_NONE);
+
+    return g_steal_pointer(&domCaps);
+}
+
+static char *
+chConnectGetDomainCapabilities(virConnectPtr conn,
+                               const char *emulatorbin,
+                               const char *arch_str,
+                               const char *machine,
+                               const char *virttype_str,
+                               unsigned int flags)
+{
+    virCHDriver *driver = conn->privateData;
+    virArch arch = virArchFromHost();
+    virDomainVirtType virttype = VIR_DOMAIN_VIRT_CH;
+    g_autoptr(virDomainCaps) domCaps = NULL;
+
+    VIR_DEBUG("Get Domain Capabilities Input: %s %s %s %s", emulatorbin, arch_str, machine, virttype_str);
+
+    virCheckFlags(VIR_CONNECT_GET_DOMAIN_CAPABILITIES_DISABLE_DEPRECATED_FEATURES,
+                  NULL);
+
+    if (virConnectGetDomainCapabilitiesEnsureACL(conn) < 0)
+        return NULL;
+
+    if (!(domCaps = virCHDriverGetDomainCapabilities(driver,
+                                                     machine,
+                                                     arch, virttype)))
+        return NULL;
+
+    return virDomainCapsFormat(domCaps);
+}
+
 /* Function Tables */
 static virHypervisorDriver chHypervisorDriver = {
     .name = "CH",
@@ -4145,6 +4207,7 @@ static virHypervisorDriver chHypervisorDriver = {
     .domainAttachDeviceFlags = chDomainAttachDeviceFlags, /* 11.4.0 */
     .domainDetachDevice = chDomainDetachDevice, /* 11.4.0 */
     .domainDetachDeviceFlags = chDomainDetachDeviceFlags, /* 11.4.0 */
+    .connectGetDomainCapabilities = chConnectGetDomainCapabilities, /* 11.4.0 */
 };
 
 static virConnectDriver chConnectDriver = {
