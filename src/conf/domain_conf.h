@@ -144,6 +144,7 @@ typedef enum {
     VIR_DOMAIN_VIRT_BHYVE,
     VIR_DOMAIN_VIRT_VZ,
     VIR_DOMAIN_VIRT_HVF,
+    VIR_DOMAIN_VIRT_CH,
 
     VIR_DOMAIN_VIRT_LAST
 } virDomainVirtType;
