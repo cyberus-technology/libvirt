@@ -310,7 +310,7 @@ virCHMonitorBuildKernelRelatedJson(virJSONValue *content, virDomainDef *vmdef)
     return 0;
 }
 
-static int virCHMonitorBuildHugePageJson(virJSONValue *content, size_t size, bool prefault)
+static void virCHMonitorBuildHugePageJson(virJSONValue *content, size_t size, bool prefault)
 {
     VIR_WARN("hugepage: size=%ld", size);
 
