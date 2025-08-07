@@ -19,6 +19,9 @@ test:nixos-tests:
   extends:
     - .nix_build_template
   dependencies: []
+  variables:
+    PYTHONUNBUFFERED: "1"
+    TERM: "xterm"
   script:
     - nix build .#tests.driver
     - ./result/bin/nixos-test-driver
