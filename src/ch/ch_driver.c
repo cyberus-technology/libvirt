@@ -2744,9 +2744,12 @@ chDoMigrateDstReceive(void *opaque)
 
     if (virCHMonitorMigrationReceive(priv->monitor, rcv_uri, args->def, args->driver, &args->cond) < 0) {
         VIR_WARN("Migration receive failed.");
+        args->success = false;
+        return;
     }
 
     VIR_WARN("Migration thread finished its duty");
+    args->success = true;
 }
 
 static virURI *
@@ -2867,6 +2870,7 @@ chDomainMigratePrepare3(virConnectPtr dconn,
     args->priv = priv;
     args->def = vm->def;
     args->driver = driver;
+    args->success = false;
 
     // VM receiving is blocking which we cannot do here, because it would block
     // the Libvirt migration protocol.
@@ -3089,6 +3093,8 @@ chDomainMigratePerform3(virDomainPtr dom,
 
     if (virCHMonitorMigrationSend(priv->monitor, uri) < 0) {
         VIR_WARN("Migration send failed.");
+        dconn->driver->domainMigrateFinish3(dconn, vm->def->name, NULL, 0, NULL, NULL, NULL, uri, flags, 0);
+        rc = -1;
         goto cleanup;
     }
 
@@ -3195,8 +3201,9 @@ chDomainMigrateFinish3(virConnectPtr dconn,
     virDomainDef *vmdef = NULL;
     virCHDomainObjPrivate *priv = NULL;
     g_autoptr(virCHDriverConfig) cfg = virCHDriverGetConfig(driver);
+    virDomainState state;
 
-    VIR_INFO("chDomainMigrateFinish3 %p %s %s %d %p %p %lu %d",
+    VIR_WARN("chDomainMigrateFinish3 %p %s %s %d %p %p %lu %d",
               dconn, dname, cookiein, cookieinlen, cookieout, cookieoutlen, flags, cancelled);
 
     vm = virDomainObjListFindByName(driver->domains, dname);
@@ -3222,6 +3229,7 @@ chDomainMigrateFinish3(virConnectPtr dconn,
 
     priv = vm->privateData;
     virThreadJoin(priv->migrationDstReceiveThr);
+
     VIR_FREE(priv->migrationDstReceiveThr);
 
     if (virPortAllocatorRelease(priv->args->port) < 0) {
@@ -3234,23 +3242,49 @@ chDomainMigrateFinish3(virConnectPtr dconn,
         VIR_WARN("Failed to destroy migration condition variable");
     }
 
-    VIR_FREE(priv->args);
 
-    virDomainObjSetState(vm, VIR_DOMAIN_RUNNING, VIR_DOMAIN_RUNNING_MIGRATED);
+    if (priv->args->success == true) {
+        virDomainObjSetState(vm, VIR_DOMAIN_RUNNING, VIR_DOMAIN_RUNNING_MIGRATED);
 
-    if (virDomainObjSave(vm, driver->xmlopt, cfg->stateDir) < 0)
-        VIR_WARN("Failed to save status on vm %s", vm->def->name);
+        if (virDomainObjSave(vm, driver->xmlopt, cfg->stateDir) < 0)
+            VIR_WARN("Failed to save status on vm %s", vm->def->name);
 
-    if (flags & VIR_MIGRATE_PERSIST_DEST) {
-        VIR_WARN("Persisting domain at destination");
-        vm->persistent = 1;
-        if (!(vmdef = virDomainObjGetPersistentDef(driver->xmlopt, vm, NULL)))
+        if (flags & VIR_MIGRATE_PERSIST_DEST) {
+            VIR_WARN("Persisting domain at destination");
+            vm->persistent = 1;
+            if (!(vmdef = virDomainObjGetPersistentDef(driver->xmlopt, vm, NULL)))
+                goto error;
+
+            if (virDomainDefSave(vmdef, driver->xmlopt, cfg->configDir) < 0)
+                goto error;
+        }
+    } else {
+        // FIXME: we currently have to shutdown the VMM here
+        // because CHV does not release the network file descriptors
+        state = virDomainObjGetState(vm, NULL);
+        if (state == VIR_DOMAIN_RUNNING || state == VIR_DOMAIN_PAUSED) {
+            if (virCHMonitorShutdownVMM(priv->monitor) < 0) {
+                virReportError(VIR_ERR_INTERNAL_ERROR, "%s",
+                        _("failed to shutdown VMM"));
+            }
+        }
+
+        if (virCHProcessStop(driver, vm, VIR_DOMAIN_SHUTOFF_DESTROYED) < 0)
             goto error;
 
-        if (virDomainDefSave(vmdef, driver->xmlopt, cfg->configDir) < 0)
+        virDomainObjRemoveTransientDef(vm);
+
+        if (virDomainDeleteConfig(cfg->stateDir, cfg->autostartDir, vm) < 0) {
             goto error;
+        }
+        if (virDomainDeleteConfig(cfg->configDir, cfg->autostartDir, vm) < 0) {
+            goto error;
+        }
+
+        virCHDomainRemoveInactive(driver, vm);
     }
 error:
+    VIR_FREE(priv->args);
     virDomainObjEndAPI(&vm);
     return dom;
 }
