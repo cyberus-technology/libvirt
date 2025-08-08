@@ -50,6 +50,7 @@ struct _chMigrationDstArgs {
     virCHDriver *driver;
     virMutex mutex;
     virCond cond;
+    volatile bool success;
 };
 
 #define CH_DOMAIN_PRIVATE(vm) \
