@@ -1727,11 +1727,14 @@ int virCHMonitorMigrationReceive(virCHMonitor *mon,
     size_t payload_len;
     g_autoptr(virJSONValue) net_json = NULL;
     g_autofree char *id = NULL;
+    int rc = 0;
 
     VIR_WARN("In virCHMonitorMigrationReceive");
 
-    if (virJSONValueObjectAppendString(content, "receiver_url", rcv_uri) < 0)
-        return -1;
+    if (virJSONValueObjectAppendString(content, "receiver_url", rcv_uri) < 0) {
+        rc = -1;
+        goto out;
+    }
 
     /* Pass the netconfig needed to restore with new netfds */
 	// TODO we need to do the same with disk devices I think!
@@ -1759,37 +1762,50 @@ int virCHMonitorMigrationReceive(virCHMonitor *mon,
 			vmdef->nets[i]->info.addr.pci.slot = i + 1;
 			vmdef->nets[i]->info.addr.pci.function = 0;
 
-            if (virJSONValueObjectAppendString(net_json, "id", id) < 0)
-                return -1;
-            if (virJSONValueObjectAppendNumberInt(net_json, "num_fds", vmdef->nets[i]->driver.virtio.queues))
-                return -1;
-            if (virJSONValueArrayAppend(nets, &net_json) < 0)
-                return -1;
+            if (virJSONValueObjectAppendString(net_json, "id", id) < 0) {
+                rc = -1;
+                goto out;
+            }
+            if (virJSONValueObjectAppendNumberInt(net_json, "num_fds", vmdef->nets[i]->driver.virtio.queues)) {
+                rc = -1;
+                goto out;
+            }
+            if (virJSONValueArrayAppend(nets, &net_json) < 0) {
+                rc = -1;
+                goto out;
+            }
         }
-        if (virJSONValueObjectAppend(content, "net_fds", &nets))
-            return -1;
+        if (virJSONValueObjectAppend(content, "net_fds", &nets)) {
+            rc = -1;
+            goto out;
+        }
     }
-    if (!(payload = virJSONValueToString(content, false)))
-        return -1;
+    if (!(payload = virJSONValueToString(content, false))) {
+        rc = -1;
+        goto out;
+    }
 
     VIR_WARN("Receive VM from url %s json: %s", rcv_uri, payload);
 
     if ((mon_sockfd = chMonitorSocketConnect(mon)) < 0) {
         VIR_WARN("socket connect failed");
-        return -1;
+        rc = -1;
+        goto out;
     }
 
     VIR_WARN("create network devices");
     if (virCHRestoreCreateNetworkDevices(driver, vmdef, &tapfds, &ntapfds, &nicindexes, &nnicindexes) < 0) {
         VIR_WARN("virCHRestoreCreateNetworkDevices failed");
-        return -1;
+        rc = -1;
+        goto out_close_fds;
     }
 
     VIR_WARN("domain interface start devices");
     /* Bring up netdevs before restoring vm */
     if (virDomainInterfaceStartDevices(vmdef) < 0) {
         VIR_WARN("virDomainInterfaceStartDevices failed");
-        return -1;
+        rc = -1;
+        goto out_close_fds;
     }
 
     virBufferAddLit(&http_headers, "PUT /api/v1/vm.receive-migration HTTP/1.1\r\n");
@@ -1810,20 +1826,23 @@ int virCHMonitorMigrationReceive(virCHMonitor *mon,
     if (virSocketSendMsgWithFDs(mon_sockfd, payload, payload_len, tapfds, ntapfds) < 0) {
         virReportSystemError(errno, "%s",
                              _("Failed to send restore request to CH"));
-        return -1;
+        rc = -1;
+        goto out_close_fds;
     }
 
     VIR_WARN("wait for response");
     if (chSocketProcessHttpResponse(mon_sockfd, false) < 0) {
         virReportSystemError(errno, "%s",
                              _("Failed to recv http response from CHV"));
-        return -1;
+        rc = -1;
+        goto out_close_fds;
     }
 
+out_close_fds:
     if (tapfds)
         chCloseFDs(tapfds, ntapfds);
-
-    return 0;
+out:
+    return rc;
 }
 
 int
