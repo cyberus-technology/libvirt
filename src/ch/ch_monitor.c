@@ -849,7 +849,7 @@ chMonitorCreateSocket(const char *socket_path)
 }
 
 virCHMonitor *
-virCHMonitorReattach(virDomainObj *vm, virCHDriverConfig *cfg)
+virCHMonitorReattach(virDomainObj *vm, virCHDriverConfig *cfg, virCHDriver *driver)
 {
     // virCHDomainObjPrivate *priv = vm->privateData;
     g_autoptr(virCHMonitor) mon = NULL;
@@ -926,6 +926,8 @@ virCHMonitorReattach(virDomainObj *vm, virCHDriverConfig *cfg)
 
     /* get a curl handle */
     mon->handle = curl_easy_init();
+
+    virInhibitorHold(driver->inhibitor);
 
     return g_steal_pointer(&mon);
 }

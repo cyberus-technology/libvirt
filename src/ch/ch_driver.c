@@ -1649,7 +1649,7 @@ chDomainReattach(virDomainObj *vm, void*data) {
     VIR_WARN("vm->def->name %s", vm->def->name);
 
     if (state == VIR_DOMAIN_RUNNING || state == VIR_DOMAIN_PAUSED) {
-        priv->monitor = virCHMonitorReattach(vm, cfg);
+        priv->monitor = virCHMonitorReattach(vm, cfg, driver);
     }
 
     return 0;
