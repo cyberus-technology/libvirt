@@ -1101,6 +1101,8 @@ virCHProcessInit(virCHDriver *driver,
         }
     }
 
+    virInhibitorHold(driver->inhibitor);
+
     vm->def->id = vm->pid;
     priv->machineName = virCHDomainGetMachineName(vm);
 
