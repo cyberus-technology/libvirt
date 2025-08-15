@@ -258,9 +258,10 @@ chValidateDomainDeviceDef(const virDomainDeviceDef *dev,
 
     if (def->nserials) {
         if (def->serials[0]->source->type != VIR_DOMAIN_CHR_TYPE_PTY &&
-            def->serials[0]->source->type != VIR_DOMAIN_CHR_TYPE_UNIX) {
+            def->serials[0]->source->type != VIR_DOMAIN_CHR_TYPE_UNIX &&
+            def->serials[0]->source->type != VIR_DOMAIN_CHR_TYPE_FILE) {
             virReportError(VIR_ERR_INTERNAL_ERROR, "%s",
-                           _("Serial only works in UNIX/PTY modes"));
+                           _("Serial only works in UNIX/PTY or file modes"));
             return -1;
         }
         if (!virBitmapIsBitSet(driver->chCaps, CH_SOCKET_BACKEND_SERIAL_PORT) &&
