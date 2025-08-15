@@ -213,6 +213,13 @@ virCHMonitorBuildConsoleJson(virJSONValue *content,
                                                "socket",
                                                vmdef->serials[0]->source->data.file.path) < 0)
                 return -1;
+        } else if (vmdef->serials[0]->source->type == VIR_DOMAIN_CHR_TYPE_FILE) {
+            if (virJSONValueObjectAppendString(serial, "mode", "File") < 0)
+                return -1;
+            if (virJSONValueObjectAppendString(serial,
+                                               "file",
+                                               vmdef->serials[0]->source->data.file.path) < 0)
+                return -1;
         }
 
         if (virJSONValueObjectAppend(content, "serial", &serial) < 0)
