@@ -1014,9 +1014,20 @@ chDoDomainSave(virCHDriver *driver,
         goto end;
     }
 
+    if (virCHMonitorShutdownVMM(priv->monitor) < 0) {
+        virReportError(VIR_ERR_INTERNAL_ERROR, "%s",
+                _("failed to shutdown VMM"));
+    }
+
     if (virCHProcessStop(driver, vm, VIR_DOMAIN_SHUTOFF_SAVED) < 0) {
         virReportError(VIR_ERR_INTERNAL_ERROR, "%s",
                        _("Failed to shutoff after domain save"));
+        goto end;
+    }
+
+    virDomainObjRemoveTransientDef(vm);
+
+    if (virDomainDeleteConfig(cfg->stateDir, cfg->autostartDir, vm) < 0) {
         goto end;
     }
 
