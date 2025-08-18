@@ -1361,12 +1361,13 @@ virCHMonitorRefreshThreadInfo(virCHMonitor *mon)
 
         VIR_DEBUG("VM PID: %d, TID %d, COMM: %s",
                   (int)vm->pid, (int)tids[i], data);
-        if (STRPREFIX(data, "vcpu")) {
+        // Allow thread names such as "vcpu-throttle"
+        if (STRPREFIX(data, "vcpu") && !STRPREFIX(data, "vcpu-") && !STRPREFIX(data, "vcpu_")) {
             int cpuid;
             char *tmp;
 
             if (virStrToLong_i(data + 4, &tmp, 0, &cpuid) < 0) {
-                VIR_WARN("Index is not specified correctly");
+                VIR_WARN("vCPU index is not specified correctly (obtained from thread name \"%s\")", data);
                 continue;
             }
             info[i].type = virCHThreadTypeVcpu;
