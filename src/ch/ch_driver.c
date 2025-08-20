@@ -646,21 +646,12 @@ chDomainShutdownFlags(virDomainPtr dom,
         virReportError(VIR_ERR_OPERATION_INVALID, "%s",
                        _("only can shutdown running/paused domain"));
         goto endjob;
-    } else {
-        // We not only shut down the VM but the whole VMM. This aligns with
-        // the libvirt VM and VMM lifecycle.
-        if (virCHMonitorShutdownVMM(priv->monitor) < 0) {
-            virReportError(VIR_ERR_INTERNAL_ERROR, "%s",
-                        _("failed to shutdown guest VM"));
-            goto endjob;
-        }
     }
-
-    virDomainObjSetState(vm, VIR_DOMAIN_SHUTDOWN, VIR_DOMAIN_SHUTDOWN_USER);
-
-    virDomainObjRemoveTransientDef(vm);
-
-    if (virDomainDeleteConfig(cfg->stateDir, cfg->autostartDir, vm) < 0) {
+    // We not only shut down the VM but the whole VMM. This aligns with
+    // the libvirt VM and VMM lifecycle.
+    if (virCHMonitorShutdownVMM(priv->monitor) < 0) {
+        virReportError(VIR_ERR_INTERNAL_ERROR, "%s",
+                    _("failed to shutdown guest VM"));
         goto endjob;
     }
 
@@ -883,12 +874,6 @@ chDomainDestroyFlags(virDomainPtr dom, unsigned int flags)
     if (virCHProcessStop(driver, vm, VIR_DOMAIN_SHUTOFF_DESTROYED) < 0)
         goto endjob;
 
-    virDomainObjRemoveTransientDef(vm);
-
-    if (virDomainDeleteConfig(cfg->stateDir, cfg->autostartDir, vm) < 0) {
-        goto endjob;
-    }
-
     event = virDomainEventLifecycleNewFromObj(vm,
                                               VIR_DOMAIN_EVENT_STOPPED,
                                               VIR_DOMAIN_EVENT_STOPPED_DESTROYED);
@@ -1021,18 +1006,6 @@ chDoDomainSave(virCHDriver *driver,
     if (virCHMonitorShutdownVMM(priv->monitor) < 0) {
         virReportError(VIR_ERR_INTERNAL_ERROR, "%s",
                 _("failed to shutdown VMM"));
-    }
-
-    if (virCHProcessStop(driver, vm, VIR_DOMAIN_SHUTOFF_SAVED) < 0) {
-        virReportError(VIR_ERR_INTERNAL_ERROR, "%s",
-                       _("Failed to shutoff after domain save"));
-        goto end;
-    }
-
-    virDomainObjRemoveTransientDef(vm);
-
-    if (virDomainDeleteConfig(cfg->stateDir, cfg->autostartDir, vm) < 0) {
-        goto end;
     }
 
     vm->hasManagedSave = managed;
