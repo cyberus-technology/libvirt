@@ -1308,6 +1308,10 @@ virCHProcessStop(virCHDriver *driver,
 
     virDomainObjSetState(vm, VIR_DOMAIN_SHUTOFF, reason);
 
+    virDomainObjRemoveTransientDef(vm);
+
+    ignore_value(virDomainDeleteConfig(cfg->stateDir, cfg->autostartDir, vm));
+
     virHostdevReAttachDomainDevices(driver->hostdevMgr, CH_DRIVER_NAME, def,
                                     hostdev_flags);
 
