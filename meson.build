@@ -27,6 +27,20 @@ if git and not get_option('no_git')
   run_command('git', 'submodule', 'update', '--init', check: true)
 endif
 
+# determine if we can use git
+
+git_cmd = find_program('git', required: false)
+
+# determine the commit hash of HEAD
+
+if git and git_cmd.found() and not get_option('no_git')
+  commit_hash = run_command('git', 'rev-parse', 'HEAD', check: true).stdout().strip()
+  commit_define = '-DCOMMIT_HASH="@0@"'.format(commit_hash)
+  add_project_arguments(commit_define, language: 'c')
+else
+  commit_define = '-DCOMMIT_HASH="0000000000000000000000000000000000000000"'
+  add_project_arguments(commit_define, language: 'c')
+endif
 
 # detect operating system
 

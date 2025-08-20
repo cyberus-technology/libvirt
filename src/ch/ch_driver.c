@@ -296,6 +296,10 @@ chDomainCreateWithFlags(virDomainPtr dom, unsigned int flags)
 
     virCheckFlags(0, -1);
 
+#ifdef COMMIT_HASH
+    VIR_WARN("Commit hash: %s", COMMIT_HASH);
+#endif
+
     if (!(vm = virCHDomainObjFromDomain(dom)))
         goto cleanup;
 
