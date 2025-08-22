@@ -28,6 +28,7 @@
 #include "object_event.h"
 #include "virportallocator.h"
 #include "virinhibitor.h"
+#include "virthreadpool.h"
 
 #define CH_DRIVER_NAME "CH"
 #define CH_CMD "cloud-hypervisor"
@@ -61,6 +62,9 @@ struct _virCHDriver
     virMutex lock;
 
     bool privileged;
+
+    /* Immutable pointer, self-locking APIs */
+    virThreadPool *workerPool;
 
     /* Require lock to get a reference on the object,
      * lockless access thereafter */
