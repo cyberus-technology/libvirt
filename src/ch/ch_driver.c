@@ -1643,6 +1643,50 @@ chDomainReattach(virDomainObj *vm, void*data) {
     return 0;
 }
 
+static void
+processMonitorEOFEvent(virCHDriver *driver,
+                       virDomainObj *vm,
+                       int domid)
+{
+    int eventReason = VIR_DOMAIN_EVENT_STOPPED_SHUTDOWN;
+    int stopReason = VIR_DOMAIN_SHUTOFF_SHUTDOWN;
+    virObjectEvent *event = NULL;
+
+    VIR_WARN("Received Monitor EOF. The domain might crashed.");
+
+    if (vm->def->id != domid) {
+        VIR_DEBUG("Domain %s was restarted, ignoring EOF",
+                  vm->def->name);
+        return;
+    }
+
+    if (virDomainObjBeginJob(vm, VIR_JOB_DESTROY) < 0)
+        return;
+
+    if (!virDomainObjIsActive(vm)) {
+        VIR_DEBUG("Domain %p '%s' is not active, ignoring EOF",
+                  vm, vm->def->name);
+        goto endjob;
+    }
+
+    if (virDomainObjGetState(vm, NULL) != VIR_DOMAIN_SHUTDOWN) {
+        VIR_DEBUG("Monitor connection to '%s' closed without SHUTDOWN event; "
+                  "assuming the domain crashed", vm->def->name);
+        eventReason = VIR_DOMAIN_EVENT_STOPPED_FAILED;
+        stopReason = VIR_DOMAIN_SHUTOFF_CRASHED;
+    }
+
+    /* TODO: Handle pending migrations */
+
+    event = virDomainEventLifecycleNewFromObj(vm, VIR_DOMAIN_EVENT_STOPPED,
+                                              eventReason);
+    virCHProcessStop(driver, vm, stopReason);
+    virObjectEventStateQueue(driver->domainEventState, event);
+
+ endjob:
+    virDomainObjEndJob(vm);
+}
+
 static void chProcessEventHandler(void *data, void *opaque)
 {
     struct chProcessEvent *processEvent = data;
@@ -1652,7 +1696,7 @@ static void chProcessEventHandler(void *data, void *opaque)
     virObjectLock(vm);
     switch (processEvent->eventType) {
     case CH_PROCESS_EVENT_MONITOR_EOF:
-        VIR_ERROR("Received Monitor EOF %p", driver);
+        processMonitorEOFEvent(driver, vm, GPOINTER_TO_INT(processEvent->data));
         break;
     case CH_PROCESS_EVENT_LAST:
         break;
