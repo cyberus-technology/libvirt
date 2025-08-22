@@ -1643,6 +1643,24 @@ chDomainReattach(virDomainObj *vm, void*data) {
     return 0;
 }
 
+static void chProcessEventHandler(void *data, void *opaque)
+{
+    struct chProcessEvent *processEvent = data;
+    virDomainObj *vm = processEvent->vm;
+    virCHDriver *driver = opaque;
+
+    virObjectLock(vm);
+    switch (processEvent->eventType) {
+    case CH_PROCESS_EVENT_MONITOR_EOF:
+        VIR_ERROR("Received Monitor EOF %p", driver);
+        break;
+    case CH_PROCESS_EVENT_LAST:
+        break;
+    }
+    virDomainObjEndAPI(&vm);
+    g_free(processEvent);
+}
+
 static virDrvStateInitResult
 chStateInitialize(bool privileged,
                   const char *root,
@@ -1652,6 +1670,7 @@ chStateInitialize(bool privileged,
 {
     int ret = VIR_DRV_STATE_INIT_ERROR;
     g_autoptr(virCHDriverConfig) cfg = NULL;
+    g_autoptr(virIdentity) identity = virIdentityGetCurrent();
     int rv;
 
     if (root != NULL) {
@@ -1735,6 +1754,11 @@ chStateInitialize(bool privileged,
         goto cleanup;
 
     ch_driver->privileged = privileged;
+
+    ch_driver->workerPool = virThreadPoolNewFull(0, 1, 0, chProcessEventHandler,
+                                                          "ch-event",
+                                                          identity,
+                                                          ch_driver);
 
     virDomainObjListForEach(ch_driver->domains,
                             true,
@@ -4076,7 +4100,7 @@ static int
 chStateShutdownPrepare(void)
 {
     VIR_WARN("in chStateShutdownPrepare\n");
-    /* virThreadPoolStop(qemu_driver->workerPool); */
+    virThreadPoolStop(ch_driver->workerPool);
     return 0;
 }
 
@@ -4086,7 +4110,7 @@ chStateShutdownWait(void)
     VIR_WARN("in chStateShutdownWait\n");
     /* virDomainObjListForEach(ch_driver->domains, false, */
                             /* qemuDomainObjStopWorkerIter, NULL); */
-    /* virThreadPoolDrain(ch_driver->workerPool); */
+    virThreadPoolDrain(ch_driver->workerPool);
     return 0;
 }
 

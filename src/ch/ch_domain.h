@@ -66,6 +66,19 @@ struct _virCHDomainVcpuPrivate {
     virTristateBool halted;
 };
 
+typedef enum {
+    CH_PROCESS_EVENT_MONITOR_EOF,
+    CH_PROCESS_EVENT_LAST
+} chProcessEventType;
+
+struct chProcessEvent {
+    virDomainObj *vm;
+    chProcessEventType eventType;
+    int action;
+    int status;
+    void *data;
+};
+
 #define CH_DOMAIN_VCPU_PRIVATE(vcpu) \
     ((virCHDomainVcpuPrivate *) (vcpu)->privateData)
 
