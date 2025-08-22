@@ -212,6 +212,38 @@ virCHProcessEvents(virCHMonitor *mon)
     return 0;
 }
 
+static void
+chProcessEventSubmit(virDomainObj *vm,
+                     chProcessEventType eventType,
+                     int action,
+                     int status,
+                     void *data)
+{
+    struct chProcessEvent *event = g_new0(struct chProcessEvent, 1);
+    virCHDriver *driver = CH_DOMAIN_PRIVATE(vm)->driver;
+
+    event->vm = virObjectRef(vm);
+    event->eventType = eventType;
+    event->action = action;
+    event->status = status;
+    event->data = data;
+
+    if (virThreadPoolSendJob(driver->workerPool, 0, event) < 0) {
+        virObjectUnref(event->vm);
+        g_free(event);
+    }
+}
+
+static void
+chProcessHandleMonitorEOF(virDomainObj *vm)
+{
+    virObjectLock(vm);
+
+    chProcessEventSubmit(vm, CH_PROCESS_EVENT_MONITOR_EOF,
+                         0, 0, GINT_TO_POINTER(vm->def->id));
+    virObjectUnlock(vm);
+}
+
 static int
 virCHReadProcessEvents(virCHMonitor *mon)
 {
@@ -246,6 +278,7 @@ virCHReadProcessEvents(virCHMonitor *mon)
         if (fds[0].revents & POLLHUP) {
             VIR_WARN(_("%1$s: Sender hung up unexpectedly!"),
                      vm->def->name);
+            chProcessHandleMonitorEOF(vm);
             return -1;
         }
 
