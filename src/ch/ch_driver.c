@@ -4099,7 +4099,12 @@ chStateStop(void)
 static int
 chStateShutdownPrepare(void)
 {
-    VIR_WARN("in chStateShutdownPrepare\n");
+    VIR_WARN("in chStateShutdownPrepare");
+    // We can reach this function before chStateInitialize is completed.
+    if (!ch_driver) {
+        return 0;
+    }
+
     virThreadPoolStop(ch_driver->workerPool);
     return 0;
 }
@@ -4108,6 +4113,10 @@ static int
 chStateShutdownWait(void)
 {
     VIR_WARN("in chStateShutdownWait\n");
+    // We can reach this function before chStateInitialize is completed.
+    if (!ch_driver) {
+        return 0;
+    }
     /* virDomainObjListForEach(ch_driver->domains, false, */
                             /* qemuDomainObjStopWorkerIter, NULL); */
     virThreadPoolDrain(ch_driver->workerPool);
