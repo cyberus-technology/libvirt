@@ -1602,6 +1602,7 @@ int virCHMonitorMigrationSend(virCHMonitor *mon,
     g_autofree char *url = NULL;
     int responseCode = 0;
     int ret = -1;
+    int retries = 0;
     g_autofree char *payload = NULL;
     struct curl_slist *headers = NULL;
     struct curl_data data = {0};
@@ -1616,6 +1617,7 @@ int virCHMonitorMigrationSend(virCHMonitor *mon,
 
     VIR_WARN("Send VM to url %s json %s", dst_uri, payload);
 
+retry:
     VIR_WITH_OBJECT_LOCK_GUARD(mon) {
         /* reset all options of a libcurl session handle at first */
         curl_easy_reset(mon->handle);
@@ -1634,6 +1636,11 @@ int virCHMonitorMigrationSend(virCHMonitor *mon,
     if (responseCode == 200 || responseCode == 204) {
         ret = 0;
     } else {
+        if (retries++ < 3) {
+            VIR_WARN("Error code when sending migration. Retrying.");
+            sleep(1);
+            goto retry;
+        }
         data.content = g_realloc(data.content, data.size + 1);
         data.content[data.size] = 0;
         virReportError(VIR_ERR_INTERNAL_ERROR, _("Error sending VM: '%1$s'"),
