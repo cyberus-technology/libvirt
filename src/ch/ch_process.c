@@ -1244,10 +1244,11 @@ virCHProcessStart(virCHDriver *driver,
     return ret;
 }
 
-int
-virCHProcessStop(virCHDriver *driver,
+static int
+virCHProcessStopOrKill(virCHDriver *driver,
                  virDomainObj *vm,
-                 virDomainShutoffReason reason)
+                 virDomainShutoffReason reason,
+                 bool kill)
 {
     g_autoptr(virCHDriverConfig) cfg = virCHDriverGetConfig(driver);
     int ret;
@@ -1264,7 +1265,7 @@ virCHProcessStop(virCHDriver *driver,
     virErrorPreserveLast(&orig_err);
 
     if (priv->monitor) {
-        virProcessAbort(vm->pid);
+        virProcessKill(vm->pid, kill ? SIGKILL : SIGTERM);
         g_clear_pointer(&priv->monitor, virCHMonitorClose);
     }
 
@@ -1316,6 +1317,22 @@ virCHProcessStop(virCHDriver *driver,
 
     virErrorRestore(&orig_err);
     return 0;
+}
+
+int
+virCHProcessKill(virCHDriver *driver,
+                 virDomainObj *vm,
+                 virDomainShutoffReason reason)
+{
+    return virCHProcessStopOrKill(driver, vm, reason, true);
+}
+
+int
+virCHProcessStop(virCHDriver *driver,
+                 virDomainObj *vm,
+                 virDomainShutoffReason reason)
+{
+    return virCHProcessStopOrKill(driver, vm, reason, false);
 }
 
 /**
