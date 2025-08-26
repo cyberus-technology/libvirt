@@ -1847,16 +1847,34 @@ int virCHMonitorMigrationReceive(virCHMonitor *mon,
         goto out_close_fds;
     }
 
+    // This is a tricky piece of code because a lot can happen behind the curtons.
+    //
+    // We need to close the FDs as soon as virSocketSendMsgWithFDs is done. Otherwise,
+    // the will never be closed if an error happens during live migration on the sender
+    // side which causes this thread to be cancelled during chSocketProcessHttpResponse.
+    //
+    // This cancellation is necessary because otherwise we would block indefinitely in
+    // a recv() system call during chSocketProcessHttpResponse. Closing the FDs here
+    // it totally fine because they have already been transmitted during virSocketSendMsgWithFDs,
+    // but makes the code a little bit ugly.
+    //
+    // See chDomainMigrateFinish3 for more details.
+    if (ntapfds) {
+        chCloseFDs(tapfds, ntapfds);
+        // Don't close the FDs again when we leave this function.
+        ntapfds = 0;
+    }
+
     VIR_WARN("wait for response");
     if (chSocketProcessHttpResponse(mon_sockfd, false) < 0) {
         virReportSystemError(errno, "%s",
                              _("Failed to recv http response from CHV"));
         rc = -1;
-        goto out_close_fds;
+        goto out;
     }
 
 out_close_fds:
-    if (tapfds)
+    if (ntapfds)
         chCloseFDs(tapfds, ntapfds);
 out:
     return rc;
