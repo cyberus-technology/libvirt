@@ -3149,7 +3149,7 @@ chDomainMigratePerform3(virDomainPtr dom,
 
     if (virCHMonitorMigrationSend(priv->monitor, uri) < 0) {
         VIR_WARN("Migration send failed.");
-        dconn->driver->domainMigrateFinish3(dconn, vm->def->name, NULL, 0, NULL, NULL, NULL, uri, flags, 0);
+        dconn->driver->domainMigrateFinish3(dconn, vm->def->name, NULL, 0, NULL, NULL, NULL, uri, flags, 1);
         rc = -1;
         goto cleanup;
     }
@@ -3257,7 +3257,6 @@ chDomainMigrateFinish3(virConnectPtr dconn,
     virDomainDef *vmdef = NULL;
     virCHDomainObjPrivate *priv = NULL;
     g_autoptr(virCHDriverConfig) cfg = virCHDriverGetConfig(driver);
-    virDomainState state;
 
     VIR_WARN("chDomainMigrateFinish3 %p %s %s %d %p %p %lu %d",
               dconn, dname, cookiein, cookieinlen, cookieout, cookieoutlen, flags, cancelled);
@@ -3279,11 +3278,25 @@ chDomainMigrateFinish3(virConnectPtr dconn,
         return NULL;
 
     }
-    if (virCHProcessUpdateInfo(vm) < 0) {
-        VIR_WARN("Could not update console info. Consider that non-fatal.");
-    }
 
     priv = vm->privateData;
+
+    // If cancelled == 1, the sender told us that there was an error on their side and
+    // we need to abort the migration. We cannot expect the monitor to still function
+    // properly at this point because chv currently handles rpc and migration within the
+    // same thread.
+    //
+    // We also need to take care about our migration thread, because
+    // it might be stuck in a recv() system call waiting for the migration to complete.
+    if (cancelled == 0) {
+        if (virCHProcessUpdateInfo(vm) < 0) {
+            VIR_WARN("Could not update console info. Consider that non-fatal.");
+        }
+    } else {
+        VIR_WARN("Migration was unsuccessful, cancel thread");
+        virThreadCancel(priv->migrationDstReceiveThr);
+    }
+
     virThreadJoin(priv->migrationDstReceiveThr);
 
     VIR_FREE(priv->migrationDstReceiveThr);
@@ -3299,7 +3312,8 @@ chDomainMigrateFinish3(virConnectPtr dconn,
     }
 
 
-    if (priv->args->success == true) {
+    // If priv->args->success is false, our migrationDstReceiveThr indicated an error.
+    if (priv->args->success == true && cancelled == 0) {
         virDomainObjSetState(vm, VIR_DOMAIN_RUNNING, VIR_DOMAIN_RUNNING_MIGRATED);
 
         if (virDomainObjSave(vm, driver->xmlopt, cfg->stateDir) < 0)
@@ -3315,18 +3329,12 @@ chDomainMigrateFinish3(virConnectPtr dconn,
                 goto error;
         }
     } else {
-        // FIXME: we currently have to shutdown the VMM here
-        // because CHV does not release the network file descriptors
-        state = virDomainObjGetState(vm, NULL);
-        if (state == VIR_DOMAIN_RUNNING || state == VIR_DOMAIN_PAUSED) {
-            if (virCHMonitorShutdownVMM(priv->monitor) < 0) {
-                virReportError(VIR_ERR_INTERNAL_ERROR, "%s",
-                        _("failed to shutdown VMM"));
-            }
-        }
-
-        if (virCHProcessStop(driver, vm, VIR_DOMAIN_SHUTOFF_DESTROYED) < 0)
+        // Kill the chv process. We have no idea what happened, so better be on the
+        // safe side. Only stopping the process, i.e. sending SIGTERM might result
+        // unsuccessful network cleanup if the chv process is not plating nice with us.
+        if (virCHProcessKill(driver, vm, VIR_DOMAIN_SHUTOFF_DESTROYED) < 0) {
             goto error;
+        }
 
         virDomainObjRemoveTransientDef(vm);
 
