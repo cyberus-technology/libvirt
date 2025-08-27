@@ -1,4 +1,10 @@
+workflow:
+  rules:
+    # For pushes, MRs, scheduled pipelines
+    - when: always
+
 stages:
+  - lint
   - build
   - test
 
@@ -19,6 +25,24 @@ variables:
     key: "${CI_PROJECT_ID}-${CI_PROJECT_NAME}-nix-cache"
     paths:
       - "$CI_PROJECT_DIR/.cache/nix"
+
+lint:commit:
+  stage: lint
+  rules:
+      # Needed for TARGET_BRANCH below.
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      when: always
+    - when: never
+  extends:
+    - .nix_build_template
+  variables:
+    GIT_DEPTH: "0"  # Ensures full Git history is fetched
+  script:
+    # Determine the target branch of the merge request
+    - TARGET_BRANCH=${CI_MERGE_REQUEST_TARGET_BRANCH_NAME:-$CI_DEFAULT_BRANCH}
+    - echo "TARGET_BRANCH=$TARGET_BRANCH"
+    # Lint commit messages in the range from target branch to current HEAD
+    - nix run nixpkgs#gitlint -- --commits origin/$TARGET_BRANCH..
 
 build:nixos-tests:
   stage: build
@@ -43,6 +67,7 @@ test:nixos-tests:
   resource_group: host-tcp-ports
   extends:
     - .nix_build_template
+  needs: [] # no dependency to lint stage
   dependencies: []
   variables:
     PYTHONUNBUFFERED: "1"
