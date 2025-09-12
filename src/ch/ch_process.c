@@ -80,6 +80,10 @@ virCHProcessUpdateConsoleDevice(virDomainObj *vm,
         vm->def->serials[0]->source->type == VIR_DOMAIN_CHR_TYPE_UNIX)
         return;
 
+    if (STREQ(device, "serial") &&
+        vm->def->serials[0]->source->type == VIR_DOMAIN_CHR_TYPE_TCP)
+        return;
+
     dev = virJSONValueObjectGet(config, device);
     if (!dev) {
         virReportError(VIR_ERR_INTERNAL_ERROR,
