@@ -220,6 +220,14 @@ virCHMonitorBuildConsoleJson(virJSONValue *content,
                                                "file",
                                                vmdef->serials[0]->source->data.file.path) < 0)
                 return -1;
+        } else if (vmdef->serials[0]->source->type == VIR_DOMAIN_CHR_TYPE_TCP) {
+            g_autofree char *url = g_strdup_printf("%s:%s",
+                                                   vmdef->serials[0]->source->data.tcp.host,
+                                                   vmdef->serials[0]->source->data.tcp.service);
+            if (virJSONValueObjectAppendString(serial, "mode", "Tcp") < 0)
+                return -1;
+            if (virJSONValueObjectAppendString(serial, "url", url) < 0)
+                return -1;
         }
 
         if (virJSONValueObjectAppend(content, "serial", &serial) < 0)
