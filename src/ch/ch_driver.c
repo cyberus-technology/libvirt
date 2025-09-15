@@ -1003,9 +1003,9 @@ chDoDomainSave(virCHDriver *driver,
         goto end;
     }
 
-    if (virCHMonitorShutdownVMM(priv->monitor) < 0) {
+    if (virCHProcessStop(driver, vm, VIR_DOMAIN_SHUTOFF_SAVED) < 0 ) {
         virReportError(VIR_ERR_INTERNAL_ERROR, "%s",
-                _("failed to shutdown VMM"));
+                _("failed to stop CH process"));
     }
 
     vm->hasManagedSave = managed;
