@@ -22,6 +22,7 @@ test:nixos-tests:
   variables:
     PYTHONUNBUFFERED: "1"
     TERM: "xterm"
+  resource_group: host-tcp-ports
   script:
     - nix build .#tests.driver
     - ./result/bin/nixos-test-driver
