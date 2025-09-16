@@ -24,5 +24,4 @@ test:nixos-tests:
     TERM: "xterm"
   resource_group: host-tcp-ports
   script:
-    - nix build .#tests.driver
-    - ./result/bin/nixos-test-driver
+    - nix run -L .#tests.driver
