@@ -3,11 +3,11 @@
     "cloud-hypervisor-src": {
       "flake": false,
       "locked": {
-        "lastModified": 1751300897,
-        "narHash": "sha256-DMTVGiNfVJH8YS+XdVd0ji1hO+zIzXrMxpKbvSdJHBY=",
+        "lastModified": 1758029276,
+        "narHash": "sha256-LH6mn2QZQuwUTmtD/+DIL4OE/QJOKKlCANEoawMyzRw=",
         "owner": "cyberus-technology",
         "repo": "cloud-hypervisor",
-        "rev": "3b8b3a51f944fd0bbf58e8a76d8f8a83c046db04",
+        "rev": "c8e5a54021b2798c610e509622eb983a5ff5b23c",
         "type": "github"
       },
       "original": {
@@ -87,11 +87,15 @@
     },
     "libvirt-tests": {
       "inputs": {
-        "cloud-hypervisor-src": "cloud-hypervisor-src",
+        "cloud-hypervisor-src": [
+          "cloud-hypervisor-src"
+        ],
         "crane": "crane",
         "flake-utils": "flake-utils",
         "libvirt-src": "libvirt-src",
-        "nixpkgs": "nixpkgs",
+        "nixpkgs": [
+          "nixpkgs"
+        ],
         "rust-overlay": "rust-overlay"
       },
       "locked": {
@@ -110,22 +114,6 @@
     },
     "nixpkgs": {
       "locked": {
-        "lastModified": 1756217674,
-        "narHash": "sha256-TH1SfSP523QI7kcPiNtMAEuwZR3Jdz0MCDXPs7TS8uo=",
-        "owner": "nixos",
-        "repo": "nixpkgs",
-        "rev": "4e7667a90c167f7a81d906e5a75cba4ad8bee620",
-        "type": "github"
-      },
-      "original": {
-        "owner": "nixos",
-        "ref": "nixos-25.05",
-        "repo": "nixpkgs",
-        "type": "github"
-      }
-    },
-    "nixpkgs_2": {
-      "locked": {
         "lastModified": 1753489912,
         "narHash": "sha256-uDCFHeXdRIgJpYmtcUxGEsZ+hYlLPBhR83fdU+vbC1s=",
         "owner": "nixos",
@@ -142,9 +130,10 @@
     },
     "root": {
       "inputs": {
+        "cloud-hypervisor-src": "cloud-hypervisor-src",
         "keycodemapdb": "keycodemapdb",
         "libvirt-tests": "libvirt-tests",
-        "nixpkgs": "nixpkgs_2"
+        "nixpkgs": "nixpkgs"
       }
     },
     "rust-overlay": {
