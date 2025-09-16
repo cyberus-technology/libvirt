@@ -4,17 +4,13 @@
   inputs = {
     cloud-hypervisor-src.url = "github:cyberus-technology/cloud-hypervisor?ref=gardenlinux";
     cloud-hypervisor-src.flake = false;
+    keycodemapdb.url = "git+https://gitlab.com/keycodemap/keycodemapdb.git";
+    keycodemapdb.flake = false;
+    libvirt-tests.url = "github:cyberus-technology/libvirt-tests";
+    libvirt-tests.inputs.cloud-hypervisor-src.follows = "cloud-hypervisor-src";
+    libvirt-tests.inputs.nixpkgs.follows = "nixpkgs";
     # We follow the latest stable release of nixpkgs
     nixpkgs.url = "github:nixos/nixpkgs/nixos-25.05";
-    libvirt-tests = {
-      url = "github:cyberus-technology/libvirt-tests";
-      inputs.cloud-hypervisor-src.follows = "cloud-hypervisor-src";
-      inputs.nixpkgs.follows = "nixpkgs";
-    };
-    keycodemapdb = {
-      url = "git+https://gitlab.com/keycodemap/keycodemapdb.git";
-      flake = false;
-    };
   };
 
   outputs = { self, nixpkgs, libvirt-tests, keycodemapdb, ... }:
