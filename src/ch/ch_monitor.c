@@ -228,6 +228,12 @@ virCHMonitorBuildConsoleJson(virJSONValue *content,
                 return -1;
             if (virJSONValueObjectAppendString(serial, "url", url) < 0)
                 return -1;
+            if (vmdef->serials[0]->source->logfile) {
+                if (virJSONValueObjectAppendString(serial,
+                                                   "file",
+                                                   vmdef->serials[0]->source->logfile) < 0)
+                    return -1;
+            }
         }
 
         if (virJSONValueObjectAppend(content, "serial", &serial) < 0)
