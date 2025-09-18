@@ -19,6 +19,7 @@ test:nixos-tests:
   extends:
     - .nix_build_template
   dependencies: []
+  resource_group: host-tcp-ports
   variables:
     PYTHONUNBUFFERED: "1"
     TERM: "xterm"
