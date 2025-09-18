@@ -1267,6 +1267,7 @@ virCHProcessStopOrKill(virCHDriver *driver,
     // A shutdown might be already on-going e.g. because an event triggered it.
     // Do not do it twice in this case.
     if (g_atomic_int_exchange(&priv->shutdown_done, 1) == 1) {
+        VIR_WARN("Shutdown already in progress or done");
         return 0;
     }
 
