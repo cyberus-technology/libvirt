@@ -1002,11 +1002,15 @@ virCHProcessPrepareHost(virCHDriver *driver, virDomainObj *vm)
 static int
 virCHProcessPrepareDomain(virDomainObj *vm)
 {
+    virCHDomainObjPrivate *priv = vm->privateData;
+
     if (virCHProcessPrepareDomainHostdevs(vm) < 0)
         return -1;
 
     if (chAssignDeviceAliases(vm->def) < 0)
         return -1;
+
+    g_atomic_int_set(&priv->shutdown_done, 0);
 
     return 0;
 }
@@ -1259,6 +1263,12 @@ virCHProcessStopOrKill(virCHDriver *driver,
     virDomainDef *def = vm->def;
     virErrorPtr orig_err = NULL;
     size_t i;
+
+    // A shutdown might be already on-going e.g. because an event triggered it.
+    // Do not do it twice in this case.
+    if (g_atomic_int_exchange(&priv->shutdown_done, 1) == 1) {
+        return 0;
+    }
 
     VIR_DEBUG("Stopping VM name=%s pid=%d reason=%d",
               vm->def->name, (int)vm->pid, (int)reason);
