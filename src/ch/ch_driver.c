@@ -615,7 +615,6 @@ static int
 chDomainShutdownFlags(virDomainPtr dom,
                       unsigned int flags)
 {
-    virCHDomainObjPrivate *priv;
     virDomainObj *vm;
     virDomainState state;
     int ret = -1;
@@ -629,8 +628,6 @@ chDomainShutdownFlags(virDomainPtr dom,
 
     if (!(vm = virCHDomainObjFromDomain(dom)))
         goto cleanup;
-
-    priv = vm->privateData;
 
     if (virDomainShutdownFlagsEnsureACL(dom->conn, vm->def, flags) < 0)
         goto cleanup;
@@ -647,13 +644,9 @@ chDomainShutdownFlags(virDomainPtr dom,
                        _("only can shutdown running/paused domain"));
         goto endjob;
     }
-    // We not only shut down the VM but the whole VMM. This aligns with
-    // the libvirt VM and VMM lifecycle.
-    if (virCHMonitorShutdownVMM(priv->monitor) < 0) {
-        virReportError(VIR_ERR_INTERNAL_ERROR, "%s",
-                    _("failed to shutdown guest VM"));
+
+    if (virCHProcessKill(driver, vm, VIR_DOMAIN_SHUTOFF_SHUTDOWN) < 0)
         goto endjob;
-    }
 
     VIR_WARN("chDomainShutdown %d", __LINE__);
 
