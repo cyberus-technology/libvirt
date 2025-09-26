@@ -99,11 +99,11 @@
         "rust-overlay": "rust-overlay"
       },
       "locked": {
-        "lastModified": 1756714840,
-        "narHash": "sha256-PKJYpg4X5J8dUH9q7p4L1qnEhsRzkgpis9rU/XJ+4+8=",
+        "lastModified": 1758871100,
+        "narHash": "sha256-Mu/tbtAZXm7/B/6jGWVKLclA6A1m6v7+9uhwmqsDcFs=",
         "owner": "cyberus-technology",
         "repo": "libvirt-tests",
-        "rev": "3712da3f3f3c4ab1278cd83c789fe0e5a32d6312",
+        "rev": "306342e792f9e843069cee06c47c3dd3e99030cc",
         "type": "github"
       },
       "original": {
