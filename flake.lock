@@ -33,6 +33,25 @@
         "type": "github"
       }
     },
+    "edk2-src": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1753177921,
+        "narHash": "sha256-NGSNYuIlmktpc6Jux17pdnaXLhIxZxofA47w6s8dasg=",
+        "ref": "gardenlinux",
+        "rev": "838aba54db575012bea74a683d15d4ee900bbad9",
+        "revCount": 34304,
+        "submodules": true,
+        "type": "git",
+        "url": "https://github.com/cyberus-technology/edk2"
+      },
+      "original": {
+        "ref": "gardenlinux",
+        "submodules": true,
+        "type": "git",
+        "url": "https://github.com/cyberus-technology/edk2"
+      }
+    },
     "flake-utils": {
       "inputs": {
         "systems": "systems"
@@ -91,6 +110,7 @@
           "cloud-hypervisor-src"
         ],
         "crane": "crane",
+        "edk2-src": "edk2-src",
         "flake-utils": "flake-utils",
         "libvirt-src": "libvirt-src",
         "nixpkgs": [
@@ -99,11 +119,11 @@
         "rust-overlay": "rust-overlay"
       },
       "locked": {
-        "lastModified": 1759220991,
-        "narHash": "sha256-RAoC40S9uz0Ecna72o0Fxt4Ty+Keehet0LlLUxYLl5A=",
+        "lastModified": 1759829934,
+        "narHash": "sha256-V0idpiILjQbcucino8AEJud0dltMc6/e8CjScf/ZaBo=",
         "owner": "cyberus-technology",
         "repo": "libvirt-tests",
-        "rev": "a3065e7473e754184dca15c98879e13c1ca5e09b",
+        "rev": "0cf2f70b61c5cdc173823044381758913ad466aa",
         "type": "github"
       },
       "original": {
