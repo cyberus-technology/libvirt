@@ -4599,6 +4599,30 @@ chStateShutdownWait(void)
     return 0;
 }
 
+/**
+ * Retrieve the currently available CPU profiles formatted as
+ * virDomainCapsCPUModels.
+ *
+ * While we currently return all available models here, the function is meant
+ * to filter the models and only return actually usable models in the current
+ * environment libvirt is running on.
+ *
+ * This function is meant to be from within the GetDomainCapabilities API call.
+ */
+static
+virDomainCapsCPUModels* getCpuModels(void)
+{
+    size_t num_models = sizeof(cpu_models) / sizeof(cpu_models[0]);
+    virDomainCapsCPUModels *cpuModels = virDomainCapsCPUModelsNew(num_models);
+    size_t i = 0;
+
+    for (i = 0; i < num_models; i++) {
+        virDomainCapsCPUModelsAdd(cpuModels, cpu_models[i], true, NULL, false, "Intel", cpu_models[i]);
+    }
+
+    return cpuModels;
+}
+
 static
 virDomainCaps *
 virCHDriverGetDomainCapabilities(virCHDriver *driver,
@@ -4615,6 +4639,11 @@ virCHDriverGetDomainCapabilities(virCHDriver *driver,
     // We initialize the mininum to make Nova happy and announce that we only support CPU pass-through
     domCaps->cpu.hostPassthrough = true;
     domCaps->cpu.hostPassthroughMigratable.report = true;
+
+    // The domain capabilities are meant to represent what is actually
+    // supported on the machine were Libvirt is currently running on. Once we
+    // e.g. support AMD CPU profiles, we should filter the profiles properly.
+    domCaps->cpu.custom = getCpuModels();
     domCaps->os.supported = VIR_TRISTATE_BOOL_YES;
     domCaps->os.firmware.report = false;
     VIR_DOMAIN_CAPS_ENUM_SET(domCaps->os.firmware, VIR_DOMAIN_OS_DEF_FIRMWARE_EFI);
