@@ -4375,6 +4375,20 @@ chStateShutdownWait(void)
 }
 
 static
+virDomainCapsCPUModels* getCpuModels(void)
+{
+    size_t num_models = sizeof(cpu_models) / sizeof(cpu_models[0]);
+    virDomainCapsCPUModels *cpuModels = virDomainCapsCPUModelsNew(num_models);
+    size_t i = 0;
+
+    for (i = 0; i < num_models; i++) {
+        virDomainCapsCPUModelsAdd(cpuModels, cpu_models[i], true, NULL, false, "Intel", cpu_models[i]);
+    }
+
+    return cpuModels;
+}
+
+static
 virDomainCaps *
 virCHDriverGetDomainCapabilities(virCHDriver *driver,
                                  const char *machine,
@@ -4390,6 +4404,7 @@ virCHDriverGetDomainCapabilities(virCHDriver *driver,
     // We initialize the mininum to make Nova happy and announce that we only support CPU pass-through
     domCaps->cpu.hostPassthrough = true;
     domCaps->cpu.hostPassthroughMigratable.report = true;
+    domCaps->cpu.custom = getCpuModels();
     domCaps->os.supported = VIR_TRISTATE_BOOL_YES;
     domCaps->os.firmware.report = false;
     VIR_DOMAIN_CAPS_ENUM_SET(domCaps->os.firmware, VIR_DOMAIN_OS_DEF_FIRMWARE_EFI);
