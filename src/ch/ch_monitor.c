@@ -115,6 +115,11 @@ virCHMonitorBuildCPUJson(virJSONValue *content, virDomainDef *vmdef)
             if (virJSONValueObjectAppend(cpus, "topology", &topology) < 0)
                 return -1;
         }
+        if (vmdef->cpu && vmdef->cpu->mode == VIR_CPU_MODE_CUSTOM && vmdef->cpu->model) {
+            DBG("Use custom CPU model: %s", vmdef->cpu->model);
+            if (virJSONValueObjectAppendString(cpus, "profile", vmdef->cpu->model) < 0)
+                return -1;
+        }
         if (virJSONValueObjectAppend(content, "cpus", &cpus) < 0)
             return -1;
     }
