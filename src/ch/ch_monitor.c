@@ -1633,6 +1633,11 @@ int virCHMonitorMigrationSend(virCHMonitor *mon,
 
 retry:
     VIR_WITH_OBJECT_LOCK_GUARD(mon) {
+
+        /* See qemuDomainObjEnterMonitorAsync for how qemu handles unlocking the
+         * VM in case of migration. */
+        virObjectUnlock(mon->vm);
+
         /* reset all options of a libcurl session handle at first */
         curl_easy_reset(mon->handle);
 
@@ -1646,6 +1651,7 @@ retry:
 
         responseCode = virCHMonitorCurlPerform(mon->handle);
     }
+    virObjectLock(mon->vm);
 
     if (responseCode == 200 || responseCode == 204) {
         ret = 0;
