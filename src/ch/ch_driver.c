@@ -2822,6 +2822,44 @@ chMigrationAnyParseURI(const char *uri, bool *wellFormed)
     return parsed;
 }
 
+static int chMigrationJobStart(virDomainObj *vm,
+                               virDomainAsyncJob job)
+{
+    virDomainJobOperation op;
+    unsigned long long mask;
+    if (vm->job->asyncJob == VIR_ASYNC_JOB_MIGRATION_IN ||
+        vm->job->asyncJob == VIR_ASYNC_JOB_MIGRATION_OUT) {
+        virReportError(VIR_ERR_OPERATION_INVALID,
+                       _("another migration job is already running for domain '%1$s'"),
+                       vm->def->name);
+        return -1;
+    }
+
+    if (vm->job) {
+        // I don't know where this member is set for QEMU, but with CH we ran
+        // into a nullptr exception when trying to access some member of
+        // `jobDataPrivateCb`.
+        // As far as I can see, we do not require setting these callbacks and
+        // we can avoid the exception by setting the whole member to NULL.
+        vm->job->jobDataPrivateCb = NULL;
+    }
+
+    if (job == VIR_ASYNC_JOB_MIGRATION_IN) {
+        op = VIR_DOMAIN_JOB_OPERATION_MIGRATION_IN;
+        mask = VIR_JOB_NONE;
+    } else {
+        op = VIR_DOMAIN_JOB_OPERATION_MIGRATION_OUT;
+        mask = VIR_JOB_DEFAULT_MASK |
+               JOB_MASK(VIR_JOB_MIGRATION_OP);
+    }
+    mask |= JOB_MASK(VIR_JOB_MODIFY_MIGRATION_SAFE);
+
+    if (virDomainObjBeginAsyncJob(vm, job, op, 0) < 0)
+        return -1;
+
+    return 0;
+}
+
 /**
  * Runs on the destination and prepares the empty cloud hypervisor process to
  * receive the migration.
@@ -3104,6 +3142,11 @@ chDomainMigratePerform3(virDomainPtr dom,
         goto cleanup;
     }
 
+    if (chMigrationJobStart(vm, VIR_ASYNC_JOB_MIGRATION_OUT) < 0) {
+        VIR_WARN("Could not begin async migration job");
+        return -1;
+    }
+
     /**
      * If the dconnuri is set we are (most likely) in the P2P/direct case. In this
      * case, the libvirt migration protocol (begin, prepare, perform, finish,
@@ -3180,12 +3223,14 @@ chDomainMigratePerform3(virDomainPtr dom,
         if (!vm->persistent)
             virDomainObjListRemoveLocked(driver->domains, vm);
 
+        virDomainObjEndAsyncJob(vm);
         virDomainObjEndAPI(&vm);
         VIR_WARN("P2P: Migration finished");
         return 0;
     }
 
 cleanup:
+    virDomainObjEndAsyncJob(vm);
     if (dconn) {
         virConnectClose(dconn);
     }
