@@ -2895,6 +2895,11 @@ chDomainMigratePrepare3(virConnectPtr dconn,
         goto cleanup;
     }
 
+    if (chMigrationJobStart(vm, VIR_ASYNC_JOB_MIGRATION_IN) < 0) {
+        VIR_WARN("Could not begin async migration job");
+        goto cleanup;
+    }
+
     if (virCHProcessInit(driver, vm) < 0) {
         rc = -1;
         VIR_WARN("Could not init process");
@@ -3350,6 +3355,7 @@ chDomainMigrateFinish3(virConnectPtr dconn,
     }
 error:
     VIR_FREE(priv->args);
+    virDomainObjEndAsyncJob(vm);
     virDomainObjEndAPI(&vm);
     return dom;
 }
