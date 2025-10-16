@@ -138,7 +138,8 @@ int virCHMonitorResumeVM(virCHMonitor *mon);
 int virCHMonitorSaveVM(virCHMonitor *mon,
                        const char *to);
 int virCHMonitorMigrationSend(virCHMonitor *mon,
-                              const char *dst_uri);
+                              const char *dst_uri,
+                              unsigned parallel_connections);
 int virCHMonitorMigrationReceive(virCHMonitor *mon,
                                  const char *rcv_uri,
                                  virDomainDef *vmdef, virCHDriver *driver, virCond *cond, char* tcp_serial_url);
