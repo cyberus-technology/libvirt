@@ -3279,11 +3279,9 @@ chDomainMigratePerform3Params(virDomainPtr dom,
     const char *dname = NULL;
     const char *xmlin = NULL;
     const char *uri = NULL;
+    int parallel_connections = 1;
 
     if (virTypedParamsGetString(params, nparams,
-                                VIR_MIGRATE_PARAM_DEST_NAME,
-                                &dname) < 0 ||
-        virTypedParamsGetString(params, nparams,
                                 VIR_MIGRATE_PARAM_URI,
                                 &uri) < 0)
         goto error;
@@ -3300,6 +3298,22 @@ chDomainMigratePerform3Params(virDomainPtr dom,
     }
 
     VIR_WARN("chDomainMigratePerform3Params dconnuri: %s dname: %s", dconnuri, dname);
+    if (flags & VIR_MIGRATE_PARALLEL) {
+        if (virTypedParamsGetInt(params, nparams,
+                                VIR_MIGRATE_PARAM_PARALLEL_CONNECTIONS,
+                                &parallel_connections) < 0) {
+            VIR_WARN("Could not get param: VIR_MIGRATE_PARAM_PARALLEL_CONNECTIONS");
+        } else {
+            VIR_WARN("VIR_MIGRATE_PARAM_PARALLEL_CONNECTIONS: %d", parallel_connections);
+        }
+    }
+
+    if (parallel_connections < 1) {
+        VIR_WARN("Unexpected value of parallel_connections: %d. Setting value to 1.", parallel_connections);
+        parallel_connections = 1;
+    }
+
+    VIR_WARN("chDomainMigratePerform3Params dconnuri: %s dname: %s parallel connection: %d", dconnuri, dname, parallel_connections);
 
     return chDomainMigratePerform3(dom,
                                    xmlin,
