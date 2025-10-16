@@ -3118,45 +3118,32 @@ static virConnectAuth virConnectAuthConfig = {
 };
 
 static int
-chDomainMigratePerform3(virDomainPtr dom,
-                        const char *xmlin,
-                        const char *cookiein,
-                        int cookieinlen,
-                        char **cookieout,
-                        int *cookieoutlen,
-                        const char *dconnuri,
-                        const char *uri,
-                        unsigned long flags,
-                        const char *dname,
-                        unsigned long resource)
+chDomainMigratePerform3Impl(virDomainObj *vm,
+                            virCHDriver *driver,
+                            const char *xmlin,
+                            const char *dconnuri,
+                            const char *uri,
+                            const char *cookiein,
+                            int cookieinlen,
+                            char **cookieout,
+                            int *cookieoutlen,
+                            unsigned long flags,
+                            const char *dname)
 {
-    virDomainObj *vm;
-    virCHDomainObjPrivate *priv = NULL;
-    virCHDriver *driver = dom->conn->privateData;
-    g_autofree char *id = g_strdup_printf("bla");
-    g_autoptr(virCHDriverConfig) cfg = NULL;
+    virCHDomainObjPrivate *priv = vm->privateData;
+    g_autofree char *id = NULL;
     g_autoptr(virConnect) dconn = NULL;
     g_autoptr(virURI) uri_parsed = NULL;
     char *uri_out = NULL;
     g_autofree char *dom_xml = NULL;
     int rc = -1;
+    g_autoptr(virCHDriverConfig) cfg = virCHDriverGetConfig(driver);
 
-    cfg = virCHDriverGetConfig(driver);
-
-    VIR_WARN("chDomainMigratePerform3 %p %s %s %u %p %p %s %s %lu %s %lu",
-             dom, xmlin, cookiein, cookieinlen, cookieout, cookieoutlen, dconnuri, uri, flags, dname, resource);
-
-    if (!(vm = virCHDomainObjFromDomain(dom)))
-        return -1;
-
-    priv = vm->privateData;
+    DBG("chDomainMigratePerform3Impl %s %s %s %lu %s %u",
+        xmlin, dconnuri, uri, flags, dname, parallel_connections);
 
     if (!priv->monitor) {
         VIR_ERROR(_("VMs monitor not initialized"));
-        goto cleanup;
-    }
-
-    if (virDomainMigratePerform3EnsureACL(dom->conn, vm->def) < 0) {
         goto cleanup;
     }
 
@@ -3196,15 +3183,11 @@ chDomainMigratePerform3(virDomainPtr dom,
             goto cleanup;
         }
 
-        // if (virConnectSetKeepAlive(dconn, 100/*cfg->keepAliveInterval*/, 100/*cfg->keepAliveCount*/) < 0)
-        //     goto cleanup;
-
         if (!(uri_parsed = chMigrationAnyParseURI(dconnuri, NULL))) {
             VIR_WARN("Parse dconnuri failed.");
         }
 
         dconn->driver->domainMigratePrepare3(dconn, cookiein, cookieinlen, cookieout, cookieoutlen, uri_parsed ? uri_parsed->server : NULL, &uri_out, flags, dname, 0 /*bandwidth*/, dom_xml);
-
 
         VIR_WARN("Got uri_out that will be used for CHV migration: %s", uri_out);
         uri = uri_out;
@@ -3223,7 +3206,6 @@ chDomainMigratePerform3(virDomainPtr dom,
         VIR_WARN("P2P: Call finish on remote context");
         dconn->driver->domainMigrateFinish3(dconn, vm->def->name, NULL, 0, NULL, NULL, NULL, uri, flags, 0);
         virConnectClose(dconn);
-
 
         VIR_WARN("P2P: Call confirm on our context");
 
@@ -3251,7 +3233,6 @@ chDomainMigratePerform3(virDomainPtr dom,
             virDomainObjListRemoveLocked(driver->domains, vm);
 
         virDomainObjEndAsyncJob(vm);
-        virDomainObjEndAPI(&vm);
         VIR_WARN("P2P: Migration finished");
         return 0;
     }
@@ -3261,6 +3242,50 @@ cleanup:
     if (dconn) {
         virConnectClose(dconn);
     }
+
+    return rc;
+}
+
+static int
+chDomainMigratePerform3(virDomainPtr dom,
+                        const char *xmlin,
+                        const char *cookiein,
+                        int cookieinlen,
+                        char **cookieout,
+                        int *cookieoutlen,
+                        const char *dconnuri,
+                        const char *uri,
+                        unsigned long flags,
+                        const char *dname,
+                        unsigned long resource)
+{
+    virDomainObj *vm;
+    virCHDriver *driver = dom->conn->privateData;
+    int rc = -1;
+
+    VIR_INFO("chDomainMigratePerform3 %p %s %s %u %p %p %s %s %lu %s %lu",
+              dom, xmlin, cookiein, cookieinlen, cookieout, cookieoutlen, dconnuri, uri, flags, dname, resource);
+
+    if (!(vm = virCHDomainObjFromDomain(dom)))
+        return -1;
+
+    if (virDomainMigratePerform3EnsureACL(dom->conn, vm->def) < 0) {
+        goto cleanup;
+    }
+
+    rc = chDomainMigratePerform3Impl(vm,
+                                     driver,
+                                     xmlin,
+                                     dconnuri,
+                                     uri,
+                                     cookiein,
+                                     cookieinlen,
+                                     cookieout,
+                                     cookieoutlen,
+                                     flags,
+                                     dname);
+
+cleanup:
     virDomainObjEndAPI(&vm);
     return rc;
 }
@@ -3280,6 +3305,9 @@ chDomainMigratePerform3Params(virDomainPtr dom,
     const char *xmlin = NULL;
     const char *uri = NULL;
     int parallel_connections = 1;
+    virDomainObj *vm;
+    virCHDriver *driver = dom->conn->privateData;
+    int rc = -1;
 
     if (virTypedParamsGetString(params, nparams,
                                 VIR_MIGRATE_PARAM_URI,
@@ -3315,19 +3343,26 @@ chDomainMigratePerform3Params(virDomainPtr dom,
 
     VIR_WARN("chDomainMigratePerform3Params dconnuri: %s dname: %s parallel connection: %d", dconnuri, dname, parallel_connections);
 
-    return chDomainMigratePerform3(dom,
-                                   xmlin,
-                                   cookiein,
-                                   cookieinlen,
-                                   cookieout,
-                                   cookieoutlen,
-                                   dconnuri,
-                                   uri,
-                                   flags,
-                                   dname,
-                                   0 /*unsigned long resource*/);
+    if (!(vm = virCHDomainObjFromDomain(dom)))
+        return -1;
+
+    if (virDomainMigratePerform3EnsureACL(dom->conn, vm->def) < 0)
+        goto error;
+
+    rc = chDomainMigratePerform3Impl(vm,
+                                     driver,
+                                     xmlin,
+                                     dconnuri,
+                                     uri,
+                                     cookiein,
+                                     cookieinlen,
+                                     cookieout,
+                                     cookieoutlen,
+                                     flags,
+                                     dname);
 error:
-    return -1;
+    virDomainObjEndAPI(&vm);
+    return rc;
 }
 
 static virDomainPtr
