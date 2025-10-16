@@ -1658,7 +1658,8 @@ int virCHMonitorRemoveDevice(virCHMonitor *mon,
 }
 
 int virCHMonitorMigrationSend(virCHMonitor *mon,
-                              const char *dst_uri)
+                              const char *dst_uri,
+                              unsigned parallel_connections)
 {
     g_autofree char *url = NULL;
     int responseCode = 0;
@@ -1667,13 +1668,23 @@ int virCHMonitorMigrationSend(virCHMonitor *mon,
     g_autofree char *payload = NULL;
     struct curl_slist *headers = NULL;
     struct curl_data data = {0};
+    g_autoptr(virJSONValue) content = virJSONValueNewObject();
 
     url = g_strdup_printf("%s/%s", URL_ROOT, URL_VM_SEND_MIGRATION);
 
     headers = curl_slist_append(headers, "Accept: application/json");
     headers = curl_slist_append(headers, "Content-Type: application/json");
 
-    if (virCHMonitorBuildKeyValueStringJson(&payload, "destination_url", dst_uri) != 0)
+
+    if (virJSONValueObjectAppendString(content, "destination_url", dst_uri) < 0)
+        return -1;
+
+    if (parallel_connections > 1) {
+        if (virJSONValueObjectAppendNumberInt(content, "connections", parallel_connections) != 0)
+            return -1;
+    }
+
+    if (!(payload = virJSONValueToString(content, false)))
         return -1;
 
     VIR_WARN("Send VM to url %s json %s", dst_uri, payload);

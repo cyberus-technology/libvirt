@@ -3091,7 +3091,8 @@ chDomainMigratePerform3Impl(virDomainObj *vm,
                             char **cookieout,
                             int *cookieoutlen,
                             unsigned long flags,
-                            const char *dname)
+                            const char *dname,
+                            unsigned parallel_connections)
 {
     virCHDomainObjPrivate *priv = vm->privateData;
     g_autofree char *id = NULL;
@@ -3156,7 +3157,7 @@ chDomainMigratePerform3Impl(virDomainObj *vm,
         uri = uri_out;
     }
 
-    if (virCHMonitorMigrationSend(priv->monitor, uri) < 0) {
+    if (virCHMonitorMigrationSend(priv->monitor, uri, parallel_connections) < 0) {
         VIR_WARN("Migration send failed.");
         dconn->driver->domainMigrateFinish3(dconn, vm->def->name, NULL, 0, NULL, NULL, NULL, uri, flags, 1);
         rc = -1;
@@ -3246,7 +3247,8 @@ chDomainMigratePerform3(virDomainPtr dom,
                                      cookieout,
                                      cookieoutlen,
                                      flags,
-                                     dname);
+                                     dname,
+                                     1);
 
 cleanup:
     virDomainObjEndAPI(&vm);
@@ -3322,7 +3324,8 @@ chDomainMigratePerform3Params(virDomainPtr dom,
                                      cookieout,
                                      cookieoutlen,
                                      flags,
-                                     dname);
+                                     dname,
+                                     parallel_connections);
 error:
     virDomainObjEndAPI(&vm);
     return rc;
