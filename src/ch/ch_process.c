@@ -1100,13 +1100,6 @@ virCHProcessInit(virCHDriver *driver,
                            _("failed to create connection to CH socket"));
             goto cleanup;
         }
-
-        if (virCHMonitorCreateVM(driver, priv->monitor) < 0) {
-            VIR_WARN("Failed virCHMonitorCreateVM");
-            virReportError(VIR_ERR_INTERNAL_ERROR, "%s",
-                           _("failed to create guest VM"));
-            goto cleanup;
-        }
     }
 
     virInhibitorHold(driver->inhibitor);
