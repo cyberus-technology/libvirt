@@ -3130,8 +3130,8 @@ chDomainMigratePerform3(virDomainPtr dom,
 
     cfg = virCHDriverGetConfig(driver);
 
-    VIR_INFO("chDomainMigratePerform3 %p %s %s %u %p %p %s %s %lu %s %lu",
-              dom, xmlin, cookiein, cookieinlen, cookieout, cookieoutlen, dconnuri, uri, flags, dname, resource);
+    VIR_WARN("chDomainMigratePerform3 %p %s %s %u %p %p %s %s %lu %s %lu",
+             dom, xmlin, cookiein, cookieinlen, cookieout, cookieoutlen, dconnuri, uri, flags, dname, resource);
 
     if (!(vm = virCHDomainObjFromDomain(dom)))
         return -1;
