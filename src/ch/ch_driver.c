@@ -3163,8 +3163,17 @@ chDomainMigratePerform3(virDomainPtr dom,
      */
     if (dconnuri) {
         VIR_WARN("Got dconnuri. Probably p2p/direct migration. Do special extra handling");
-        // dom_xml = chDomainMigrateBegin3(dom, xmlin, cookieout, cookieoutlen, flags, dname, 0);
-        dom_xml = virDomainDefFormat(vm->def, driver->xmlopt, VIR_DOMAIN_DEF_FORMAT_SECURE);
+
+        /* The caller of the migration is able to specify a domain XML
+         * description used for the domain on the destination side. This is
+         * required e.g. to adapt some ip or port binding in the TCP serial
+         * configuration. */
+        if (xmlin) {
+            /* dom_xml will be cleaned up by us but the caller expects to cleanup xmlin. */
+            dom_xml = g_strdup(xmlin);
+        } else {
+            dom_xml = virDomainDefFormat(vm->def, driver->xmlopt, VIR_DOMAIN_DEF_FORMAT_SECURE);
+        }
 
         VIR_WARN("Got domain xml: %s", dom_xml);
 
@@ -3255,6 +3264,7 @@ chDomainMigratePerform3Params(virDomainPtr dom,
                               unsigned int flags)
 {
     const char *dname = NULL;
+    const char *xmlin = NULL;
     const char *uri = NULL;
 
     if (virTypedParamsGetString(params, nparams,
@@ -3265,10 +3275,21 @@ chDomainMigratePerform3Params(virDomainPtr dom,
                                 &uri) < 0)
         goto error;
 
+    if (virTypedParamsGetString(params, nparams,
+                                VIR_MIGRATE_PARAM_DEST_NAME,
+                                &dname) < 0)
+        goto error;
+
+    if (virTypedParamsGetString(params, nparams,
+                                VIR_MIGRATE_PARAM_DEST_XML,
+                                &xmlin) < 0) {
+        goto error;
+    }
+
     VIR_WARN("chDomainMigratePerform3Params dconnuri: %s dname: %s", dconnuri, dname);
 
     return chDomainMigratePerform3(dom,
-                                   NULL /*const char *xmlin*/,
+                                   xmlin,
                                    cookiein,
                                    cookieinlen,
                                    cookieout,
