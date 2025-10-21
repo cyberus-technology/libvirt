@@ -57,6 +57,7 @@ struct _chMigrationDstArgs {
     virMutex mutex;
     virCond cond;
     volatile bool success;
+    char *tcp_serial_url;
 };
 
 #define CH_DOMAIN_PRIVATE(vm) \

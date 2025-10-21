@@ -140,7 +140,7 @@ int virCHMonitorMigrationSend(virCHMonitor *mon,
                               const char *dst_uri);
 int virCHMonitorMigrationReceive(virCHMonitor *mon,
                                  const char *rcv_uri,
-                                 virDomainDef *vmdef, virCHDriver *driver, virCond *cond);
+                                 virDomainDef *vmdef, virCHDriver *driver, virCond *cond, char* tcp_serial_url);
 int virCHMonitorRemoveDevice(virCHMonitor *mon, const char* device_id);
 int virCHMonitorGetInfo(virCHMonitor *mon, virJSONValue **info);
 
