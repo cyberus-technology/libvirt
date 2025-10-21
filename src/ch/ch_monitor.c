@@ -1746,7 +1746,8 @@ int virCHMonitorMigrationReceive(virCHMonitor *mon,
                                  const char *rcv_uri,
                                  virDomainDef *vmdef,
                                  virCHDriver *driver,
-                                 virCond *cond)
+                                 virCond *cond,
+                                 char *tcp_serial_url)
 {
     // int ret = 0;
     size_t i = 0;
@@ -1770,6 +1771,14 @@ int virCHMonitorMigrationReceive(virCHMonitor *mon,
     if (virJSONValueObjectAppendString(content, "receiver_url", rcv_uri) < 0) {
         rc = -1;
         goto out;
+    }
+
+    if (vmdef->serials[0]->source->type == VIR_DOMAIN_CHR_TYPE_TCP) {
+        VIR_WARN("TCP serial in use. Pass adapted TCP serial url: %s", tcp_serial_url);
+        if (virJSONValueObjectAppendString(content, "tcp_serial_url", tcp_serial_url) < 0) {
+            rc = -1;
+            goto out;
+        }
     }
 
     /* Pass the netconfig needed to restore with new netfds */

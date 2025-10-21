@@ -2754,7 +2754,12 @@ chDoMigrateDstReceive(void *opaque)
 
     rcv_uri = g_strdup_printf("tcp:0.0.0.0:%d", args->port);
 
-    if (virCHMonitorMigrationReceive(priv->monitor, rcv_uri, args->def, args->driver, &args->cond) < 0) {
+    if (virCHMonitorMigrationReceive(priv->monitor,
+                                     rcv_uri,
+                                     args->def,
+                                     args->driver,
+                                     &args->cond,
+                                     args->tcp_serial_url) < 0) {
         VIR_WARN("Migration receive failed.");
         args->success = false;
         return;
@@ -2926,6 +2931,14 @@ chDomainMigratePrepare3(virConnectPtr dconn,
     args->def = vm->def;
     args->driver = driver;
     args->success = false;
+    args->tcp_serial_url = NULL;
+
+    if (vm->def->nserials > 0 &&
+        vm->def->serials[0]->source->type == VIR_DOMAIN_CHR_TYPE_TCP) {
+        args->tcp_serial_url = g_strdup_printf("%s:%s",
+                                               vm->def->serials[0]->source->data.tcp.host,
+                                               vm->def->serials[0]->source->data.tcp.service);
+    }
 
     // VM receiving is blocking which we cannot do here, because it would block
     // the Libvirt migration protocol.
@@ -3375,6 +3388,9 @@ chDomainMigrateFinish3(virConnectPtr dconn,
         virCHDomainRemoveInactive(driver, vm);
     }
 error:
+    if (priv->args->tcp_serial_url) {
+        VIR_FREE(priv->args->tcp_serial_url);
+    }
     VIR_FREE(priv->args);
     virDomainObjEndAsyncJob(vm);
     virDomainObjEndAPI(&vm);
