@@ -4317,6 +4317,111 @@ chConnectGetDomainCapabilities(virConnectPtr conn,
     return virDomainCapsFormat(domCaps);
 }
 
+static int
+chDomainBlockResize(virDomainPtr dom,
+                      const char *path,
+                      unsigned long long size,
+                      unsigned int flags)
+{
+    virDomainObj *vm;
+    virCHDomainObjPrivate *priv;
+    int ret = -1;
+    g_autofree char *device = NULL;
+    virDomainDiskDef *disk = NULL;
+    g_autofree char *payload = NULL;
+    bool success = NULL;
+    g_autoptr(virJSONValue) resize = NULL;
+
+    VIR_WARN("chDomainBlockResize: path:%s size:%lld, flags:%x", path, size, flags);
+
+    virCheckFlags(VIR_DOMAIN_BLOCK_RESIZE_BYTES |
+                  VIR_DOMAIN_BLOCK_RESIZE_CAPACITY, -1);
+
+    if ((flags & VIR_DOMAIN_BLOCK_RESIZE_BYTES) == 0) {
+        if (size > ULLONG_MAX / 1024) {
+            virReportError(VIR_ERR_OVERFLOW,
+                           _("size must be less than %1$llu"),
+                           ULLONG_MAX / 1024);
+            return -1;
+        }
+        size *= 1024;
+    }
+
+    if (!(vm = virCHDomainObjFromDomain(dom)))
+        goto cleanup;
+
+    priv = vm->privateData;
+
+    if (virDomainBlockResizeEnsureACL(dom->conn, vm->def) < 0)
+        goto cleanup;
+
+    if (virDomainObjBeginJob(vm, VIR_JOB_MODIFY) < 0)
+        goto cleanup;
+
+    if (virDomainObjCheckActive(vm) < 0)
+        goto endjob;
+
+    if (!(disk = virDomainDiskByName(vm->def, path, false))) {
+        virReportError(VIR_ERR_INVALID_ARG,
+                       _("disk '%1$s' was not found in the domain config"), path);
+        goto endjob;
+    }
+
+    if (virStorageSourceIsEmpty(disk->src) || disk->src->readonly) {
+        virReportError(VIR_ERR_OPERATION_UNSUPPORTED,
+                       _("can't resize empty or readonly disk '%1$s'"),
+                       disk->dst);
+        goto endjob;
+    }
+
+    if (virStorageSourceGetActualType(disk->src) == VIR_STORAGE_TYPE_VHOST_USER) {
+        virReportError(VIR_ERR_OPERATION_UNSUPPORTED, "%s",
+                       _("block resize is not supported for vhostuser disk"));
+        goto endjob;
+    }
+
+    if (flags & VIR_DOMAIN_BLOCK_RESIZE_CAPACITY) {
+        virReportError(VIR_ERR_OPERATION_UNSUPPORTED, "capacity resize is currently not supported");
+        goto endjob;
+    }
+
+    if (disk->src->format == VIR_STORAGE_FILE_QCOW2 ||
+        disk->src->format == VIR_STORAGE_FILE_QED) {
+        size = VIR_ROUND_UP(size, 512);
+    }
+
+    if (disk->src->sliceStorage) {
+        virReportError(VIR_ERR_OPERATION_UNSUPPORTED, "slice storage is not supported");
+        goto endjob;
+    }
+
+    resize = virJSONValueNewObject();
+
+    if (virJSONValueObjectAppendString(resize, "id", disk->info.alias) < 0) {
+        goto endjob;
+    }
+    if (virJSONValueObjectAppendNumberUlong(resize, "desired_size", size) < 0) {
+        goto endjob;
+    }
+
+    payload = virJSONValueToString(resize, false);
+
+    success = virCHMonitorPutNoResponse(priv->monitor, URL_VM_RESIZE_DISK, payload, NULL);
+
+    if (success) {
+        ret = 0;
+    } else {
+        VIR_WARN("Disk rezise failed. Invalid CH response.");
+    }
+
+ endjob:
+    virDomainObjEndJob(vm);
+
+ cleanup:
+    virDomainObjEndAPI(&vm);
+    return ret;
+}
+
 /* Function Tables */
 static virHypervisorDriver chHypervisorDriver = {
     .name = "CH",
@@ -4396,6 +4501,7 @@ static virHypervisorDriver chHypervisorDriver = {
     .domainDetachDevice = chDomainDetachDevice, /* 11.4.0 */
     .domainDetachDeviceFlags = chDomainDetachDeviceFlags, /* 11.4.0 */
     .connectGetDomainCapabilities = chConnectGetDomainCapabilities, /* 11.4.0 */
+    .domainBlockResize = chDomainBlockResize, /* 11.4.0 */
 };
 
 static virConnectDriver chConnectDriver = {
