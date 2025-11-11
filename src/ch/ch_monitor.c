@@ -1036,7 +1036,7 @@ virCHMonitorNew(virDomainObj *vm, virCHDriverConfig *cfg, int logfile)
     virCommandPassFD(cmd, socket_fd, VIR_COMMAND_PASS_FD_CLOSE_PARENT);
     virCommandAddArg(cmd, "-v");
     virCommandAddArg(cmd, "--seccomp");
-    virCommandAddArg(cmd, "log");
+    virCommandAddArg(cmd, "true");
     virCommandAddArg(cmd, "--event-monitor");
     virCommandAddArgFormat(cmd, "path=%s", mon->eventmonitorpath);
     virCommandSetPidFile(cmd, priv->pidfile);
