@@ -111,7 +111,7 @@ virCHMonitorBuildCPUJson(virJSONValue *content, virDomainDef *vmdef)
         if (virJSONValueObjectAppendNumberInt(cpus, "max_vcpus", vmdef->maxvcpus) < 0)
             return -1;
         if (virCHMonitorBuildCPUTopologyJson(topology, vmdef) == 0) {
-            VIR_WARN("Using CPU topology: %d:%d:%d:%d", vmdef->cpu->sockets, vmdef->cpu->dies, vmdef->cpu->cores, vmdef->cpu->threads);
+            DBG("Using CPU topology: %d:%d:%d:%d", vmdef->cpu->sockets, vmdef->cpu->dies, vmdef->cpu->cores, vmdef->cpu->threads);
             if (virJSONValueObjectAppend(cpus, "topology", &topology) < 0)
                 return -1;
         }
@@ -333,13 +333,13 @@ virCHMonitorBuildKernelRelatedJson(virJSONValue *content, virDomainDef *vmdef)
 
 static void virCHMonitorBuildHugePageJson(virJSONValue *content, size_t size, bool prefault)
 {
-    VIR_WARN("hugepage: size=%ld", size);
+    DBG("hugepage: size=%ld", size);
 
     virJSONValueObjectAppendBoolean(content, "hugepages", true);
     virJSONValueObjectAppendNumberInt(content, "hugepage_size", size);
 
     if (prefault) {
-        VIR_WARN("hugepage: prefaulting has been requested");
+        DBG("hugepage: prefaulting has been requested");
         virJSONValueObjectAppendBoolean(content, "prefault", true);
     }
 }
@@ -360,7 +360,7 @@ virCHMonitorBuildMemoryZonesJson(virJSONValue *content, virDomainDef *def)
     size_t i = 0;
     g_autoptr(virJSONValue) zones = virJSONValueNewArray();
 
-    VIR_WARN("Found NUMA cell configuration. Creating %ld NUMA nodes for guest VM.", ncells);
+    DBG("Found NUMA cell configuration. Creating %ld NUMA nodes for guest VM.", ncells);
 
     for (i = 0; i < ncells; i++) {
         g_autofree char *id = g_strdup_printf("zone%zu", i);
@@ -373,8 +373,8 @@ virCHMonitorBuildMemoryZonesJson(virJSONValue *content, virDomainDef *def)
         size_t hostNode = virBitmapLastSetBit(nodes);
 
         if (hostNodeCount > 1) {
-            VIR_WARN("There are %ld host nodes specified but Cloud Hypervisor only supports 1", hostNodeCount);
-            VIR_WARN("The host node mapping is dropped.");
+            DBG("There are %ld host nodes specified but Cloud Hypervisor only supports 1", hostNodeCount);
+            DBG("The host node mapping is dropped.");
         }
 
         if (virJSONValueObjectAppendString(zone, "id", id) < 0)
@@ -384,14 +384,14 @@ virCHMonitorBuildMemoryZonesJson(virJSONValue *content, virDomainDef *def)
             return -1;
 
         if (hostNodeCount == 1) {
-            VIR_WARN("Associating guest node %lu with host node %s", i , nodeset);
+            DBG("Associating guest node %lu with host node %s", i , nodeset);
 
             if (virJSONValueObjectAppendNumberUlong(zone, "host_numa_node", hostNode) < 0)
                 return -1;
         }
 
         if (def->mem.nhugepages) {
-            VIR_WARN("hugepage: found %ld definitions", def->mem.nhugepages);
+            DBG("hugepage: found %ld definitions", def->mem.nhugepages);
             for (unsigned j=0; j<def->mem.nhugepages; ++j) {
                 size_t size = def->mem.hugepages[j].size * 1024;
                 bool prefault = def->mem.allocation == VIR_DOMAIN_MEMORY_ALLOCATION_IMMEDIATE;
@@ -402,7 +402,7 @@ virCHMonitorBuildMemoryZonesJson(virJSONValue *content, virDomainDef *def)
                         break;
                     }
                 } else {
-                    VIR_WARN("hugepage: applying default definition");
+                    DBG("hugepage: applying default definition");
                     virCHMonitorBuildHugePageJson(zone, size, prefault);
                 }
             }
@@ -769,7 +769,7 @@ virCHMonitorBuildVMJson(virCHDriver *driver, virDomainDef *vmdef,
         return -1;
 
     if (virCHMonitorBuildNumaJson(content, vmdef) < 0) {
-        VIR_WARN("Failed building NUMA json");
+        DBG("Failed building NUMA json");
         return -1;
     }
 
@@ -1216,9 +1216,7 @@ virCHMonitorPutNoContent(virCHMonitor *mon, const char *endpoint,
     curl_easy_setopt(mon->handle, CURLOPT_WRITEFUNCTION, curl_callback);
     curl_easy_setopt(mon->handle, CURLOPT_WRITEDATA, (void *)&data);
 
-    VIR_WARN("curl perform");
     responseCode = virCHMonitorCurlPerform(mon->handle);
-    VIR_WARN("done");
 
     if (logCtxt && data.size) {
         /* Do this to append a NULL char at the end of data */
@@ -1229,7 +1227,10 @@ virCHMonitorPutNoContent(virCHMonitor *mon, const char *endpoint,
     }
     data.content = g_realloc(data.content, data.size + 1);
     data.content[data.size] = 0;
-    VIR_WARN("HTTP Response: %s", data.content);
+
+    if (data.size) {
+        DBG("HTTP Response: %s", data.content);
+    }
 
     if (responseCode == 200 || responseCode == 204)
         ret = 0;
@@ -1273,8 +1274,11 @@ virCHMonitorPutNoResponse(virCHMonitor *mon, const char *endpoint,
     data.content = g_realloc(data.content, data.size + 1);
     data.content[data.size] = 0;
 
-    VIR_WARN("Reponse code from CH: %d\n", responseCode);
-    VIR_WARN("HTTP Response: %s", data.content);
+    DBG("Reponse code from CH: %d", responseCode);
+
+    if (data.size) {
+        DBG("HTTP Response: %s", data.content);
+    }
 
     if (logCtxt) {
         /* Do this to append a NULL char at the end of data */
@@ -1322,8 +1326,12 @@ virCHMonitorPut(virCHMonitor *mon, const char *endpoint,
     data.content = g_realloc(data.content, data.size + 1);
     data.content[data.size] = 0;
 
-    VIR_WARN("Reponse code from CH: %d\n", responseCode);
-    VIR_WARN("HTTP Response: %s", data.content);
+    DBG("Reponse code from CH: %d", responseCode);
+
+    if (data.size) {
+        DBG("HTTP Response: %s", data.content);
+    }
+
     retJson = virJSONValueFromString(data.content);
 
     if (logCtxt && data.size) {
@@ -1688,7 +1696,7 @@ int virCHMonitorMigrationSend(virCHMonitor *mon,
     if (!(payload = virJSONValueToString(content, false)))
         return -1;
 
-    VIR_WARN("Send VM to url %s json %s", dst_uri, payload);
+    DBG("Send VM to url %s json %s", dst_uri, payload);
 
 retry:
     VIR_WITH_OBJECT_LOCK_GUARD(mon) {
@@ -1716,7 +1724,7 @@ retry:
         ret = 0;
     } else {
         if (retries++ < 3) {
-            VIR_WARN("Error code when sending migration. Retrying.");
+            DBG("Error code when sending migration. Retrying.");
             sleep(1);
             goto retry;
         }
@@ -1809,7 +1817,6 @@ int virCHMonitorMigrationReceive(virCHMonitor *mon,
                                  virCond *cond,
                                  char *tcp_serial_url)
 {
-    // int ret = 0;
     size_t i = 0;
     VIR_AUTOCLOSE mon_sockfd = -1;
     g_autofree char *payload = NULL;
@@ -1826,7 +1833,7 @@ int virCHMonitorMigrationReceive(virCHMonitor *mon,
     g_autofree char *id = NULL;
     int rc = 0;
 
-    VIR_WARN("In virCHMonitorMigrationReceive");
+    DBG("In virCHMonitorMigrationReceive");
 
     if (virJSONValueObjectAppendString(content, "receiver_url", rcv_uri) < 0) {
         rc = -1;
@@ -1834,7 +1841,7 @@ int virCHMonitorMigrationReceive(virCHMonitor *mon,
     }
 
     if (vmdef->serials[0]->source->type == VIR_DOMAIN_CHR_TYPE_TCP) {
-        VIR_WARN("TCP serial in use. Pass adapted TCP serial url: %s", tcp_serial_url);
+        DBG("TCP serial in use. Pass adapted TCP serial url: %s", tcp_serial_url);
         if (virJSONValueObjectAppendString(content, "tcp_serial_url", tcp_serial_url) < 0) {
             rc = -1;
             goto out;
@@ -1890,25 +1897,23 @@ int virCHMonitorMigrationReceive(virCHMonitor *mon,
         goto out;
     }
 
-    VIR_WARN("Receive VM from url %s json: %s", rcv_uri, payload);
+    DBG("Receive VM from url %s\njson: %s", rcv_uri, payload);
 
     if ((mon_sockfd = chMonitorSocketConnect(mon)) < 0) {
-        VIR_WARN("socket connect failed");
+        DBG("socket connect failed");
         rc = -1;
         goto out;
     }
 
-    VIR_WARN("create network devices");
     if (virCHRestoreCreateNetworkDevices(driver, vmdef, &tapfds, &ntapfds, &nicindexes, &nnicindexes) < 0) {
-        VIR_WARN("virCHRestoreCreateNetworkDevices failed");
+        DBG("virCHRestoreCreateNetworkDevices failed");
         rc = -1;
         goto out_close_fds;
     }
 
-    VIR_WARN("domain interface start devices");
     /* Bring up netdevs before restoring vm */
     if (virDomainInterfaceStartDevices(vmdef) < 0) {
-        VIR_WARN("virDomainInterfaceStartDevices failed");
+        DBG("virDomainInterfaceStartDevices failed");
         rc = -1;
         goto out_close_fds;
     }
@@ -1927,10 +1932,9 @@ int virCHMonitorMigrationReceive(virCHMonitor *mon,
     // that the migration protocol can continue.
     virCondSignal(cond);
 
-    VIR_WARN("socketsendmsgwithfds");
     if (virSocketSendMsgWithFDs(mon_sockfd, payload, payload_len, tapfds, ntapfds) < 0) {
         virReportSystemError(errno, "%s",
-                             _("Failed to send restore request to CH"));
+                             _("Failed to send migrate receive request to CH"));
         rc = -1;
         goto out_close_fds;
     }
@@ -1953,7 +1957,6 @@ int virCHMonitorMigrationReceive(virCHMonitor *mon,
         ntapfds = 0;
     }
 
-    VIR_WARN("wait for response");
     if (chSocketProcessHttpResponse(mon_sockfd, false) < 0) {
         virReportSystemError(errno, "%s",
                              _("Failed to recv http response from CHV"));
