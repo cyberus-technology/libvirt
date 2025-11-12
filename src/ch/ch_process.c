@@ -657,7 +657,7 @@ chProcessAddNetworkDevice(virCHDriver *driver,
     }
 
     if ((mon_sockfd = chMonitorSocketConnect(mon)) < 0) {
-        VIR_WARN("chProcessAddNetworkDevices failed");
+        DBG("chProcessAddNetworkDevices failed");
         return -1;
     }
 
@@ -677,7 +677,7 @@ chProcessAddNetworkDevice(virCHDriver *driver,
     if (virCHDomainValidateActualNetDef(net) < 0) {
         virReportError(VIR_ERR_INTERNAL_ERROR, "%s",
                         _("net definition failed validation"));
-        VIR_WARN("virCHDomainValidateActualNetDef failed.");
+        DBG("virCHDomainValidateActualNetDef failed.");
         return -1;
     }
 
@@ -687,7 +687,7 @@ chProcessAddNetworkDevice(virCHDriver *driver,
     /* Connect Guest interfaces */
     if (virCHConnetNetworkInterfaces(driver, vmdef, net, tapfds,
                                      &nicindexes, &nnicindexes) < 0) {
-        VIR_WARN("chProcessAddNetworkDevices failed.");
+        DBG("chProcessAddNetworkDevices failed.");
         return -1;
     }
 
@@ -695,11 +695,11 @@ chProcessAddNetworkDevice(virCHDriver *driver,
     if (virCHMonitorBuildNetJson(net, new_net_id, &payload) < 0) {
         virReportError(VIR_ERR_INTERNAL_ERROR, "%s",
                         _("Failed to build net json"));
-        VIR_WARN("virCHMonitorBuildNetJson failed.");
+        DBG("virCHMonitorBuildNetJson failed.");
         return -1;
     }
 
-    VIR_WARN("payload sent with net-add request to CH = %s", payload);
+    DBG("payload sent with net-add request to CH = %s", payload);
 
     virBufferAsprintf(&buf, "%s", virBufferCurrentContent(&http_headers));
     virBufferAsprintf(&buf, "Content-Length: %zu\r\n\r\n", strlen(payload));
@@ -758,7 +758,7 @@ chProcessAddNetworkDevices(virCHDriver *driver,
     }
 
     if ((mon_sockfd = chMonitorSocketConnect(mon)) < 0) {
-        VIR_WARN("chProcessAddNetworkDevices failed");
+        DBG("chProcessAddNetworkDevices failed");
         return -1;
     }
 
@@ -788,7 +788,7 @@ chProcessAddNetworkDevices(virCHDriver *driver,
         if (virCHDomainValidateActualNetDef(vmdef->nets[i]) < 0) {
             virReportError(VIR_ERR_INTERNAL_ERROR, "%s",
                            _("net definition failed validation"));
-            VIR_WARN("virCHDomainValidateActualNetDef failed.");
+            DBG("virCHDomainValidateActualNetDef failed.");
             return -1;
         }
 
@@ -798,18 +798,18 @@ chProcessAddNetworkDevices(virCHDriver *driver,
         /* Connect Guest interfaces */
         if (virCHConnetNetworkInterfaces(driver, vmdef, vmdef->nets[i], tapfds,
                                          nicindexes, nnicindexes) < 0) {
-            VIR_WARN("chProcessAddNetworkDevices failed.");
+            DBG("chProcessAddNetworkDevices failed.");
             return -1;
         }
 
         if (virCHMonitorBuildNetJson(vmdef->nets[i], i, &payload) < 0) {
             virReportError(VIR_ERR_INTERNAL_ERROR, "%s",
                            _("Failed to build net json"));
-            VIR_WARN("virCHMonitorBuildNetJson failed.");
+            DBG("virCHMonitorBuildNetJson failed.");
             return -1;
         }
 
-        VIR_WARN("payload sent with net-add request to CH = %s", payload);
+        DBG("payload sent with net-add request to CH = %s", payload);
 
         virBufferAsprintf(&buf, "%s", virBufferCurrentContent(&http_headers));
         virBufferAsprintf(&buf, "Content-Length: %zu\r\n\r\n", strlen(payload));
@@ -1030,7 +1030,7 @@ int virCHProcessInitNetwork(virCHDriver *driver,
 
     if (chProcessAddNetworkDevices(driver, priv->monitor, vm->def,
                                    &nicindexes, &nnicindexes) < 0) {
-        VIR_WARN("Failed chProcessAddNetworkDevices");
+        DBG("Failed chProcessAddNetworkDevices");
         virReportError(VIR_ERR_INTERNAL_ERROR, "%s",
                        _("Failed while adding guest interfaces"));
         goto cleanup;
@@ -1038,7 +1038,7 @@ int virCHProcessInitNetwork(virCHDriver *driver,
 
     /* Bring up netdevs before starting CPUs */
     if (virDomainInterfaceStartDevices(vm->def) < 0) {
-        VIR_WARN("Failed virDomainInterfaceStartDevices");
+        DBG("Failed virDomainInterfaceStartDevices");
         return -1;
     }
 
@@ -1076,7 +1076,7 @@ virCHProcessInit(virCHDriver *driver,
         return -1;
     }
 
-    VIR_WARN("Creating domain log file for %s domain", vm->def->name);
+    DBG("Creating domain log file for %s domain", vm->def->name);
     if (!(logCtxt = domainLogContextNew(cfg->stdioLogD, cfg->logDir,
                                         CH_DRIVER_NAME,
                                         vm, driver->privileged,
@@ -1115,7 +1115,7 @@ virCHProcessInit(virCHDriver *driver,
                                    priv->driver->privileged,
                                    priv->machineName) < 0)
     {
-        VIR_WARN("Failed virDomainCgroupSetupCgroup");
+        DBG("Failed virDomainCgroupSetupCgroup");
         goto cleanup;
     }
 
@@ -1235,7 +1235,7 @@ virCHProcessStart(virCHDriver *driver,
 
     virDomainObjSetState(vm, VIR_DOMAIN_RUNNING, reason);
     if (virDomainObjSave(vm, driver->xmlopt, cfg->stateDir) < 0)
-        VIR_WARN("Failed to save status on vm %s", vm->def->name);
+        DBG("Failed to save status on vm %s", vm->def->name);
 
     return 0;
 
@@ -1264,7 +1264,7 @@ virCHProcessStopOrKill(virCHDriver *driver,
     // A shutdown might be already on-going e.g. because an event triggered it.
     // Do not do it twice in this case.
     if (g_atomic_int_exchange(&priv->shutdown_done, 1) == 1) {
-        VIR_WARN("Shutdown already in progress or done");
+        DBG("Shutdown already in progress or done");
         return 0;
     }
 
