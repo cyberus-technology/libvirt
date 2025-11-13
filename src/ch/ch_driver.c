@@ -4255,6 +4255,8 @@ chStateShutdownWait(void)
     /* virDomainObjListForEach(ch_driver->domains, false, */
                             /* qemuDomainObjStopWorkerIter, NULL); */
     virThreadPoolDrain(ch_driver->workerPool);
+
+    VIR_FREE(ch_driver);
     return 0;
 }
 
