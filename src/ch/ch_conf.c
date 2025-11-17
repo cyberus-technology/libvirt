@@ -184,6 +184,7 @@ virCHDriverConfigDispose(void *obj)
 
     g_free(cfg->saveDir);
     g_free(cfg->stateDir);
+    g_free(cfg->configDir);
     g_free(cfg->logDir);
 }
 
