@@ -4292,6 +4292,22 @@ chStateShutdownWait(void)
     /* virDomainObjListForEach(ch_driver->domains, false, */
                             /* qemuDomainObjStopWorkerIter, NULL); */
     virThreadPoolDrain(ch_driver->workerPool);
+    virThreadPoolFree(ch_driver->workerPool);
+
+    virBitmapFree(ch_driver->chCaps);
+
+    virPortAllocatorRangeFree(ch_driver->migrationPorts);
+
+    virInhibitorRelease(ch_driver->inhibitor);
+    virInhibitorFree(ch_driver->inhibitor);
+
+    virObjectUnref(ch_driver->domainEventState);
+    virObjectUnref(ch_driver->xmlopt);
+    virObjectUnref(ch_driver->domains);
+    virObjectUnref(ch_driver->hostdevMgr);
+    virObjectUnref(ch_driver->caps);
+
+    virObjectUnref(ch_driver->config);
 
     VIR_FREE(ch_driver);
     return 0;
