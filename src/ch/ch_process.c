@@ -641,6 +641,7 @@ chProcessAddNetworkDevice(virCHDriver *driver,
     g_auto(virBuffer) http_headers = VIR_BUFFER_INITIALIZER;
     g_autofree int *tapfds = NULL;
     g_autofree char *payload = NULL;
+    g_autofree char *netJson = NULL;
     g_autofree char *response = NULL;
     g_autofree int *nicindexes = NULL;
     size_t nnicindexes = 0;
@@ -692,18 +693,18 @@ chProcessAddNetworkDevice(virCHDriver *driver,
     }
 
     new_net_id = vmdef->nnets - 1; // IDs start at 0
-    if (virCHMonitorBuildNetJson(net, new_net_id, &payload) < 0) {
+    if (virCHMonitorBuildNetJson(net, new_net_id, &netJson) < 0) {
         virReportError(VIR_ERR_INTERNAL_ERROR, "%s",
                         _("Failed to build net json"));
         DBG("virCHMonitorBuildNetJson failed.");
         return -1;
     }
 
-    DBG("payload sent with net-add request to CH = %s", payload);
+    DBG("payload sent with net-add request to CH = %s", netJson);
 
     virBufferAsprintf(&buf, "%s", virBufferCurrentContent(&http_headers));
-    virBufferAsprintf(&buf, "Content-Length: %zu\r\n\r\n", strlen(payload));
-    virBufferAsprintf(&buf, "%s", payload);
+    virBufferAsprintf(&buf, "Content-Length: %zu\r\n\r\n", strlen(netJson));
+    virBufferAsprintf(&buf, "%s", netJson);
     payload_len = virBufferUse(&buf);
     payload = virBufferContentAndReset(&buf);
 
@@ -769,6 +770,7 @@ chProcessAddNetworkDevices(virCHDriver *driver,
     for (i = 0; i < vmdef->nnets; i++) {
         g_autofree int *tapfds = NULL;
         g_autofree char *payload = NULL;
+        g_autofree char *netJson = NULL;
         g_autofree char *response = NULL;
         size_t tapfd_len;
         size_t payload_len;
@@ -802,18 +804,18 @@ chProcessAddNetworkDevices(virCHDriver *driver,
             return -1;
         }
 
-        if (virCHMonitorBuildNetJson(vmdef->nets[i], i, &payload) < 0) {
+        if (virCHMonitorBuildNetJson(vmdef->nets[i], i, &netJson) < 0) {
             virReportError(VIR_ERR_INTERNAL_ERROR, "%s",
                            _("Failed to build net json"));
             DBG("virCHMonitorBuildNetJson failed.");
             return -1;
         }
 
-        DBG("payload sent with net-add request to CH = %s", payload);
+        DBG("payload sent with net-add request to CH = %s", netJson);
 
         virBufferAsprintf(&buf, "%s", virBufferCurrentContent(&http_headers));
-        virBufferAsprintf(&buf, "Content-Length: %zu\r\n\r\n", strlen(payload));
-        virBufferAsprintf(&buf, "%s", payload);
+        virBufferAsprintf(&buf, "Content-Length: %zu\r\n\r\n", strlen(netJson));
+        virBufferAsprintf(&buf, "%s", netJson);
         payload_len = virBufferUse(&buf);
         payload = virBufferContentAndReset(&buf);
 
