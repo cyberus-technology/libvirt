@@ -1313,6 +1313,7 @@ virCHProcessStopOrKill(virCHDriver *driver,
     vm->pid = 0;
     vm->def->id = -1;
     g_clear_pointer(&priv->machineName, g_free);
+    g_clear_pointer(&priv->pciAddrSet, virDomainPCIAddressSetFree);
 
     if (priv->pidfile) {
         if (unlink(priv->pidfile) < 0 &&

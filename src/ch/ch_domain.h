@@ -26,6 +26,7 @@
 #include "vircgroup.h"
 #include "virdomainjob.h"
 #include "virthread.h"
+#include "domain_addr.h"
 
 typedef struct _chMigrationDstArgs chMigrationDstArgs;
 
@@ -47,6 +48,7 @@ struct _virCHDomainObjPrivate {
      * events.
      */
     int shutdown_done;
+    virDomainPCIAddressSet *pciAddrSet;
 };
 
 struct _chMigrationDstArgs {

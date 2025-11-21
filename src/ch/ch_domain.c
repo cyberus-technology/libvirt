@@ -83,6 +83,7 @@ virCHDomainObjPrivateFree(void *data)
 {
     virCHDomainObjPrivate *priv = data;
 
+    g_clear_pointer(&priv->pciAddrSet, virDomainPCIAddressSetFree);
     virChrdevFree(priv->chrdevs);
     g_free(priv->machineName);
     virBitmapFree(priv->autoCpuset);
