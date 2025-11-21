@@ -24,7 +24,6 @@
 
 #include "virobject.h"
 #include "virjson.h"
-#include "domain_conf.h"
 #include "domain_logcontext.h"
 #include "ch_conf.h"
 

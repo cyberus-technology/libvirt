@@ -42,6 +42,7 @@
 #include "virstring.h"
 #include "ch_interface.h"
 #include "ch_hostdev.h"
+#include "ch_pci_addr.h"
 
 #define VIR_FROM_THIS VIR_FROM_CH
 
@@ -1019,6 +1020,20 @@ virCHProcessPrepareDomain(virDomainObj *vm)
         return -1;
 
     g_atomic_int_set(&priv->shutdown_done, 0);
+
+    // Initialize our one and only PCI bus
+    if (chDomainPCIAddressSetCreate(vm)) {
+        virReportError(VIR_ERR_INTERNAL_ERROR,
+                   "CHV driver only supports `ethernet` network types!");
+        return -1;
+    }
+
+    // Attach all devices from the config to the PCI bus
+    if (chInitPciDevices(vm)) {
+        virReportError(VIR_ERR_INTERNAL_ERROR,
+                    "Failed to assign addresses to PCI devices defined in XML!");
+        return -1;
+    }
 
     return 0;
 }
