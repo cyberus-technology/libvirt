@@ -26,7 +26,6 @@
 #include <unistd.h>
 #include <curl/curl.h>
 
-#include "datatypes.h"
 #include "ch_conf.h"
 #include "ch_domain.h"
 #include "ch_events.h"
@@ -198,6 +197,10 @@ virCHMonitorBuildConsoleJson(virJSONValue *content,
 
     if (vmdef->nconsoles &&
         vmdef->consoles[0]->source->type == VIR_DOMAIN_CHR_TYPE_PTY) {
+        DBG("Create Console with type: %d", vmdef->consoles[0]->info.type);
+        if (vmdef->consoles[0]->info.type == VIR_DOMAIN_DEVICE_ADDRESS_TYPE_PCI) {
+            DBG("Found Console '%s' bound to PCI slot %d", vmdef->consoles[0]->info.alias, vmdef->consoles[0]->info.addr.pci.slot);
+        }
         if (virJSONValueObjectAppendString(console, "mode", "Pty") < 0)
             return -1;
         if (virJSONValueObjectAppend(content, "console", &console) < 0)
@@ -205,6 +208,15 @@ virCHMonitorBuildConsoleJson(virJSONValue *content,
     }
 
     if (vmdef->nserials) {
+        if (vmdef->serials[0]->info.type == VIR_DOMAIN_DEVICE_ADDRESS_TYPE_PCI) {
+            DBG("Found serial Console '%s' bound to PCI slot %d", vmdef->serials[0]->info.alias, vmdef->serials[0]->info.addr.pci.slot);
+            if (virJSONValueObjectAppendNumberInt(serial, "bdf_device_id", vmdef->serials[0]->info.addr.pci.slot) < 0) {
+                virReportError(VIR_ERR_INTERNAL_ERROR,
+                           ("Failed to add slot number to JSON for console with alias '%s'"),
+                           vmdef->serials[0]->info.alias);
+                return -1;
+            }
+        }
         if (vmdef->serials[0]->source->type == VIR_DOMAIN_CHR_TYPE_PTY) {
             if (virJSONValueObjectAppendString(serial, "mode", "Pty") < 0)
                 return -1;
@@ -463,6 +475,11 @@ virCHMonitorBuildDiskJson(virJSONValue *disks, virDomainDiskDef *diskdef)
     if (!diskdef->src)
         return -1;
 
+    if (!disk) {
+        virReportError(VIR_ERR_INTERNAL_ERROR, "Failed to allocate memory for disk JSON!");
+        return -1;
+    }
+
     switch (diskdef->src->type) {
     case VIR_STORAGE_TYPE_FILE:
         if (!diskdef->src->path) {
@@ -493,6 +510,16 @@ virCHMonitorBuildDiskJson(virJSONValue *disks, virDomainDiskDef *diskdef)
             if (virJSONValueObjectAppendBoolean(disk, "readonly", true) < 0)
                 return -1;
         }
+
+        if (diskdef->info.type == VIR_DOMAIN_DEVICE_ADDRESS_TYPE_PCI) {
+            if (virJSONValueObjectAppendNumberInt(disk, "bdf_device_id", diskdef->info.addr.pci.slot) < 0) {
+                virReportError(VIR_ERR_INTERNAL_ERROR,
+                           ("Failed to add slot number to JSON for disk with alias '%s'"),
+                           diskdef->info.alias);
+                return -1;
+            }
+        }
+
         if (virJSONValueArrayAppend(disks, &disk) < 0)
             return -1;
 
@@ -524,8 +551,12 @@ virCHMonitorBuildDisksJson(virJSONValue *content, virDomainDef *vmdef)
         disks = virJSONValueNewArray();
 
         for (i = 0; i < vmdef->ndisks; i++) {
-            if (virCHMonitorBuildDiskJson(disks, vmdef->disks[i]) < 0)
+            if (virCHMonitorBuildDiskJson(disks, vmdef->disks[i]) < 0) {
+                virReportError(VIR_ERR_INTERNAL_ERROR,
+                           _("Failed to attach disk with alias '%s'"),
+                           vmdef->disks[i]->info.alias);
                 return -1;
+            }
         }
         if (virJSONValueObjectAppend(content, "disks", &disks) < 0)
             return -1;
@@ -553,6 +584,16 @@ virCHMonitorBuildRngJson(virJSONValue *content, virDomainDef *vmdef)
     case VIR_DOMAIN_RNG_BACKEND_RANDOM:
         if (virJSONValueObjectAppendString(rng, "src", vmdef->rngs[0]->source.file) < 0)
             return -1;
+
+            // We already know that we have a VIRTIO device from above
+        if (vmdef->rngs[0]->info.type == VIR_DOMAIN_DEVICE_ADDRESS_TYPE_PCI) {
+            if (virJSONValueObjectAppendNumberInt(rng, "bdf_device_id", vmdef->rngs[0]->info.addr.pci.slot) < 0) {
+                virReportError(VIR_ERR_INTERNAL_ERROR,
+                            ("Failed to add slot number to JSON for RNG device with alias '%s'"),
+                            vmdef->rngs[0]->info.alias);
+                return -1;
+            }
+        }
 
         if (virJSONValueObjectAppend(content, "rng", &rng) < 0)
             return -1;
@@ -599,19 +640,12 @@ virCHMonitorBuildNetJson(virDomainNetDef *net,
 
     // Populate the <interface type="pci"> XML tag, relevant for OpenStack
     // Currently not needed to have sane values here.
-	net->info.type = VIR_DOMAIN_DEVICE_ADDRESS_TYPE_PCI;
-    net->info.addr.pci.bus = 0;
-    assert(netindex <= 7);
-    net->info.addr.pci.slot = netindex + 1;
-    net->info.addr.pci.function = 0;
-
     if (actualType == VIR_DOMAIN_NET_TYPE_ETHERNET &&
         net->guestIP.nips == 1) {
         const virNetDevIPAddr *ip;
         g_autofree char *addr = NULL;
         virSocketAddr netmask;
         g_autofree char *netmaskStr = NULL;
-
         ip = net->guestIP.ips[0];
 
         if (!(addr = virSocketAddrFormat(&ip->address)))
@@ -670,6 +704,11 @@ virCHMonitorBuildNetJson(virDomainNetDef *net,
 
     if (net->mtu) {
         if (virJSONValueObjectAppendNumberInt(net_json, "mtu", net->mtu) < 0)
+            return -1;
+    }
+
+    if (net->info.type == VIR_DOMAIN_DEVICE_ADDRESS_TYPE_PCI) {
+        if (virJSONValueObjectAppendNumberInt(net_json, "bdf_device_id", net->info.addr.pci.slot) < 0)
             return -1;
     }
 
@@ -1879,15 +1918,12 @@ int virCHMonitorMigrationReceive(virCHMonitor *mon,
             net_json = virJSONValueNewObject();
             // TODO switch to chAssignDeviceNetAlias from ch_alias.c
             id = g_strdup_printf("%s_%zu", CH_NET_ID_PREFIX, i);
-			vmdef->nets[i]->info.alias = g_strdup_printf("%s", id);
+            vmdef->nets[i]->info.alias = g_strdup_printf("%s", id);
 
-			// Populate the <interface type="pci"> XML tag, relevant for OpenStack
-			// Currently not needed to have sane values here.
-			vmdef->nets[i]->info.type = VIR_DOMAIN_DEVICE_ADDRESS_TYPE_PCI;
-			vmdef->nets[i]->info.addr.pci.bus = 0;
-			assert(i <= 7);
-			vmdef->nets[i]->info.addr.pci.slot = i + 1;
-			vmdef->nets[i]->info.addr.pci.function = 0;
+            if (vmdef->nets[i]->info.type == VIR_DOMAIN_DEVICE_ADDRESS_TYPE_PCI) {
+                if (virJSONValueObjectAppendNumberInt(net_json, "bdf_device_id", vmdef->nets[i]->info.addr.pci.slot) < 0)
+                    return -1;
+            }
 
             if (virJSONValueObjectAppendString(net_json, "id", id) < 0) {
                 rc = -1;
