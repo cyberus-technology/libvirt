@@ -1217,15 +1217,13 @@ virCHMonitorPutNoContent(virCHMonitor *mon, const char *endpoint,
 
     responseCode = virCHMonitorCurlPerform(mon->handle);
 
+    data.content = g_realloc(data.content, data.size + 1 /* NULL */);
+    data.content[data.size] = 0;
+
     if (logCtxt && data.size) {
-        /* Do this to append a NULL char at the end of data */
-        data.content = g_realloc(data.content, data.size + 1);
-        data.content[data.size] = 0;
         domainLogContextWrite(logCtxt, "HTTP response code from CH: %d\n", responseCode);
         domainLogContextWrite(logCtxt, "Response = %s\n", data.content);
     }
-    data.content = g_realloc(data.content, data.size + 1);
-    data.content[data.size] = 0;
 
     if (data.size) {
         DBG("HTTP Response: %s", data.content);
@@ -1235,7 +1233,7 @@ virCHMonitorPutNoContent(virCHMonitor *mon, const char *endpoint,
         ret = 0;
 
     curl_slist_free_all(headers);
-
+    g_free(data.content);
     return ret;
 }
 
@@ -1286,6 +1284,7 @@ virCHMonitorPutNoResponse(virCHMonitor *mon, const char *endpoint,
     }
 
     curl_slist_free_all(headers);
+    g_free(data.content);
 
     return responseCode == 200 || responseCode == 204;
 }
@@ -1340,6 +1339,7 @@ virCHMonitorPut(virCHMonitor *mon, const char *endpoint,
     }
 
     curl_slist_free_all(headers);
+    g_free(data.content);
 
     if (responseCode != 200 && responseCode != 204)
         return NULL;
