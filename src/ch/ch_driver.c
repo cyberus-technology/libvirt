@@ -4287,6 +4287,7 @@ chStateShutdownWait(void)
     DBG("chStateShutdownWait\n");
     // We can reach this function before chStateInitialize is completed.
     if (!ch_driver) {
+        VIR_WARN("No ch_driver object yet. Early return.");
         return 0;
     }
     /* virDomainObjListForEach(ch_driver->domains, false, */
