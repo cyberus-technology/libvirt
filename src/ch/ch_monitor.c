@@ -32,8 +32,10 @@
 #include "ch_events.h"
 #include "ch_interface.h"
 #include "ch_monitor.h"
+#include "ch_pci_addr.h"
 #include "ch_socket.h"
 #include "domain_interface.h"
+#include "libvirt/libvirt.h"
 #include "viralloc.h"
 #include "vircommand.h"
 #include "virerror.h"
@@ -939,6 +941,20 @@ virCHMonitorReattach(virDomainObj *vm, virCHDriverConfig *cfg, virCHDriver *driv
     }
     mon->eventmonitorfd = event_monitor_fd;
     VIR_DEBUG("%s: Opened the event monitor FIFO(%s)", vm->def->name, mon->eventmonitorpath);
+
+    // Initialize our one and only PCI bus
+    if (chDomainPCIAddressSetCreate(vm)) {
+        virReportError(VIR_ERR_INTERNAL_ERROR,
+                   "CHV driver only supports `ethernet` network types!");
+        return NULL;
+    }
+
+    // Attach all devices from the config to the PCI bus
+    if (chInitPciDevices(vm)) {
+        virReportError(VIR_ERR_INTERNAL_ERROR,
+                    "Failed to assign addresses to PCI devices defined in XML!");
+        return NULL;
+    }
 
     /* now has its own reference */
     mon->vm = virObjectRef(vm);
