@@ -27,6 +27,7 @@
 #include "ch_domain.h"
 #include "ch_driver.h"
 #include "ch_monitor.h"
+#include "ch_pci_addr.h"
 #include "ch_process.h"
 #include "domain_capabilities.h"
 #include "domain_cgroup.h"
@@ -45,8 +46,6 @@
 #include "virlog.h"
 #include "virobject.h"
 #include "virfile.h"
-#include "virstring.h"
-#include "virtime.h"
 #include "virtypedparam.h"
 #include "virutil.h"
 #include "viruuid.h"
@@ -3600,6 +3599,12 @@ chDomainAttachDeviceLive(virDomainObj *vm,
             break;
         }
 
+        if (chEnsurePciAddress(vm, dev)) {
+            virReportError(VIR_ERR_INTERNAL_ERROR,
+                _("Couldn't allocate PCI device slot for device %s!"), dev->data.disk->info.alias);
+            return -1;
+        }
+
         disks = virJSONValueNewArray();
         if (virCHMonitorBuildDiskJson(disks, dev->data.disk) < 0) {
             DBG("Attach disk failed");
@@ -3616,14 +3621,19 @@ chDomainAttachDeviceLive(virDomainObj *vm,
             break;
         }
 
+        DBG("Disk : dst: %s drivername: %s alias: %s PCI slot: %d", dev->data.disk->dst, dev->data.disk->driverName, dev->data.disk->info.alias, dev->data.disk->info.addr.pci.slot);
         virDomainDiskInsert(vm->def, dev->data.disk);
         dev->data.disk = NULL;
-
         ret = 0;
         break;
     }
     case VIR_DOMAIN_DEVICE_NET:
     {
+        if (chEnsurePciAddress(vm, dev)) {
+            virReportError(VIR_ERR_INTERNAL_ERROR,
+                ("Couldn't allocate PCI device slot for Net device: %s!"), dev->data.net->info.alias);
+            return -1;
+        }
         virDomainNetInsert(vm->def, dev->data.net);
         ret = chProcessAddNetworkDevice(driver, mon, vm->def, dev->data.net);
         dev->data.net = NULL;
@@ -4047,6 +4057,14 @@ chDomainDetachDeviceLive(virDomainObj *vm,
         virReportError(VIR_ERR_INTERNAL_ERROR, "%s",
                        _("CH API call for device removal failed."));
         return -1;
+    }
+
+    if (info->type == VIR_DOMAIN_DEVICE_ADDRESS_TYPE_PCI) {
+        DBG("Release PCI address for device '%s'", info->alias);
+        chDomainReleaseDeviceAddress(vm, info);
+        DBG("");
+    } else {
+        DBG("Detached non-PCI device '%s'!", info->alias);
     }
 
     if (match->type == VIR_DOMAIN_DEVICE_DISK) {
