@@ -3985,6 +3985,7 @@ chDomainDetachDeviceLive(virDomainObj *vm,
         if (idx >= 0) {
             DBG("Remove device from libvirt xml state %d", idx);
             virDomainDiskRemove(vm->def, idx);
+            g_clear_pointer(&detach.data.disk, virDomainDiskDefFree);
         }
     } else if (match->type == VIR_DOMAIN_DEVICE_NET) {
         virDomainInterfaceStopDevice(detach.data.net);
@@ -3992,9 +3993,8 @@ chDomainDetachDeviceLive(virDomainObj *vm,
         if ((idx = virDomainNetFindIdx(vm->def, detach.data.net)) < 0)
             return -1;
 
-        /* this is guaranteed to succeed */
-        virDomainNetDefFree(virDomainNetRemove(vm->def, idx));
-        // virDomainNetDefFree(detach.data.net);
+        virDomainNetRemove(vm->def, idx);
+        g_clear_pointer(&detach.data.net, virDomainNetDefFree);
     }
 
 //  cleanup:
