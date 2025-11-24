@@ -53,3 +53,9 @@ chProcessAddNetworkDevice(virCHDriver *driver,
 
 int
 chMonitorSocketConnect(virCHMonitor *mon);
+
+int
+virCHProcessInitCpuAffinity(virDomainObj *vm);
+
+int
+virCHProcessSetup(virDomainObj *vm);
