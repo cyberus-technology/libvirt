@@ -3404,6 +3404,14 @@ chDomainMigrateFinish3(virConnectPtr dconn,
     if (priv->args->success == true && cancelled == 0) {
         virDomainObjSetState(vm, VIR_DOMAIN_RUNNING, VIR_DOMAIN_RUNNING_MIGRATED);
 
+        if (virCHProcessInitCpuAffinity(vm) < 0) {
+            goto error;
+        }
+
+        if (virCHProcessSetup(vm) < 0) {
+            goto error;
+        }
+
         if (virDomainObjSave(vm, driver->xmlopt, cfg->stateDir) < 0) {
             DBG("Failed to save status on vm %s", vm->def->name);
         }
