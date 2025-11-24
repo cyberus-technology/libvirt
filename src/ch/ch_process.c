@@ -166,7 +166,7 @@ virCHProcessGetAllCpuAffinity(virBitmap **cpumapRet)
 }
 
 #if defined(WITH_SCHED_GETAFFINITY) || defined(WITH_BSD_CPU_AFFINITY)
-static int
+int
 virCHProcessInitCpuAffinity(virDomainObj *vm)
 {
     g_autoptr(virBitmap) cpumapToSet = NULL;
@@ -206,7 +206,7 @@ virCHProcessInitCpuAffinity(virDomainObj *vm)
     return 0;
 }
 #else /* !defined(WITH_SCHED_GETAFFINITY) && !defined(WITH_BSD_CPU_AFFINITY) */
-static int
+int
 virCHProcessInitCpuAffinity(virDomainObj *vm G_GNUC_UNUSED)
 {
     return 0;
@@ -477,7 +477,7 @@ virCHProcessSetupVcpus(virDomainObj *vm)
     return 0;
 }
 
-static int
+int
 virCHProcessSetup(virDomainObj *vm)
 {
     virCHDomainObjPrivate *priv = vm->privateData;
