@@ -139,10 +139,12 @@ int virCHMonitorSaveVM(virCHMonitor *mon,
                        const char *to);
 int virCHMonitorMigrationSend(virCHMonitor *mon,
                               const char *dst_uri,
-                              unsigned parallel_connections);
+                              unsigned parallel_connections,
+                              bool use_tls,
+                              char *tls_dir);
 int virCHMonitorMigrationReceive(virCHMonitor *mon,
                                  const char *rcv_uri,
-                                 virDomainDef *vmdef, virCHDriver *driver, virCond *cond, char* tcp_serial_url);
+                                 virDomainDef *vmdef, virCHDriver *driver, virCond *cond, char* tcp_serial_url, bool use_tls);
 int virCHMonitorRemoveDevice(virCHMonitor *mon, const char* device_id);
 int virCHMonitorGetInfo(virCHMonitor *mon, virJSONValue **info);
 

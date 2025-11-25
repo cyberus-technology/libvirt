@@ -53,6 +53,8 @@ struct _virCHDriverConfig {
     gid_t group;
 
     bool stdioLogD;
+
+    char *migrateTLSx509certdir;
 };
 
 G_DEFINE_AUTOPTR_CLEANUP_FUNC(virCHDriverConfig, virObjectUnref);
