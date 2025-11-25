@@ -2755,7 +2755,8 @@ chDoMigrateDstReceive(void *opaque)
                                      args->def,
                                      args->driver,
                                      &args->cond,
-                                     args->tcp_serial_url) < 0) {
+                                     args->tcp_serial_url,
+                                     args->use_tls) < 0) {
         DBG("Migration receive failed.");
         args->success = false;
         return;
@@ -2927,6 +2928,7 @@ chDomainMigratePrepare3(virConnectPtr dconn,
     args->driver = driver;
     args->success = false;
     args->tcp_serial_url = NULL;
+    args->use_tls = flags & VIR_MIGRATE_TLS;
 
     if (vm->def->nserials > 0 &&
         vm->def->serials[0]->source->type == VIR_DOMAIN_CHR_TYPE_TCP) {
@@ -3090,7 +3092,8 @@ chDomainMigratePerform3Impl(virDomainObj *vm,
                             int *cookieoutlen,
                             unsigned long flags,
                             const char *dname,
-                            unsigned parallel_connections)
+                            unsigned parallel_connections,
+                            bool use_tls)
 {
     virCHDomainObjPrivate *priv = vm->privateData;
     g_autofree char *id = NULL;
@@ -3102,8 +3105,8 @@ chDomainMigratePerform3Impl(virDomainObj *vm,
     int rc = -1;
     g_autoptr(virCHDriverConfig) cfg = virCHDriverGetConfig(driver);
 
-    DBG("chDomainMigratePerform3Impl %s %s %s %lu %s %u",
-        xmlin, dconnuri, uri, flags, dname, parallel_connections);
+    DBG("chDomainMigratePerform3Impl %s %s %s %lu %s %u %s",
+        xmlin, dconnuri, uri, flags, dname, parallel_connections, use_tls ? "true" : "false");
 
     if (!priv->monitor) {
         VIR_ERROR(_("VMs monitor not initialized"));
@@ -3156,7 +3159,7 @@ chDomainMigratePerform3Impl(virDomainObj *vm,
         uri = uri_out;
     }
 
-    if (virCHMonitorMigrationSend(priv->monitor, uri, parallel_connections) < 0) {
+    if (virCHMonitorMigrationSend(priv->monitor, uri, parallel_connections, use_tls, driver->config->migrateTLSx509certdir) < 0) {
         DBG("Migration send failed.");
         ddomain = dconn->driver->domainMigrateFinish3(dconn, vm->def->name, NULL, 0, NULL, NULL, NULL, uri, flags, 1);
         virObjectUnref(ddomain);
@@ -3243,7 +3246,8 @@ chDomainMigratePerform3(virDomainPtr dom,
                                      cookieoutlen,
                                      flags,
                                      dname,
-                                     1);
+                                     1,
+                                    false);
 
 cleanup:
     virDomainObjEndAPI(&vm);
@@ -3268,6 +3272,7 @@ chDomainMigratePerform3Params(virDomainPtr dom,
     virDomainObj *vm;
     virCHDriver *driver = dom->conn->privateData;
     int rc = -1;
+    bool use_tls = false;
 
     if (virTypedParamsGetString(params, nparams,
                                 VIR_MIGRATE_PARAM_URI,
@@ -3300,6 +3305,8 @@ chDomainMigratePerform3Params(virDomainPtr dom,
         parallel_connections = 1;
     }
 
+    use_tls = flags & VIR_MIGRATE_TLS;
+
     DBG("chDomainMigratePerform3Params dconnuri: %s dname: %s parallel connection: %d", dconnuri, dname, parallel_connections);
 
     if (!(vm = virCHDomainObjFromDomain(dom)))
@@ -3319,7 +3326,8 @@ chDomainMigratePerform3Params(virDomainPtr dom,
                                      cookieoutlen,
                                      flags,
                                      dname,
-                                     parallel_connections);
+                                     parallel_connections,
+                                     use_tls);
 error:
     virDomainObjEndAPI(&vm);
     return rc;

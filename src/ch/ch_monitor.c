@@ -1667,7 +1667,9 @@ int virCHMonitorRemoveDevice(virCHMonitor *mon,
 
 int virCHMonitorMigrationSend(virCHMonitor *mon,
                               const char *dst_uri,
-                              unsigned parallel_connections)
+                              unsigned parallel_connections,
+                              bool use_tls,
+                              char *tls_dir)
 {
     g_autofree char *url = NULL;
     int responseCode = 0;
@@ -1690,6 +1692,19 @@ int virCHMonitorMigrationSend(virCHMonitor *mon,
     if (parallel_connections > 1) {
         if (virJSONValueObjectAppendNumberInt(content, "connections", parallel_connections) != 0)
             return -1;
+    }
+
+    if (use_tls) {
+      if (!virFileExists(tls_dir)) {
+        virReportError(
+            VIR_ERR_CONF_SYNTAX,
+            _("migrate_tls_x509_cert_dir directory '%1$s' does not exist"),
+            tls_dir);
+        return -1;
+      }
+
+      if (virJSONValueObjectAppendString(content, "tls_dir", tls_dir) != 0)
+        return -1;
     }
 
     if (!(payload = virJSONValueToString(content, false)))
@@ -1814,7 +1829,8 @@ int virCHMonitorMigrationReceive(virCHMonitor *mon,
                                  virDomainDef *vmdef,
                                  virCHDriver *driver,
                                  virCond *cond,
-                                 char *tcp_serial_url)
+                                 char *tcp_serial_url,
+                                 bool use_tls)
 {
     size_t i = 0;
     VIR_AUTOCLOSE mon_sockfd = -1;
@@ -1898,6 +1914,20 @@ int virCHMonitorMigrationReceive(virCHMonitor *mon,
             goto err;
         }
     }
+
+    if (use_tls) {
+      if (!virFileExists(driver->config->migrateTLSx509certdir)) {
+        virReportError(
+            VIR_ERR_CONF_SYNTAX,
+            _("migrate_tls_x509_cert_dir directory '%1$s' does not exist"),
+            driver->config->migrateTLSx509certdir);
+        return -1;
+      }
+
+      if (virJSONValueObjectAppendString(content, "tls_dir", driver->config->migrateTLSx509certdir) != 0)
+        return -1;
+    }
+
     if (!(receiveJson = virJSONValueToString(content, false))) {
         DBG("virJSONValueToString failed");
         rc = -1;
