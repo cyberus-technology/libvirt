@@ -168,6 +168,9 @@ virCHDriverConfigNew(bool privileged)
         cfg->saveDir = g_strdup_printf("%s/ch/save", configbasedir);
     }
 
+    // TODO: we should read this from a config file.
+    cfg->migrateTLSx509certdir = g_strdup_printf("%s/pki", cfg->configDir);
+
     return cfg;
 }
 
@@ -185,6 +188,8 @@ virCHDriverConfigDispose(void *obj)
     g_free(cfg->saveDir);
     g_free(cfg->stateDir);
     g_free(cfg->logDir);
+
+    g_free(cfg->migrateTLSx509certdir);
 }
 
 #define MIN_VERSION ((15 * 1000000) + (0 * 1000) + (0))
