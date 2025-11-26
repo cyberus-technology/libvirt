@@ -114,8 +114,10 @@ virCHProcessUpdateConsoleDevice(virDomainObj *vm,
         chr = vm->def->serials[0];
     }
 
-    if (chr && chr->source)
+    if (chr && chr->source) {
+        g_free(chr->source->data.file.path);
         chr->source->data.file.path = g_strdup(path);
+    }
 }
 
 static void
