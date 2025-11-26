@@ -1368,6 +1368,7 @@ virCHProcessStartRestore(virCHDriver *driver, virDomainObj *vm, const char *from
     g_auto(virBuffer) buf = VIR_BUFFER_INITIALIZER;
     g_auto(virBuffer) http_headers = VIR_BUFFER_INITIALIZER;
     g_autofree char *payload = NULL;
+    g_autofree char *restoreJson = NULL;
     g_autofree char *response = NULL;
     VIR_AUTOCLOSE mon_sockfd = -1;
     g_autofree int *tapfds = NULL;
@@ -1408,7 +1409,7 @@ virCHProcessStartRestore(virCHDriver *driver, virDomainObj *vm, const char *from
     vm->def->id = vm->pid;
     priv->machineName = virCHDomainGetMachineName(vm);
 
-    if (virCHMonitorBuildRestoreJson(vm->def, from, &payload) < 0) {
+    if (virCHMonitorBuildRestoreJson(vm->def, from, &restoreJson) < 0) {
         virReportError(VIR_ERR_INTERNAL_ERROR, "%s",
                        _("failed to restore domain"));
         goto cleanup;
@@ -1418,8 +1419,8 @@ virCHProcessStartRestore(virCHDriver *driver, virDomainObj *vm, const char *from
     virBufferAddLit(&http_headers, "Host: localhost\r\n");
     virBufferAddLit(&http_headers, "Content-Type: application/json\r\n");
     virBufferAsprintf(&buf, "%s", virBufferCurrentContent(&http_headers));
-    virBufferAsprintf(&buf, "Content-Length: %zu\r\n\r\n", strlen(payload));
-    virBufferAsprintf(&buf, "%s", payload);
+    virBufferAsprintf(&buf, "Content-Length: %zu\r\n\r\n", strlen(restoreJson));
+    virBufferAsprintf(&buf, "%s", restoreJson);
     payload_len = virBufferUse(&buf);
     payload = virBufferContentAndReset(&buf);
 
