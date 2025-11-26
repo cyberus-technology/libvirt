@@ -195,14 +195,19 @@ virCHMonitorBuildConsoleJson(virJSONValue *content,
     g_autoptr(virJSONValue) console = virJSONValueNewObject();
     g_autoptr(virJSONValue) serial = virJSONValueNewObject();
 
-    if (vmdef->nconsoles &&
-        vmdef->consoles[0]->source->type == VIR_DOMAIN_CHR_TYPE_PTY) {
-        DBG("Create Serial with type: %d", vmdef->consoles[0]->info.type);
-        if (virJSONValueObjectAppendString(console, "mode", "Pty") < 0)
-            return -1;
-        if (virJSONValueObjectAppend(content, "console", &console) < 0)
+    if (vmdef->nconsoles) {
+        if (vmdef->consoles[0]->source->type == VIR_DOMAIN_CHR_TYPE_PTY) {
+            DBG("Create Serial with type: %d", vmdef->consoles[0]->info.type);
+            if (virJSONValueObjectAppendString(console, "mode", "Pty") < 0)
+                return -1;
+        }
+    } else {
+        DBG("Disable default virtio console device in CHV");
+        if (virJSONValueObjectAppendString(console, "mode", "Off") < 0)
             return -1;
     }
+    if (virJSONValueObjectAppend(content, "console", &console) < 0)
+        return -1;
 
     if (vmdef->nserials) {
         if (vmdef->serials[0]->source->type == VIR_DOMAIN_CHR_TYPE_PTY) {
