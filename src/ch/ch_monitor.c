@@ -1819,6 +1819,7 @@ int virCHMonitorMigrationReceive(virCHMonitor *mon,
     size_t i = 0;
     VIR_AUTOCLOSE mon_sockfd = -1;
     g_autofree char *payload = NULL;
+    g_autofree char *receiveJson = NULL;
     g_autofree char *response = NULL;
     g_autoptr(virJSONValue) content = virJSONValueNewObject();
     g_autofree int *tapfds = NULL;
@@ -1891,12 +1892,12 @@ int virCHMonitorMigrationReceive(virCHMonitor *mon,
             goto out;
         }
     }
-    if (!(payload = virJSONValueToString(content, false))) {
+    if (!(receiveJson = virJSONValueToString(content, false))) {
         rc = -1;
         goto out;
     }
 
-    DBG("Receive VM from url %s\njson: %s", rcv_uri, payload);
+    DBG("Receive VM from url %s json: %s", rcv_uri, receiveJson);
 
     if ((mon_sockfd = chMonitorSocketConnect(mon)) < 0) {
         DBG("socket connect failed");
@@ -1921,8 +1922,8 @@ int virCHMonitorMigrationReceive(virCHMonitor *mon,
     virBufferAddLit(&http_headers, "Host: localhost\r\n");
     virBufferAddLit(&http_headers, "Content-Type: application/json\r\n");
     virBufferAsprintf(&buf, "%s", virBufferCurrentContent(&http_headers));
-    virBufferAsprintf(&buf, "Content-Length: %zu\r\n\r\n", strlen(payload));
-    virBufferAsprintf(&buf, "%s", payload);
+    virBufferAsprintf(&buf, "Content-Length: %zu\r\n\r\n", strlen(receiveJson));
+    virBufferAsprintf(&buf, "%s", receiveJson);
     payload_len = virBufferUse(&buf);
     payload = virBufferContentAndReset(&buf);
 
