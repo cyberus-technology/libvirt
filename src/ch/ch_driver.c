@@ -345,8 +345,6 @@ chDomainCreateWithFlags(virDomainPtr dom, unsigned int flags)
         DBG("Failed to save status on vm %s", vm->def->name);
     }
 
-    vm->newDef = virDomainObjCopyPersistentDef(vm, driver->xmlopt, NULL);
-
  endjob:
     virDomainObjEndJob(vm);
 
@@ -3757,7 +3755,7 @@ chDomainAttachDeviceLiveAndConfig(virDomainObj *vm,
             DBG("virDomainDefSave failed");
             return -1;
         }
-        virDomainObjAssignDef(vm, &vmdef, virDomainObjIsActive(vm) ? true : false, NULL);
+        virDomainObjAssignDef(vm, &vmdef, false, NULL);
         /* Event sending if persistent config has changed */
         event = virDomainEventLifecycleNewFromObj(vm,
                                                   VIR_DOMAIN_EVENT_DEFINED,

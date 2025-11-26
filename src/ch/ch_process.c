@@ -1167,6 +1167,9 @@ virCHProcessStart(virCHDriver *driver,
         return -1;
     }
 
+    if (virDomainObjSetDefTransient(driver->xmlopt, vm, NULL) < 0)
+        return -1;
+
     VIR_DEBUG("Creating domain log file for %s domain", vm->def->name);
     if (!(logCtxt = domainLogContextNew(cfg->stdioLogD, cfg->logDir,
                                         CH_DRIVER_NAME,
