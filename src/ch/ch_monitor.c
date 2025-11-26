@@ -1831,7 +1831,6 @@ int virCHMonitorMigrationReceive(virCHMonitor *mon,
     g_auto(virBuffer) http_headers = VIR_BUFFER_INITIALIZER;
     size_t payload_len;
     g_autoptr(virJSONValue) net_json = NULL;
-    g_autofree char *id = NULL;
     int rc = 0;
 
     DBG("In virCHMonitorMigrationReceive");
@@ -1854,6 +1853,7 @@ int virCHMonitorMigrationReceive(virCHMonitor *mon,
     if (vmdef->nnets) {
         g_autoptr(virJSONValue) nets = virJSONValueNewArray();
         for (i = 0; i < vmdef->nnets; i++) {
+            g_autofree char *id = NULL;
             // This is set to 0 in domain_conf.c always. Figure out how to
             // handle this properly!
             if (vmdef->nets[i]->driver.virtio.queues == 0) {
