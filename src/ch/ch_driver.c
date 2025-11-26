@@ -3130,8 +3130,9 @@ chDomainMigratePerform3Impl(virDomainObj *vm,
     g_autofree char *id = NULL;
     g_autoptr(virConnect) dconn = NULL;
     g_autoptr(virURI) uri_parsed = NULL;
-    char *uri_out = NULL;
+    g_autofree char *uri_out = NULL;
     g_autofree char *dom_xml = NULL;
+    virDomainPtr ddomain = NULL;
     int rc = -1;
     g_autoptr(virCHDriverConfig) cfg = virCHDriverGetConfig(driver);
 
@@ -3200,8 +3201,8 @@ chDomainMigratePerform3Impl(virDomainObj *vm,
 
     if (dconnuri) {
         DBG("P2P: Call finish on remote context");
-        dconn->driver->domainMigrateFinish3(dconn, vm->def->name, NULL, 0, NULL, NULL, NULL, uri, flags, 0);
-        virConnectClose(dconn);
+        ddomain = dconn->driver->domainMigrateFinish3(dconn, vm->def->name, NULL, 0, NULL, NULL, NULL, uri, flags, 0);
+        virObjectUnref(ddomain);
 
         DBG("P2P: Call confirm on our context");
 
@@ -3226,7 +3227,7 @@ chDomainMigratePerform3Impl(virDomainObj *vm,
         // virCHDomainRemoveInactive function. This has shown to run better in
         // some manual tests.
         if (!vm->persistent)
-            virDomainObjListRemoveLocked(driver->domains, vm);
+            virDomainObjListRemove(driver->domains, vm);
 
         virDomainObjEndAsyncJob(vm);
         DBG("P2P: Migration finished");
