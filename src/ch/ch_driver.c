@@ -3223,11 +3223,9 @@ chDomainMigratePerform3Impl(virDomainObj *vm,
             vm->persistent = 0;
         }
 
-        // We have seen strange issues with removing the domain via the
-        // virCHDomainRemoveInactive function. This has shown to run better in
-        // some manual tests.
-        if (!vm->persistent)
-            virDomainObjListRemove(driver->domains, vm);
+        if (!virDomainObjIsActive(vm)) {
+            virCHDomainRemoveInactive(driver, vm);
+        }
 
         virDomainObjEndAsyncJob(vm);
         DBG("P2P: Migration finished");
