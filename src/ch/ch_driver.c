@@ -3157,7 +3157,8 @@ chDomainMigratePerform3Impl(virDomainObj *vm,
 
     if (virCHMonitorMigrationSend(priv->monitor, uri, parallel_connections) < 0) {
         DBG("Migration send failed.");
-        dconn->driver->domainMigrateFinish3(dconn, vm->def->name, NULL, 0, NULL, NULL, NULL, uri, flags, 1);
+        ddomain = dconn->driver->domainMigrateFinish3(dconn, vm->def->name, NULL, 0, NULL, NULL, NULL, uri, flags, 1);
+        virObjectUnref(ddomain);
         rc = -1;
         goto cleanup;
     }
