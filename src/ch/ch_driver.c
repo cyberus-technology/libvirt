@@ -3200,9 +3200,6 @@ chDomainMigratePerform3Impl(virDomainObj *vm,
 
 cleanup:
     virDomainObjEndAsyncJob(vm);
-    if (dconn) {
-        virConnectClose(dconn);
-    }
 
     return rc;
 }
