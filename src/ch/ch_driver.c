@@ -2841,6 +2841,8 @@ static int chMigrationJobStart(virDomainObj *vm,
         // `jobDataPrivateCb`.
         // As far as I can see, we do not require setting these callbacks and
         // we can avoid the exception by setting the whole member to NULL.
+        // vm->job->jobDataPrivateCb = NULL;
+        g_free(vm->job->jobDataPrivateCb);
         vm->job->jobDataPrivateCb = NULL;
     }
 
