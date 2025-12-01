@@ -10,7 +10,7 @@
     libvirt-tests.inputs.cloud-hypervisor-src.follows = "cloud-hypervisor-src";
     libvirt-tests.inputs.nixpkgs.follows = "nixpkgs";
     # We follow the latest stable release of nixpkgs
-    nixpkgs.url = "github:nixos/nixpkgs/nixos-25.05";
+    nixpkgs.url = "github:nixos/nixpkgs/nixos-25.11";
   };
 
   outputs = { self, nixpkgs, libvirt-tests, keycodemapdb, ... }:
