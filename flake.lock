@@ -107,11 +107,11 @@
     "libvirt-src": {
       "flake": false,
       "locked": {
-        "lastModified": 1763107339,
-        "narHash": "sha256-8ghigqZ52HoJqkbTHNA9RC23WygXdBZo/PAhEX4+Mnk=",
+        "lastModified": 1764087192,
+        "narHash": "sha256-IqpK4GPW00E7pKtcWWn+6z5XSz7HUcLTOYZ+hTor57g=",
         "ref": "gardenlinux",
-        "rev": "73c923fb947fec3ba118c55fd62e72d53e48b312",
-        "revCount": 52377,
+        "rev": "6e38797ab4c34ec6afe286d9455193b6b775dffc",
+        "revCount": 52379,
         "submodules": true,
         "type": "git",
         "url": "https://github.com/cyberus-technology/libvirt"
@@ -139,11 +139,11 @@
         "rust-overlay": "rust-overlay"
       },
       "locked": {
-        "lastModified": 1764087152,
-        "narHash": "sha256-tNydVAFCclGz4pGmZljs2co4J1uMxIbgryG/+Jx0kVk=",
+        "lastModified": 1764606285,
+        "narHash": "sha256-yVGDkSKSpFKbK7VNefcwCAVqZHwBPCDTS4HGaVd0JsE=",
         "owner": "cyberus-technology",
         "repo": "libvirt-tests",
-        "rev": "5c7436e5f5dd4e0e7bb9fd4ef5fb735fe659f548",
+        "rev": "7eb83a0789814a60e3f87dd94daaace42a2c7b09",
         "type": "github"
       },
       "original": {
