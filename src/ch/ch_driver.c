@@ -63,6 +63,15 @@ VIR_LOG_INIT("ch.ch_driver");
 
 virCHDriver *ch_driver = NULL;
 
+/**
+ * Cloud Hypervisor does not yet support to list all available CPU profiles. We
+ * maintain a hardcoded list here for now.
+*/
+static const char *cpu_models[] = {
+    "skylake",
+    "sapphire-rapids",
+};
+
 /* Functions */
 static int
 chConnectURIProbe(char **uri)
@@ -4756,6 +4765,51 @@ chDomainBlockResize(virDomainPtr dom,
     return ret;
 }
 
+/**
+ * Retrieve all supported CPU models for a given architecture e.g. x86_64.
+ *
+ * Currently, only x86_64 is supported.
+ */
+static int
+chConnectGetCPUModelNames(virConnectPtr conn,
+                          const char *archName,
+                          char ***models,
+                          unsigned int flags)
+{
+    virArch arch;
+    size_t num_models = sizeof(cpu_models) / sizeof(cpu_models[0]);
+    size_t i = 0;
+
+    virCheckFlags(0, -1);
+    if (virConnectGetCPUModelNamesEnsureACL(conn) < 0)
+        return -1;
+
+    if (!(arch = virArchFromString(archName))) {
+        virReportError(VIR_ERR_INVALID_ARG,
+                       _("cannot find architecture %1$s"),
+                       archName);
+        return -1;
+    }
+
+    if (arch != VIR_ARCH_X86_64) {
+        virReportError(VIR_ERR_INVALID_ARG,
+                       _("Unsupported architecture: %1$s. Only x86_64 is supported."),
+                       archName);
+        return -1;
+
+    }
+    if (!models)
+        return -1;
+
+    *models = g_new0(char *, num_models);
+
+    for (i = 0; i < num_models; i++) {
+        (*models)[i] = g_strdup(cpu_models[i]);
+    }
+
+    return num_models;
+}
+
 /* Function Tables */
 static virHypervisorDriver chHypervisorDriver = {
     .name = "CH",
@@ -4836,6 +4890,7 @@ static virHypervisorDriver chHypervisorDriver = {
     .domainDetachDeviceFlags = chDomainDetachDeviceFlags, /* 11.4.0 */
     .connectGetDomainCapabilities = chConnectGetDomainCapabilities, /* 11.4.0 */
     .domainBlockResize = chDomainBlockResize, /* 11.4.0 */
+    .connectGetCPUModelNames = chConnectGetCPUModelNames, /* 11.4.0 */
 };
 
 static virConnectDriver chConnectDriver = {
