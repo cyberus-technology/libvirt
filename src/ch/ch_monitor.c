@@ -1835,15 +1835,17 @@ int virCHMonitorMigrationReceive(virCHMonitor *mon,
     DBG("In virCHMonitorMigrationReceive");
 
     if (virJSONValueObjectAppendString(content, "receiver_url", rcv_uri) < 0) {
+        DBG("virJSONValueObjectAppendString failed for receiver_url");
         rc = -1;
-        goto out;
+        goto err;
     }
 
     if (vmdef->serials[0]->source->type == VIR_DOMAIN_CHR_TYPE_TCP) {
         DBG("TCP serial in use. Pass adapted TCP serial url: %s", tcp_serial_url);
         if (virJSONValueObjectAppendString(content, "tcp_serial_url", tcp_serial_url) < 0) {
+            DBG("virJSONValueObjectAppendString failed for tcp_serial_url");
             rc = -1;
-            goto out;
+            goto err;
         }
     }
 
@@ -1875,26 +1877,31 @@ int virCHMonitorMigrationReceive(virCHMonitor *mon,
 			vmdef->nets[i]->info.addr.pci.function = 0;
 
             if (virJSONValueObjectAppendString(net_json, "id", id) < 0) {
+                DBG("virJSONValueObjectAppendString failed for id");
                 rc = -1;
-                goto out;
+                goto err;
             }
             if (virJSONValueObjectAppendNumberInt(net_json, "num_fds", vmdef->nets[i]->driver.virtio.queues)) {
+                DBG("virJSONValueObjectAppendNumberInt failed for num_fds");
                 rc = -1;
-                goto out;
+                goto err;
             }
             if (virJSONValueArrayAppend(nets, &net_json) < 0) {
+                DBG("virJSONValueObjectAppend failed for net_json");
                 rc = -1;
-                goto out;
+                goto err;
             }
         }
         if (virJSONValueObjectAppend(content, "net_fds", &nets)) {
+            DBG("virJSONValueObjectAppend failed for net_fds");
             rc = -1;
-            goto out;
+            goto err;
         }
     }
     if (!(receiveJson = virJSONValueToString(content, false))) {
+        DBG("virJSONValueToString failed");
         rc = -1;
-        goto out;
+        goto err;
     }
 
     DBG("Receive VM from url %s json: %s", rcv_uri, receiveJson);
@@ -1902,20 +1909,20 @@ int virCHMonitorMigrationReceive(virCHMonitor *mon,
     if ((mon_sockfd = chMonitorSocketConnect(mon)) < 0) {
         DBG("socket connect failed");
         rc = -1;
-        goto out;
+        goto err;
     }
 
     if (virCHRestoreCreateNetworkDevices(driver, vmdef, &tapfds, &ntapfds, &nicindexes, &nnicindexes) < 0) {
         DBG("virCHRestoreCreateNetworkDevices failed");
         rc = -1;
-        goto out_close_fds;
+        goto err_close_fds;
     }
 
     /* Bring up netdevs before restoring vm */
     if (virDomainInterfaceStartDevices(vmdef) < 0) {
         DBG("virDomainInterfaceStartDevices failed");
         rc = -1;
-        goto out_close_fds;
+        goto err_close_fds;
     }
 
     virBufferAddLit(&http_headers, "PUT /api/v1/vm.receive-migration HTTP/1.1\r\n");
@@ -1967,7 +1974,17 @@ int virCHMonitorMigrationReceive(virCHMonitor *mon,
 out_close_fds:
     if (ntapfds)
         chCloseFDs(tapfds, ntapfds);
+
 out:
+    return rc;
+
+err_close_fds:
+    if (ntapfds)
+        chCloseFDs(tapfds, ntapfds);
+err:
+    // We need to signal here to wakeup the receiver thread
+    // so it can fail gracefully.
+    virCondSignal(cond);
     return rc;
 }
 
