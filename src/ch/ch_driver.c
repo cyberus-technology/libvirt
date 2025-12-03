@@ -1648,8 +1648,9 @@ processMonitorEOFEvent(virCHDriver *driver,
         return;
     }
 
-    if (virDomainObjBeginJob(vm, VIR_JOB_DESTROY) < 0)
+    if (virDomainObjBeginJob(vm, VIR_JOB_MODIFY) < 0) {
         return;
+    }
 
     if (!virDomainObjIsActive(vm)) {
         VIR_DEBUG("Domain %p '%s' is not active, ignoring EOF",
