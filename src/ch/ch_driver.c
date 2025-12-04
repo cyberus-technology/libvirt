@@ -3416,8 +3416,8 @@ chDomainMigrateFinish3(virConnectPtr dconn,
             DBG("Could not update console info. Consider that non-fatal.");
         }
     } else {
-        DBG("Migration was unsuccessful, cancel thread");
-        virThreadCancel(priv->migrationDstReceiveThr);
+        DBG("Migration was unsuccessful, killing CHV process");
+        virCHProcessKill(driver, vm, VIR_DOMAIN_SHUTOFF_DESTROYED);
     }
 
     virThreadJoin(priv->migrationDstReceiveThr);
