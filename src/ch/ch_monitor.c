@@ -1674,7 +1674,7 @@ int virCHMonitorRemoveDevice(virCHMonitor *mon,
     if (virCHMonitorBuildKeyValueStringJson(&payload, "id", device_id) != 0)
         return -1;
 
-    VIR_DEBUG("Remove device id %s json %s", device_id, payload);
+    DBG("Remove device id %s json %s", device_id, payload);
 
     VIR_WITH_OBJECT_LOCK_GUARD(mon) {
         /* reset all options of a libcurl session handle at first */
