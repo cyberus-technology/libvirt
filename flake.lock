@@ -3,11 +3,11 @@
     "cloud-hypervisor-src": {
       "flake": false,
       "locked": {
-        "lastModified": 1764758716,
-        "narHash": "sha256-pOv2lP8qYy4w5GimEiKlILU4WVWUVykWkhXDr+22AdE=",
+        "lastModified": 1764947614,
+        "narHash": "sha256-ptMDewPVs13ZOFdJLAJhLXvfa8A3PihAzjiSPbLxZ7M=",
         "owner": "cyberus-technology",
         "repo": "cloud-hypervisor",
-        "rev": "127f2d8f1ebfc43da697fa17a9f5f9457699fb23",
+        "rev": "d4cb05de4d7fe1b4300ce4d6bed56ae7fc04e19b",
         "type": "github"
       },
       "original": {
@@ -139,11 +139,11 @@
         "rust-overlay": "rust-overlay"
       },
       "locked": {
-        "lastModified": 1764938419,
-        "narHash": "sha256-nyvPQsLbALgffpopRw8KkX63tU1/NgufLKqyoUbfo5k=",
+        "lastModified": 1764946710,
+        "narHash": "sha256-oohci4Q4H4yGsJT/iicoBIoeK5dywmnIkUy2qkrsIps=",
         "owner": "cyberus-technology",
         "repo": "libvirt-tests",
-        "rev": "56a9da2b8699cb986b2cb2f52c06d5b564c0ff79",
+        "rev": "47c17170b922c2a208b1ffe015e68ebcc8e663a4",
         "type": "github"
       },
       "original": {
