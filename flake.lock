@@ -19,11 +19,11 @@
     },
     "crane": {
       "locked": {
-        "lastModified": 1763938834,
-        "narHash": "sha256-j8iB0Yr4zAvQLueCZ5abxfk6fnG/SJ5JnGUziETjwfg=",
+        "lastModified": 1764903584,
+        "narHash": "sha256-RSkJtNtx0SEaQiYqsoFoRynwfZLo2OZ9z6rUq1DJR6g=",
         "owner": "ipetkov",
         "repo": "crane",
-        "rev": "d9e753122e51cee64eb8d2dddfe11148f339f5a2",
+        "rev": "2b3a5a88d852575758e1eb6ac9ee677fcd633fc1",
         "type": "github"
       },
       "original": {
@@ -75,11 +75,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1763732559,
-        "narHash": "sha256-a/RgkYjRM772JT1SzcrlGVK9g6W3803qNa1IlalNNuA=",
+        "lastModified": 1764620651,
+        "narHash": "sha256-OOoCw8Bo36VGDkSPqYYxY8JSJarI1FTmwK0G47K6KKQ=",
         "owner": "phip1611",
         "repo": "fcntl-tool",
-        "rev": "76054e86e713e154395162560bf8c6d34a2a5dc3",
+        "rev": "ca5d70e4096eb1ea7d32fac93bd2fd4b9c617345",
         "type": "github"
       },
       "original": {
@@ -107,11 +107,11 @@
     "libvirt-src": {
       "flake": false,
       "locked": {
-        "lastModified": 1764686076,
-        "narHash": "sha256-tfKch7RPaA34QSfwDn+Qf7rhHdSV7NvmUzcxCa+JjtA=",
+        "lastModified": 1764861673,
+        "narHash": "sha256-WSJU62hcYIJGzSmOoiHmdX4x77KVmlSjQP8j5gxf8aM=",
         "ref": "gardenlinux",
-        "rev": "c1f26f290dabe1adbbeef7e39a504679874904e6",
-        "revCount": 52397,
+        "rev": "3e60c4dd6b3103c2c7ba6dfd6320f86e52334b3e",
+        "revCount": 52402,
         "submodules": true,
         "type": "git",
         "url": "https://github.com/cyberus-technology/libvirt"
@@ -139,11 +139,11 @@
         "rust-overlay": "rust-overlay"
       },
       "locked": {
-        "lastModified": 1764838638,
-        "narHash": "sha256-AXEqIYopIvCjMOdcG4pQ0trBWn9gFLJnmf9OzfBfG3g=",
+        "lastModified": 1764938419,
+        "narHash": "sha256-nyvPQsLbALgffpopRw8KkX63tU1/NgufLKqyoUbfo5k=",
         "owner": "cyberus-technology",
         "repo": "libvirt-tests",
-        "rev": "b7d9fe89cf93399e56f3d3ab0cff10780de118d9",
+        "rev": "56a9da2b8699cb986b2cb2f52c06d5b564c0ff79",
         "type": "github"
       },
       "original": {
@@ -184,11 +184,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1764729618,
-        "narHash": "sha256-z4RA80HCWv2los1KD346c+PwNPzMl79qgl7bCVgz8X0=",
+        "lastModified": 1764902447,
+        "narHash": "sha256-wNqkDBj+tjK619sTHPEA7uhjr7DHHEY8OsFou31dxy0=",
         "owner": "oxalica",
         "repo": "rust-overlay",
-        "rev": "52764074a85145d5001bf0aa30cb71936e9ad5b8",
+        "rev": "d914a744a83098eeb28125d2848ad383b209223f",
         "type": "github"
       },
       "original": {
