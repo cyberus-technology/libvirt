@@ -184,6 +184,7 @@ virCHProcessEvents(virCHMonitor *mon)
                     if (virCHProcessEvent(mon, obj) < 0) {
                         VIR_ERROR(_("%1$s: Failed to process JSON event doc: %2$s"),
                                   vm->def->name, json_start);
+                        virJSONValueFree(obj);
                         return -1;
                     }
                 } else {
