@@ -85,26 +85,19 @@ static void free_queue(dynamicAddressQueue **queue) {
  *
  * Returns 0 if the bus bus successfully created and added to the domain. Otherwise -1.
  */
-int chDomainPCIAddressSetCreate(virDomainObj *obj) {
-    int ret = -1;
+static virDomainPCIAddressSet* chDomainPCIAddressSetCreate(virDomainDef *def) {
     int nbuses = 0;
     virDomainPCIAddressSet *addrs = NULL;
-    virCHDomainObjPrivate *priv = NULL;
-    virDomainDef *def = obj->def;
-    if (!obj) {
-        virReportError(VIR_ERR_INVALID_ARG, "Domain pointer is NULL!");
-        goto cleanup;
-    }
 
     if (!def) {
         virReportError(VIR_ERR_INVALID_ARG, "Domain def pointer is NULL!");
-        goto cleanup;
+        return NULL;
     }
 
     if (def->ncontrollers > 0) {
         virReportError(VIR_ERR_INVALID_ARG, 
             _("No additional PCI controllers supported right now!"));
-        goto cleanup;
+        return NULL;
     }
 
     // We currently support only one bus
@@ -113,27 +106,14 @@ int chDomainPCIAddressSetCreate(virDomainObj *obj) {
     if (nbuses > 1) {
         virReportError(VIR_ERR_INVALID_ARG,
             _("CHV currently does't support more than one PCI bus!"));
-        goto cleanup;
+        return NULL;
     }
     
     // We need to allocate some representation of the PCI bus for libvirt to manage devices
     if (!(addrs = virDomainPCIAddressSetAlloc(nbuses, VIR_PCI_ADDRESS_EXTENSION_NONE)))
-        goto cleanup;
-    // We support exactly one PCI bus currently. We need to set the respective model for usign it
-    if (virDomainPCIAddressBusSetModel(&addrs->buses[0], VIR_DOMAIN_CONTROLLER_MODEL_PCI_ROOT, true) < 0)
-        goto cleanup;
-    if (obj && obj->privateData) {
-        priv = obj->privateData;
-        /* if this is the live domain object, we persist the PCI addresses */
-        priv->pciAddrSet = g_steal_pointer(&addrs);
-    }
-    ret = 0;
+        return NULL;
 
-    cleanup:
-    virDomainPCIAddressSetFree(addrs);
-
-
-    return ret;
+    return addrs;
 }
 
 /**
@@ -319,10 +299,7 @@ static int chReserveDynamicPciIds(virDomainPCIAddressSet *addrSet, dynamicAddres
  * 
  * 0 indicates success, -1 failure 
  */
-int chInitPciDevices(virDomainObj *dom) {
-    virCHDomainObjPrivate *priv = dom->privateData;
-    virDomainDef *def = dom->def;
-    virDomainPCIAddressSet *addrSet = priv->pciAddrSet;
+static int chInitPciDevices(virDomainDef *def, virDomainPCIAddressSet *addrSet) {
     dynamicAddressQueue* queue = NULL;
     int rc = 0;
     new_addr_queue(&queue);
@@ -356,6 +333,62 @@ int chInitPciDevices(virDomainObj *dom) {
 
     cleanup:
     free_queue(&queue);
+
+    return rc;
+}
+
+/*
+ * Assigns PCI Addresses to all devices in a definition and persists them if 
+ * there is a domain object.
+ */
+int chAssignPciAddresses(virDomainDef *def, virDomainObj *obj) {
+    virDomainPCIAddressSet *addr_set = NULL;
+    virCHDomainObjPrivate *priv = NULL;
+    int rc = -1;
+    // If there is an object, we want to persist `addr_set`. If not, we just ditch it.
+    if (obj) {
+        if(obj->privateData) {
+            priv = obj->privateData;
+            addr_set = priv->pciAddrSet;
+        } else {
+            // An object without privateData initialized seems like a bad thing (shouldn't exists).
+            VIR_ERROR("%s:%d: Cannot allocate PCI addresses! Domain object supplied but private Data not initialized!", 
+                      __FILE_NAME__,
+                      __LINE__);
+            return -1;
+        }
+    }
+
+    if (!addr_set) {
+        if (!(addr_set = chDomainPCIAddressSetCreate(def))) {
+            VIR_ERROR("%s:%d: Address set allocation failed!", __FILE_NAME__, __LINE__);
+            return -1;
+        };
+    }
+
+    if (!addr_set->buses) {
+        VIR_ERROR("%s:%d: Number of PCI busses is zero!", __FILE_NAME__, __LINE__);
+        goto cleanup;
+    }
+
+    // We support exactly one PCI bus currently. We need to set the respective model for usign it
+    if (virDomainPCIAddressBusSetModel(&addr_set->buses[0], VIR_DOMAIN_CONTROLLER_MODEL_PCI_ROOT, true) < 0)
+        goto cleanup;
+
+    // Add all devices to the address set
+    if (chInitPciDevices(def, addr_set)) {
+        virReportError(VIR_ERR_INTERNAL_ERROR, "PCI address assignment failed! See above.");
+        goto cleanup;
+    }
+
+    // We got a running domain object, so we persist the PCI address set
+    if (priv) {
+        priv->pciAddrSet = g_steal_pointer(&addr_set);
+    }
+    rc = 0;
+
+    cleanup:
+    virDomainPCIAddressSetFree(addr_set);
 
     return rc;
 }
