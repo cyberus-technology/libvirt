@@ -971,15 +971,8 @@ virCHMonitorReattach(virDomainObj *vm, virCHDriverConfig *cfg, virCHDriver *driv
     mon->eventmonitorfd = event_monitor_fd;
     VIR_DEBUG("%s: Opened the event monitor FIFO(%s)", vm->def->name, mon->eventmonitorpath);
 
-    // Initialize our one and only PCI bus
-    if (chDomainPCIAddressSetCreate(vm)) {
-        virReportError(VIR_ERR_INTERNAL_ERROR,
-                   "CHV driver only supports `ethernet` network types!");
-        return NULL;
-    }
-
     // Attach all devices from the config to the PCI bus
-    if (chInitPciDevices(vm)) {
+    if (chAssignPciAddresses(vm->def, vm)) {
         virReportError(VIR_ERR_INTERNAL_ERROR,
                     "Failed to assign addresses to PCI devices defined in XML!");
         return NULL;
