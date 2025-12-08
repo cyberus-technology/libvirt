@@ -28,6 +28,7 @@
 #include "virtime.h"
 #include "virsystemd.h"
 #include "datatypes.h"
+#include "ch_pci_addr.h"
 
 #define VIR_FROM_THIS VIR_FROM_CH
 
@@ -374,10 +375,21 @@ virCHDomainRefreshThreadInfo(virDomainObj *vm)
                  maxvcpus, ncpus);
 }
 
+
+static int
+chDomainDefAssignAddresses(virDomainDef *def,
+                             unsigned int parseFlags G_GNUC_UNUSED,
+                             void *opaque,
+                             void *parseOpaque)
+{
+    return chAssignPciAddresses(def, NULL);
+}
+
 virDomainDefParserConfig virCHDriverDomainDefParserConfig = {
     .domainPostParseBasicCallback = virCHDomainDefPostParseBasic,
     .domainPostParseCallback = virCHDomainDefPostParse,
     .deviceValidateCallback = chValidateDomainDeviceDef,
+    .assignAddressesCallback = chDomainDefAssignAddresses,
     .features = VIR_DOMAIN_DEF_FEATURE_NO_STUB_CONSOLE |
                 VIR_DOMAIN_DEF_FEATURE_USER_ALIAS,
 };
