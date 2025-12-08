@@ -1021,15 +1021,8 @@ virCHProcessPrepareDomain(virDomainObj *vm)
 
     g_atomic_int_set(&priv->shutdown_done, 0);
 
-    // Initialize our one and only PCI bus
-    if (chDomainPCIAddressSetCreate(vm)) {
-        virReportError(VIR_ERR_INTERNAL_ERROR,
-                   "CHV driver only supports `ethernet` network types!");
-        return -1;
-    }
-
     // Attach all devices from the config to the PCI bus
-    if (chInitPciDevices(vm)) {
+    if (chAssignPciAddresses(vm->def, vm)) {
         virReportError(VIR_ERR_INTERNAL_ERROR,
                     "Failed to assign addresses to PCI devices defined in XML!");
         return -1;
