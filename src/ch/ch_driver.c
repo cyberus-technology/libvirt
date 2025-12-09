@@ -4110,11 +4110,24 @@ chDomainDetachPrepDisk(virDomainObj *vm,
     return 0;
 }
 
+
+/*
+ * Detaches the devices from the running domain and might release the address
+ * occupied by it.
+ *
+ * @vm: Pointer to the VM domain object from which the device is to be removed
+ * @match: Device configuration to search in the VM for removal
+ * @driver: Unused
+ * @async: Unused
+ * @free_addr: Instruction the function to either free the address (if true) 
+ * or keep it allocated (if false).
+ */
 static int
 chDomainDetachDeviceLive(virDomainObj *vm,
                          virDomainDeviceDef *match,
                          virCHDriver */*driver*/,
-                         bool /*async*/)
+                         bool /*async*/,
+                         bool free_addr )
 {
     virDomainDeviceDef detach = { .type = match->type };
     virDomainDeviceInfo *info = NULL;
@@ -4183,12 +4196,12 @@ chDomainDetachDeviceLive(virDomainObj *vm,
         return -1;
     }
 
-    if (info->type == VIR_DOMAIN_DEVICE_ADDRESS_TYPE_PCI) {
-        DBG("Release PCI address for device '%s'", info->alias);
-        chDomainReleaseDeviceAddress(vm, info);
-        DBG("");
-    } else {
-        DBG("Detached non-PCI device '%s'!", info->alias);
+    // Check if we have to release the address used by the device
+    if (free_addr) {
+        // Free PCI device addresses
+        if (info->type == VIR_DOMAIN_DEVICE_ADDRESS_TYPE_PCI) {
+            chDomainReleaseDeviceAddress(vm, info);
+        } 
     }
 
     if (match->type == VIR_DOMAIN_DEVICE_DISK) {
@@ -4301,6 +4314,48 @@ chDomainDetachDeviceConfig(virDomainDef *vmdef,
     return 0;
 }
 
+static bool chDomainContainsDevice(virDomainDef* dom_def, virDomainDeviceDef* dev_def) {
+    switch (dev_def->type) {
+        case VIR_DOMAIN_DEVICE_DISK:
+            return NULL != virDomainDiskByName(dom_def, dev_def->data.disk->dst, false);
+            break;
+        case VIR_DOMAIN_DEVICE_NET:
+            return NULL != virDomainNetFindByName(dom_def, dev_def->data.net->ifname);
+            break;
+            case VIR_DOMAIN_DEVICE_SOUND:
+        case VIR_DOMAIN_DEVICE_HOSTDEV:
+        case VIR_DOMAIN_DEVICE_LEASE:
+        case VIR_DOMAIN_DEVICE_CONTROLLER:
+        case VIR_DOMAIN_DEVICE_CHR:
+        case VIR_DOMAIN_DEVICE_FS:
+        case VIR_DOMAIN_DEVICE_RNG:
+        case VIR_DOMAIN_DEVICE_MEMORY:
+        case VIR_DOMAIN_DEVICE_REDIRDEV:
+        case VIR_DOMAIN_DEVICE_SHMEM:
+        case VIR_DOMAIN_DEVICE_WATCHDOG:
+        case VIR_DOMAIN_DEVICE_INPUT:
+        case VIR_DOMAIN_DEVICE_VSOCK:
+        case VIR_DOMAIN_DEVICE_IOMMU:
+        case VIR_DOMAIN_DEVICE_VIDEO:
+        case VIR_DOMAIN_DEVICE_GRAPHICS:
+        case VIR_DOMAIN_DEVICE_HUB:
+        case VIR_DOMAIN_DEVICE_SMARTCARD:
+        case VIR_DOMAIN_DEVICE_MEMBALLOON:
+        case VIR_DOMAIN_DEVICE_NVRAM:
+        case VIR_DOMAIN_DEVICE_NONE:
+        case VIR_DOMAIN_DEVICE_TPM:
+        case VIR_DOMAIN_DEVICE_PANIC:
+        case VIR_DOMAIN_DEVICE_AUDIO:
+        case VIR_DOMAIN_DEVICE_CRYPTO:
+        case VIR_DOMAIN_DEVICE_PSTORE:
+        case VIR_DOMAIN_DEVICE_LAST:
+            virReportError(VIR_ERR_OPERATION_UNSUPPORTED,
+                           _("Currently no support for check existence for devices of type `%s`"),
+                           virDomainDeviceTypeToString(dev_def->type));
+    }
+    return false;
+}
+
 static int
 chDomainDetachDeviceLiveAndConfig(virCHDriver *driver,
                                   virDomainObj *vm,
@@ -4325,26 +4380,24 @@ chDomainDetachDeviceLiveAndConfig(virCHDriver *driver,
         !(flags & VIR_DOMAIN_AFFECT_LIVE))
         parse_flags |= VIR_DOMAIN_DEF_PARSE_INACTIVE;
 
-    if (flags & VIR_DOMAIN_AFFECT_CONFIG) {
-        if (!(dev_config = virDomainDeviceDefParse(xml, vm->def, driver->xmlopt,
-                                                   NULL, parse_flags)))
-            return -1;
-    }
-
-    if (flags & VIR_DOMAIN_AFFECT_LIVE) {
-        if (!(dev_live = virDomainDeviceDefParse(xml, vm->def, driver->xmlopt,
-                                                 NULL, parse_flags))) {
-            DBG("chDomainDetachDeviceLiveAndConfig failed");
-            return -1;
-        }
-    }
+    // Get config from both, live and config. We need `dev_config` in any case to 
+    // decide if we should keep the address allocated in the live domain.
+    vmdef = virDomainObjCopyPersistentDef(vm, driver->xmlopt, NULL);
+    /* Make a copy for updated domain. */
+    dev_config = virDomainDeviceDefParse(xml, vmdef, driver->xmlopt, NULL, parse_flags);
+    dev_live = virDomainDeviceDefParse(xml, vm->def, driver->xmlopt,NULL, parse_flags);
 
     if (flags & VIR_DOMAIN_AFFECT_CONFIG) {
-         /* Make a copy for updated domain. */
-         vmdef = virDomainObjCopyPersistentDef(vm, driver->xmlopt, NULL);
          if (!vmdef)
              return -1;
 
+        if (!dev_config) {
+            VIR_ERROR("%s:%d: Tried to detach non-present device from config!", 
+                      __FILE_NAME__,
+                      __LINE__);
+        }
+
+         
          if (chDomainDetachDeviceConfig(vmdef, dev_config, NULL,
                                           parse_flags,
                                           driver->xmlopt) < 0)
@@ -4352,9 +4405,21 @@ chDomainDetachDeviceLiveAndConfig(virCHDriver *driver,
     }
 
     if (flags & VIR_DOMAIN_AFFECT_LIVE) {
+        bool free_addr = false;
         int rc;
 
-        if ((rc = chDomainDetachDeviceLive(vm, dev_live, driver, false)) < 0)
+        // Only release the address, if the device is not present in the persistent config
+        // or if it is removed from both, the live and persistent config.
+        if (!chDomainContainsDevice(vmdef, dev_live) || (flags & VIR_DOMAIN_AFFECT_CONFIG)) 
+            free_addr = true;
+
+        if (!dev_live) {
+            VIR_ERROR("%s:%d: Tried to detach non-present device from live!", 
+                      __FILE_NAME__,
+                      __LINE__);
+        }
+
+        if ((rc = chDomainDetachDeviceLive(vm, dev_live, driver, false, free_addr)) < 0)
             return -1;
 
         if (virDomainObjIsActive(vm)) {
