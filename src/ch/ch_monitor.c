@@ -1917,16 +1917,19 @@ int virCHMonitorMigrationReceive(virCHMonitor *mon,
     }
 
     if (use_tls) {
-      if (!virFileExists(driver->config->migrateTLSx509certdir)) {
-        virReportError(
-            VIR_ERR_CONF_SYNTAX,
-            _("migrate_tls_x509_cert_dir directory '%1$s' does not exist"),
-            driver->config->migrateTLSx509certdir);
-        return -1;
-      }
+        if (!virFileExists(driver->config->migrateTLSx509certdir)) {
+            virReportError(
+                    VIR_ERR_CONF_SYNTAX,
+                    _("migrate_tls_x509_cert_dir directory '%1$s' does not exist"),
+                    driver->config->migrateTLSx509certdir);
+            rc = -1;
+            goto err;
+        }
 
-      if (virJSONValueObjectAppendString(content, "tls_dir", driver->config->migrateTLSx509certdir) != 0)
-        return -1;
+        if (virJSONValueObjectAppendString(content, "tls_dir", driver->config->migrateTLSx509certdir) != 0) {
+            rc = -1;
+            goto err;
+        }
     }
 
     if (!(receiveJson = virJSONValueToString(content, false))) {
