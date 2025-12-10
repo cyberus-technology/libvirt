@@ -1687,12 +1687,16 @@ int virCHMonitorMigrationSend(virCHMonitor *mon,
     headers = curl_slist_append(headers, "Content-Type: application/json");
 
 
-    if (virJSONValueObjectAppendString(content, "destination_url", dst_uri) < 0)
-        return -1;
+    if (virJSONValueObjectAppendString(content, "destination_url", dst_uri) < 0) {
+        ret = -1;
+        goto out;
+    }
 
     if (parallel_connections > 1) {
-        if (virJSONValueObjectAppendNumberInt(content, "connections", parallel_connections) != 0)
-            return -1;
+        if (virJSONValueObjectAppendNumberInt(content, "connections", parallel_connections) != 0) {
+            ret = -1;
+            goto out;
+        }
     }
 
     if (use_tls) {
@@ -1701,15 +1705,20 @@ int virCHMonitorMigrationSend(virCHMonitor *mon,
             VIR_ERR_CONF_SYNTAX,
             _("migrate_tls_x509_cert_dir directory '%1$s' does not exist"),
             tls_dir);
-        return -1;
+        ret = -1;
+        goto out;
       }
 
-      if (virJSONValueObjectAppendString(content, "tls_dir", tls_dir) != 0)
-        return -1;
+      if (virJSONValueObjectAppendString(content, "tls_dir", tls_dir) != 0) {
+        ret = -1;
+        goto out;
+      }
     }
 
-    if (!(payload = virJSONValueToString(content, false)))
-        return -1;
+    if (!(payload = virJSONValueToString(content, false))) {
+        ret = -1;
+        goto out;
+    }
 
     DBG("Send VM to url %s json %s", dst_uri, payload);
 
@@ -1752,6 +1761,7 @@ retry:
 
     /* reset the libcurl handle to avoid leaking a stack pointer to data */
     curl_easy_reset(mon->handle);
+out:
     curl_slist_free_all(headers);
     return ret;
 }
