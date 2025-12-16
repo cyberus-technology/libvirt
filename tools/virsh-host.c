@@ -1380,6 +1380,9 @@ cmdVersion(vshControl *ctl, const vshCmd *cmd G_GNUC_UNUSED)
     vshPrint(ctl, _("Compiled against library: libvirt %1$d.%2$d.%3$d\n"),
              major, minor, rel);
 
+    vshPrint(ctl, _("Compiled with the Cloud Hypervisor patches by Cyberus Technology for SAP/Apeiro\n"));
+    vshPrint(ctl, _("|-Commit: " COMMIT_HASH "\n"));
+
     if (virGetVersion(&libVersion, hvType, &apiVersion) < 0) {
         vshError(ctl, "%s", _("failed to get the library version"));
         return false;
