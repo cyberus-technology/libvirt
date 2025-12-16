@@ -36,10 +36,7 @@
         cp -r ${keycodemapdb}/* $out/subprojects/keycodemapdb/
       '';
 
-      # We just use "every system" here to not restrict any user. However, it
-      # likely happens that certain packages don't build for/under certain
-      # systems.
-      systems = nixpkgs.lib.systems.flakeExposed;
+      systems = [ "x86_64-linux" ];
       forAllSystems =
         function: nixpkgs.lib.genAttrs systems (system: function nixpkgs.legacyPackages.${system});
     in
