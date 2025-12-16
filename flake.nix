@@ -1,5 +1,5 @@
 {
-  description = "libvirt";
+  description = "libvirt with Cloud Hypervisor patches by Cyberus Technology";
 
   inputs = {
     cloud-hypervisor-src.url = "github:cyberus-technology/cloud-hypervisor?ref=gardenlinux";
@@ -23,20 +23,47 @@
     }:
     let
       pkgs = nixpkgs.legacyPackages.x86_64-linux;
+      lib = pkgs.lib;
+      fs = lib.fileset;
+
+      # Clean source for libvirt. No GitLab CI, no Nix
+      cleanSource = lib.cleanSourceWith {
+        src = self;
+        filter =
+          path: type:
+          let
+            baseName = baseNameOf path;
+          in
+          # Exclude .git and other VCS artifacts
+          lib.cleanSourceFilter path type
+          && (
+            # Exclude our own additional files
+            !(lib.hasSuffix ".nix" baseName || baseName == "flake.lock" || baseName == ".gitlab-ci.yml")
+          );
+      };
 
       # libvirt requires a populated submodule to build successfully. As we
       # cannot reference a local git directory as a flake input to let nix
       # handle the submodule population, we assemble it ourself.
-      sourceWithSubmodules =
+      cleanSourceWithSubmodules =
         (pkgs.runCommand "source-with-submodules" { } ''
           mkdir -p $out
 
-          cp -r ${self}/* $out/
+          cp -r ${cleanSource}/* $out/
 
-          mkdir -p $out/subprojects/keycodemapdb
-          cp -r ${keycodemapdb}/* $out/subprojects/keycodemapdb/
+          # If someone fetched this flake with `submodules=1`, then we are good
+          # to go. If not, we populate the submodules.
+          if [ ! -d $out/subprojects/keycodemapdb ]; then
+            echo "Was fetched without submodules: populating ..."
+            mkdir -p $out/subprojects/keycodemapdb
+            cp -r ${keycodemapdb}/* $out/subprojects/keycodemapdb/
+          else
+            echo "Was fetched with 'submodules=1'"
+          fi
         '')
         # We make the source behave somewhat like a real flake input.
+        # TODO: Remove once libvirt-tests does not consume `libvirt-src` any longer
+        # but consumes the package from this flake instead!
         .overrideAttrs
           {
             rev = if self ? rev then self.rev else self.dirtyRev;
@@ -57,6 +84,49 @@
       # Nix flake attribute structure (tests.<system>.<test-name>). For each
       # test, we override the source of libvirt with the source from this
       # repository.
+      packages = forAllSystems (
+        pkgs:
+        let
+          # This builds libvirt with our own sources and the normal upstream libvirt configuration.
+          libvirt = pkgs.libvirt.overrideAttrs (_old: {
+            name = "libvirt-chv";
+            src = cleanSourceWithSubmodules;
+            version =
+              # We fetch the version from `meson.build`.
+              let
+                fallback = builtins.trace "WARN: cannot obtain version from libvirt fork" "0.0.0-unknown";
+                mesonBuild = builtins.readFile "${cleanSourceWithSubmodules}/meson.build";
+                # Searches for the line `version: '11.3.0'` and captures the version.
+                matches = builtins.match ".*[[:space:]]*version:[[:space:]]'([0-9]+.[0-9]+.[0-9]+)'.*" mesonBuild;
+                version = builtins.elemAt matches 0;
+              in
+              if matches != null then version else fallback;
+            doInstallCheck = false;
+            doCheck = false;
+            patches = [
+              ./patches/libvirt/0001-meson-patch-in-an-install-prefix-for-building-on-nix.patch
+              ./patches/libvirt/0002-substitute-zfs-and-zpool-commands.patch
+            ];
+          });
+          # This builds libvirt with our own sources and:
+          # - support for debugging (optimized debug build with symbols)
+          # - support for address sanitizers
+          libvirt-debugoptimized = libvirt.overrideAttrs (_old: {
+            mesonBuildType = "debugoptimized";
+            # IMPORTANT: donStrip is required because otherwise, nix will strip all
+            # debug info from the binaries in its fixupPhase. Having the debug info
+            # is crucial for getting source code info from the sanitizers, as well as
+            # when using GDB.
+            dontStrip = true;
+          });
+        in
+        {
+          inherit libvirt libvirt-debugoptimized;
+          default = libvirt;
+        }
+      );
+      # We export all tests from `libvirt-tests.tests` but override the libvirt
+      # input with libvirt from this repository.
       tests = forAllSystems (
         pkgs:
         let
@@ -66,7 +136,9 @@
         # New attribute set with updated `libvirt-src` input for each test.
         lib.concatMapAttrs (name: value: {
           ${name} = value.override {
-            libvirt-src = sourceWithSubmodules;
+            # TODO use the package of this flake in libvirt-tests once libvirt-tests supports this
+            # libvirt-chv = self.packages.${system}.libvirt-debugoptimized;
+            libvirt-src = cleanSourceWithSubmodules;
           };
         }) libvirt-tests.tests.${system}
       );
