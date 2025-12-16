@@ -13,14 +13,21 @@
     nixpkgs.url = "github:nixos/nixpkgs/nixos-25.11";
   };
 
-  outputs = { self, nixpkgs, libvirt-tests, keycodemapdb, ... }:
+  outputs =
+    {
+      self,
+      nixpkgs,
+      libvirt-tests,
+      keycodemapdb,
+      ...
+    }:
     let
       pkgs = nixpkgs.legacyPackages.x86_64-linux;
 
       # libvirt requires a populated submodule to build successfully. As we
       # cannot reference a local git directory as a flake input to let nix
       # handle the submodule population, we assemble it ourself.
-      sourceWithSubmodules = pkgs.runCommand "source-with-submodules" {} ''
+      sourceWithSubmodules = pkgs.runCommand "source-with-submodules" { } ''
         mkdir -p $out
 
         cp -r ${self}/* $out/
@@ -37,12 +44,12 @@
         function: nixpkgs.lib.genAttrs systems (system: function nixpkgs.legacyPackages.${system});
     in
     {
-      formatter = forAllSystems (pkgs: pkgs.nixfmt-rfc-style);
+      formatter = forAllSystems (pkgs: pkgs.nixfmt-tree);
       devShells = forAllSystems (pkgs: {
         default = pkgs.mkShell {
           inputsFrom = [ pkgs.libvirt ];
         };
       });
-      tests = libvirt-tests.tests.x86_64-linux.override {libvirt-src = sourceWithSubmodules; };
+      tests = libvirt-tests.tests.x86_64-linux.override { libvirt-src = sourceWithSubmodules; };
     };
 }
