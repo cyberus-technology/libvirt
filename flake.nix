@@ -41,12 +41,12 @@
         function: nixpkgs.lib.genAttrs systems (system: function nixpkgs.legacyPackages.${system});
     in
     {
-      formatter = forAllSystems (pkgs: pkgs.nixfmt-tree);
       devShells = forAllSystems (pkgs: {
         default = pkgs.mkShell {
           inputsFrom = [ pkgs.libvirt ];
         };
       });
+      formatter = forAllSystems (pkgs: pkgs.nixfmt-tree);
       tests = libvirt-tests.tests.x86_64-linux.override { libvirt-src = sourceWithSubmodules; };
     };
 }
