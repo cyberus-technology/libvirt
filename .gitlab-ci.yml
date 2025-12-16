@@ -61,7 +61,7 @@ build:nixos-tests:
   dependencies: []
   needs: []
   script:
-    - nix build -L .#tests.default.driver
+    - nix build -L .#tests.x86_64-linux.default.driver
 
 test:nixos-tests:
   stage: test
@@ -80,4 +80,4 @@ test:nixos-tests:
     PYTHONUNBUFFERED: "1"
     TERM: "xterm"
   script:
-    - nix run -L .#tests.default.driver
+    - nix run -L .#tests.x86_64-linux.default.driver
