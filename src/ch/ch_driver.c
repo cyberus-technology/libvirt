@@ -246,6 +246,8 @@ chDomainCreateXML(virConnectPtr conn,
                                    NULL)))
         goto cleanup;
 
+    DBG("creating domain: name=%s,title=%s", vm->def->name, vm->def->title);
+
     /* cleanup if there's any stale managedsave dir */
     managed_save_path = chDomainManagedSavePath(driver, vm);
     if (virFileDeleteTree(managed_save_path) < 0) {
@@ -298,6 +300,8 @@ chDomainCreateWithFlags(virDomainPtr dom, unsigned int flags)
 
     if (!(vm = virCHDomainObjFromDomain(dom)))
         goto cleanup;
+
+    DBG("creating domain: name=%s,title=%s", vm->def->name, vm->def->title);
 
     if (virDomainCreateWithFlagsEnsureACL(dom->conn, vm->def) < 0)
         goto cleanup;
@@ -467,6 +471,8 @@ chDomainDefineXMLFlags(virConnectPtr conn, const char *xml, unsigned int flags)
                                    0, &oldDef)))
         goto cleanup;
 
+    DBG("defining domain: name=%s,title=%s", vm->def->name, vm->def->title);
+
     if (virDomainDefSave(vm->newDef ? vm->newDef : vm->def,
                          driver->xmlopt, cfg->configDir) < 0)
         goto cleanup;
@@ -521,6 +527,8 @@ chDomainUndefineFlags(virDomainPtr dom,
 
     if (!(vm = virCHDomainObjFromDomain(dom)))
         goto cleanup;
+
+    DBG("undefine domain: name=%s,title=%s", vm->def->name, vm->def->title);
 
     if (virDomainUndefineFlagsEnsureACL(dom->conn, vm->def) < 0)
         goto cleanup;
@@ -617,6 +625,8 @@ chDomainShutdownFlags(virDomainPtr dom,
 
     if (!(vm = virCHDomainObjFromDomain(dom)))
         goto cleanup;
+
+    DBG("shutting down domain: name=%s,title=%s", vm->def->name, vm->def->title);
 
     if (virDomainShutdownFlagsEnsureACL(dom->conn, vm->def, flags) < 0)
         goto cleanup;
@@ -830,6 +840,8 @@ chDomainDestroyFlags(virDomainPtr dom, unsigned int flags)
     if (!(vm = virCHDomainObjFromDomain(dom)))
         goto cleanup;
 
+    DBG("destroying domain: name=%s,title=%s", vm->def->name, vm->def->title);
+
     priv = vm->privateData;
 
     if (virDomainDestroyFlagsEnsureACL(dom->conn, vm->def) < 0)
@@ -1012,6 +1024,8 @@ chDomainSaveFlags(virDomainPtr dom, const char *to, const char *dxml, unsigned i
     if (!(vm = virCHDomainObjFromDomain(dom)))
         goto cleanup;
 
+    DBG("saving domain: name=%s,title=%s", vm->def->name, vm->def->title);
+
     if (virDomainSaveFlagsEnsureACL(dom->conn, vm->def) < 0)
         goto cleanup;
 
@@ -1147,6 +1161,8 @@ chDomainManagedSave(virDomainPtr dom, unsigned int flags)
 
     if (!(vm = virCHDomainObjFromDomain(dom)))
         goto cleanup;
+
+    DBG("managedsave domain: name=%s,title=%s", vm->def->name, vm->def->title);
 
     if (virDomainManagedSaveEnsureACL(dom->conn, vm->def) < 0)
         goto cleanup;
@@ -1298,6 +1314,8 @@ chDomainRestoreFlags(virConnectPtr conn,
                                    VIR_DOMAIN_OBJ_LIST_ADD_CHECK_LIVE,
                                    NULL)))
         goto cleanup;
+
+    DBG("restoring domain: name=%s,title=%s", vm->def->name, vm->def->title);
 
     if (virDomainObjBeginJob(vm, VIR_JOB_MODIFY) < 0)
         goto cleanup;
@@ -2663,6 +2681,8 @@ chDomainMigrateBegin3(virDomainPtr domain,
     if (!(vm = virCHDomainObjFromDomain(domain)))
         return NULL;
 
+    DBG("begin migrating domain: name=%s,title=%s", vm->def->name, vm->def->title);
+
     if (virDomainMigrateBegin3EnsureACL(domain->conn, vm->def) < 0) {
         virDomainObjEndAPI(&vm);
         return NULL;
@@ -3040,6 +3060,8 @@ chDomainMigrateConfirm3(virDomainPtr domain,
     if (!(vm = virCHDomainObjFromDomain(domain)))
         return -1;
 
+    DBG("confirm migration domain: name=%s,title=%s", vm->def->name, vm->def->title);
+
     // priv = vm->privateData;
 
     if (virDomainMigrateConfirm3EnsureACL(domain->conn, vm->def) < 0) {
@@ -3118,6 +3140,8 @@ chDomainMigratePerform3Impl(virDomainObj *vm,
 
     DBG("chDomainMigratePerform3Impl %s %s %s %lu %s %u %s",
         xmlin, dconnuri, uri, flags, dname, parallel_connections, use_tls ? "true" : "false");
+
+    DBG("migrating domain: name=%s,title=%s", vm->def->name, vm->def->title);
 
     if (!priv->monitor) {
         VIR_ERROR(_("VMs monitor not initialized"));
@@ -3241,6 +3265,8 @@ chDomainMigratePerform3(virDomainPtr dom,
 
     if (!(vm = virCHDomainObjFromDomain(dom)))
         return -1;
+
+    DBG("perform migrating domain: name=%s,title=%s", vm->def->name, vm->def->title);
 
     if (virDomainMigratePerform3EnsureACL(dom->conn, vm->def) < 0) {
         rc = -1;
