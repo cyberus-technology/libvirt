@@ -3323,19 +3323,32 @@ chDomainMigratePerform3Params(virDomainPtr dom,
     int rc = -1;
     bool use_tls = false;
 
+    if (!(vm = virCHDomainObjFromDomain(dom)))
+        return -1;
+
+    if (virDomainMigratePerform3EnsureACL(dom->conn, vm->def) < 0) {
+        rc = -1;
+        goto error;
+    }
+
     if (virTypedParamsGetString(params, nparams,
                                 VIR_MIGRATE_PARAM_URI,
-                                &uri) < 0)
+                                &uri) < 0) {
+        rc = -1;
         goto error;
+    }
 
     if (virTypedParamsGetString(params, nparams,
                                 VIR_MIGRATE_PARAM_DEST_NAME,
-                                &dname) < 0)
+                                &dname) < 0) {
+        rc = -1;
         goto error;
+    }
 
     if (virTypedParamsGetString(params, nparams,
                                 VIR_MIGRATE_PARAM_DEST_XML,
                                 &xmlin) < 0) {
+        rc = -1;
         goto error;
     }
 
@@ -3357,12 +3370,6 @@ chDomainMigratePerform3Params(virDomainPtr dom,
     use_tls = flags & VIR_MIGRATE_TLS;
 
     DBG("chDomainMigratePerform3Params dconnuri: %s dname: %s parallel connection: %d", dconnuri, dname, parallel_connections);
-
-    if (!(vm = virCHDomainObjFromDomain(dom)))
-        return -1;
-
-    if (virDomainMigratePerform3EnsureACL(dom->conn, vm->def) < 0)
-        goto error;
 
     rc = chDomainMigratePerform3Impl(vm,
                                      driver,
