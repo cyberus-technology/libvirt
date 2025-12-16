@@ -47,6 +47,22 @@
         };
       });
       formatter = forAllSystems (pkgs: pkgs.nixfmt-tree);
-      tests = libvirt-tests.tests.x86_64-linux.override { libvirt-src = sourceWithSubmodules; };
+      # We export all tests from `libvirt-tests.tests` following the typical
+      # Nix flake attribute structure (tests.<system>.<test-name>). For each
+      # test, we override the source of libvirt with the source from this
+      # repository.
+      tests = forAllSystems (
+        pkgs:
+        let
+          lib = pkgs.lib;
+          system = pkgs.stdenv.hostPlatform.system;
+        in
+        # New attribute set with updated `libvirt-src` input for each test.
+        lib.concatMapAttrs (name: value: {
+          ${name} = value.override {
+            libvirt-src = sourceWithSubmodules;
+          };
+        }) libvirt-tests.tests.${system}
+      );
     };
 }
