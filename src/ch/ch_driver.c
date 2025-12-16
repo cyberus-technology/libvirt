@@ -3158,7 +3158,7 @@ chDomainMigratePerform3Impl(virDomainObj *vm,
 
     if (!priv->monitor) {
         VIR_ERROR(_("VMs monitor not initialized"));
-        goto cleanup;
+        return -1;
     }
 
     if (chMigrationJobStart(vm, VIR_ASYNC_JOB_MIGRATION_OUT) < 0) {
