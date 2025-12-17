@@ -1,4 +1,5 @@
 stages:
+  - build
   - test
 
 variables:
@@ -19,14 +20,32 @@ variables:
     paths:
       - "$CI_PROJECT_DIR/.cache/nix"
 
+build:nixos-tests:
+  stage: build
+  rules:
+    - when: always
+  extends:
+    - .nix_build_template
+  dependencies: []
+  script:
+    - nix build -L .#tests.default.driver
+
 test:nixos-tests:
   stage: test
+  rules:
+    # Resource groups do not work across forks. However, we need the resource
+    # group to apply globally for the GitLab CI runner. As a workaround, we
+    # only run this job in the main repository (on pull requests). Once all
+    # forks were rebased, this change becomes effective.
+    - if: '$CI_PROJECT_PATH == "cyberus/cloud/libvirt"'
+      when: always
+    - when: never
+  resource_group: host-tcp-ports
   extends:
     - .nix_build_template
   dependencies: []
   variables:
     PYTHONUNBUFFERED: "1"
     TERM: "xterm"
-  resource_group: host-tcp-ports
   script:
     - nix run -L .#tests.default.driver
