@@ -3243,6 +3243,7 @@ chDomainMigratePerform3(virDomainPtr dom,
         return -1;
 
     if (virDomainMigratePerform3EnsureACL(dom->conn, vm->def) < 0) {
+        rc = -1;
         goto cleanup;
     }
 
