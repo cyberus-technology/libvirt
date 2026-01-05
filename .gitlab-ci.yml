@@ -50,7 +50,9 @@ build:nixos-tests:
     - when: always
   extends:
     - .nix_build_template
+  # No dependency to lint stage.
   dependencies: []
+  needs: []
   script:
     - nix build -L .#tests.default.driver
 
@@ -67,8 +69,6 @@ test:nixos-tests:
   resource_group: host-tcp-ports
   extends:
     - .nix_build_template
-  needs: [] # no dependency to lint stage
-  dependencies: []
   variables:
     PYTHONUNBUFFERED: "1"
     TERM: "xterm"
