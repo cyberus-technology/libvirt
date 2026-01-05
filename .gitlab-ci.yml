@@ -44,6 +44,13 @@ lint:commit:
     # Lint commit messages in the range from target branch to current HEAD
     - nix run nixpkgs#gitlint -- --commits origin/$TARGET_BRANCH..
 
+lint:nix-fmt:
+  stage: lint
+  extends:
+    - .nix_build_template
+  script:
+    - nix fmt -- --ci
+
 build:nixos-tests:
   stage: build
   rules:
