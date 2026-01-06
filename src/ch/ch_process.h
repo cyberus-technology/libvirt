@@ -41,11 +41,3 @@ int virCHProcessStartRestore(virCHDriver *driver,
                          const char *from);
 
 int virCHProcessUpdateInfo(virDomainObj *vm);
-
-int
-chProcessAddNetworkDevice(virCHDriver *driver,
-                          virCHMonitor *mon,
-                          virDomainDef *vmdef,
-                          virDomainNetDef *net,
-                          int **nicindexes,
-                          size_t *nnicindexes);

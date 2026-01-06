@@ -138,6 +138,7 @@ int virCHMonitorGetIOThreads(virCHMonitor *mon,
                              virDomainIOThreadInfo ***iothreads);
 int
 virCHMonitorBuildNetJson(virDomainNetDef *netdef,
+                         int netindex,
                          char **jsonstr);
 int
 virCHMonitorAddDisk(virCHMonitor* mon,
