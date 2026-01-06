@@ -685,6 +685,7 @@ chProcessAddNetworkDevice(virCHDriver *driver,
         return -1;
     }
 
+    chAssignDeviceNetAlias(vmdef, net);
     if (virCHMonitorBuildNetJson(net, &netJSONPayload) < 0) {
         virReportError(VIR_ERR_INTERNAL_ERROR, "%s",
                         _("Failed to build net json"));
