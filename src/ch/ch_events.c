@@ -60,7 +60,7 @@ virCHEventStopProcess(virDomainObj *vm,
 
     if (virDomainObjBeginJob(vm, VIR_JOB_DESTROY))
         return -1;
-    virCHProcessStop(driver, vm, reason, VIR_CH_PROCESS_STOP_FORCE);
+    virCHProcessStop(driver, vm, reason);
     virDomainObjEndJob(vm);
 
     return 0;
