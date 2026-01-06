@@ -588,24 +588,15 @@ virCHMonitorBuildVMJson(virCHDriver *driver, virDomainDef *vmdef,
     return 0;
 }
 
-static virJSONValue*
-virCHMonitorBuildKeyValueJson(const char *key,
-                              const char *value)
-{
-    g_autoptr(virJSONValue) content = virJSONValueNewObject();
-
-    if (virJSONValueObjectAppendString(content, key, value) < 0)
-        return NULL;
-
-    return g_steal_pointer(&content);
-}
-
 static int
 virCHMonitorBuildKeyValueStringJson(char **jsonstr,
                                     const char *key,
                                     const char *value)
 {
-    g_autoptr(virJSONValue) content = virCHMonitorBuildKeyValueJson(key, value);
+    g_autoptr(virJSONValue) content = virJSONValueNewObject();
+
+    if (virJSONValueObjectAppendString(content, key, value) < 0)
+        return -1;
 
     if (!(*jsonstr = virJSONValueToString(content, false)))
         return -1;
