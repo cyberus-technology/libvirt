@@ -1,5 +1,0 @@
-module Test_libvirtd_ch =
-  @CONFIG@
-
-   test Libvirtd_ch.lns get conf =
-{ "log_level" = "0" }
