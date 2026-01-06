@@ -24,3 +24,7 @@ tags
 # clangd related ignores
 .clangd
 compile_commands.json
+
+# Nix
+.direnv
+/result*
