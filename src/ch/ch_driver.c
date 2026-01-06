@@ -681,13 +681,9 @@ chDomainDestroyFlags(virDomainPtr dom, unsigned int flags)
     virCHDriver *driver = dom->conn->privateData;
     virDomainObj *vm;
     virObjectEvent *event = NULL;
-    unsigned int stopFlags = 0;
     int ret = -1;
 
-    virCheckFlags(VIR_DOMAIN_DESTROY_GRACEFUL, -1);
-
-    if (!(flags & VIR_DOMAIN_DESTROY_GRACEFUL))
-        stopFlags |= VIR_CH_PROCESS_STOP_FORCE;
+    virCheckFlags(0, -1);
 
     if (!(vm = virCHDomainObjFromDomain(dom)))
         goto cleanup;
@@ -702,7 +698,8 @@ chDomainDestroyFlags(virDomainPtr dom, unsigned int flags)
         goto endjob;
 
     if (virCHProcessStop(driver, vm,
-                         VIR_DOMAIN_SHUTOFF_DESTROYED, stopFlags) < 0) {
+                         VIR_DOMAIN_SHUTOFF_DESTROYED,
+                         VIR_CH_PROCESS_STOP_FORCE) < 0) {
         goto endjob;
     }
 
