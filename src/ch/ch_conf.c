@@ -211,10 +211,9 @@ virCHDriverConfigDispose(void *obj)
 {
     virCHDriverConfig *cfg = obj;
 
-    g_free(cfg->stateDir);
-    g_free(cfg->configDir);
-    g_free(cfg->logDir);
     g_free(cfg->saveDir);
+    g_free(cfg->stateDir);
+    g_free(cfg->logDir);
 }
 
 #define MIN_VERSION ((15 * 1000000) + (0 * 1000) + (0))
