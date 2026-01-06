@@ -212,7 +212,6 @@ chDomainRemoveDevice(virDomainObj *vm,
         for (i = 0; i < vm->def->ndisks; i++) {
             if (vm->def->disks[i] == device->data.disk) {
                 virDomainDiskRemove(vm->def, i);
-                g_clear_pointer(&device->data.disk, virDomainDiskDefFree);
                 break;
             }
         }
