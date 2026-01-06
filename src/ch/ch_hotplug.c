@@ -185,6 +185,7 @@ chDomainFindDisk(virDomainObj *vm,
                  virDomainDiskDef *match,
                  virDomainDiskDef **detach)
 {
+    virDomainDiskDef *disk;
     int idx;
 
     if ((idx = chFindDiskId(vm->def, match->dst)) < 0) {
@@ -192,7 +193,7 @@ chDomainFindDisk(virDomainObj *vm,
                        _("disk %1$s not found"), match->dst);
         return -1;
     }
-    *detach = vm->def->disks[idx];
+    *detach = disk = vm->def->disks[idx];
 
     return 0;
 }
