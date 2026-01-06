@@ -1028,7 +1028,7 @@ virCHProcessStop(virCHDriver *driver,
     virErrorPreserveLast(&orig_err);
 
     if (priv->monitor) {
-        virProcessKillPainfully(vm->pid, true);
+        virProcessAbort(vm->pid);
         g_clear_pointer(&priv->monitor, virCHMonitorClose);
     }
 
