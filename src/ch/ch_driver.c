@@ -2492,24 +2492,6 @@ chConnectDomainEventRegister(virConnectPtr conn,
 }
 
 
-static int
-chConnectDomainEventDeregister(virConnectPtr conn,
-                               virConnectDomainEventCallback callback)
-{
-    virCHDriver *driver = conn->privateData;
-
-    if (virConnectDomainEventDeregisterEnsureACL(conn) < 0)
-        return -1;
-
-    if (virDomainEventStateDeregister(conn,
-                                      driver->domainEventState,
-                                      callback) < 0)
-        return -1;
-
-    return 0;
-}
-
-
 /* Function Tables */
 static virHypervisorDriver chHypervisorDriver = {
     .name = "CH",
@@ -2576,7 +2558,6 @@ static virHypervisorDriver chHypervisorDriver = {
     .domainDetachDevice = chDomainDetachDevice, /* 11.8.0 */
     .domainDetachDeviceFlags = chDomainDetachDeviceFlags, /* 11.8.0 */
     .connectDomainEventRegister = chConnectDomainEventRegister, /* 11.8.0 */
-    .connectDomainEventDeregister = chConnectDomainEventDeregister, /* 11.8.0 */
 };
 
 static virConnectDriver chConnectDriver = {
