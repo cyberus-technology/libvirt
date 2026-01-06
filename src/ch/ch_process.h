@@ -26,15 +26,9 @@
 int virCHProcessStart(virCHDriver *driver,
                       virDomainObj *vm,
                       virDomainRunningReason reason);
-
-typedef enum {
-    VIR_CH_PROCESS_STOP_FORCE = 1 << 0,
-} virCHProcessStopFlags;
-
 int virCHProcessStop(virCHDriver *driver,
                      virDomainObj *vm,
-                     virDomainShutoffReason reason,
-                     unsigned int flags);
+                     virDomainShutoffReason reason);
 
 int virCHProcessStartRestore(virCHDriver *driver,
                          virDomainObj *vm,
