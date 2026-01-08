@@ -21,6 +21,8 @@ ch_driver_sources = [
   'ch_hostdev.h',
   'ch_socket.h',
   'ch_socket.c',
+  'ch_pci_addr.h',
+  'ch_pci_addr.c',
 ]
 
 driver_source_files += files(ch_driver_sources)
