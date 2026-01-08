@@ -79,5 +79,12 @@ test:nixos-tests:
   variables:
     PYTHONUNBUFFERED: "1"
     TERM: "xterm"
+    DBG_LOG_DIR: "./logs"
+  artifacts:
+    expire_in: 1 week
+    when: always
+    paths:
+      - logs/
   script:
-    - nix run -L .#tests.x86_64-linux.default.driver
+    - mkdir logs
+    - nix run -L .#tests.x86_64-linux.default.driver 2>&1 | tee logs/nixos_driver.log
