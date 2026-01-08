@@ -141,6 +141,59 @@ virCHDomainVcpuPrivateNew(void)
     return (virObject *) priv;
 }
 
+/**
+ * Initializes the Array of virDomainRNGDef with a default device.
+ * CHV creates a default RNG device if none is present, so we do the same add one to the configuration.
+ * The default as of writing this code is as follows:
+ *  - random with path /dev/urandom
+ *  - no iommu
+ *  - no bdf, but we assign one as we want libvirt and CHV to be in sync
+ *
+ * returns 0 on success, -1 otherwise
+ */
+static int virCHDomainDefAddImplicitRng(virDomainRNGDef ***deviceDefs) {
+    int ret = -1;
+    char* rng_source_file = g_strdup("/dev/urandom"); 
+    char* rng_device_alias = g_strdup("implicit-rng-device");
+    virDomainDeviceInfo implicit_rng_device_info = {
+        .alias = NULL,
+        .type = VIR_DOMAIN_DEVICE_ADDRESS_TYPE_PCI,
+        .pciConnectFlags = VIR_PCI_CONNECT_TYPE_PCI_DEVICE | VIR_PCI_CONNECT_HOTPLUGGABLE,
+    };
+    virDomainRNGDef* implicit_rng_device = g_new0 (virDomainRNGDef, 1);
+
+    if (!implicit_rng_device) {
+        virReportError(VIR_ERR_INTERNAL_ERROR,
+            _("Failed to allocate memory for implicit RNG device!"));
+        goto cleanup;
+    }
+
+    // Create the default RNG device 
+    implicit_rng_device->model = VIR_DOMAIN_RNG_MODEL_VIRTIO;
+    implicit_rng_device->backend = VIR_DOMAIN_RNG_BACKEND_RANDOM;
+    implicit_rng_device->info = implicit_rng_device_info;
+    implicit_rng_device->source.file = g_steal_pointer(&rng_source_file);
+    implicit_rng_device->info.alias = g_steal_pointer(&rng_device_alias);
+    // All well so far, now we add it to the configuration by allocating the list and adding the device to its head
+    *deviceDefs = g_malloc0(sizeof(**deviceDefs));
+    if (!deviceDefs) {
+        virReportError(VIR_ERR_INTERNAL_ERROR,
+            _("Failed to allocate memory for RNG device list when creating implicit RNG device!"));
+        goto cleanup;
+    }
+    (*deviceDefs)[0] = g_steal_pointer(&implicit_rng_device);
+    ret = 0;
+
+    cleanup:
+    if(NULL != rng_source_file)
+        g_free(rng_source_file);
+    if(NULL != rng_device_alias)
+        g_free(rng_device_alias);
+    if(NULL != implicit_rng_device)
+        g_free(implicit_rng_device);
+    
+    return ret;
+}
 
 static int
 virCHDomainDefPostParse(virDomainDef *def,
@@ -159,6 +212,11 @@ virCHDomainDefPostParse(virDomainDef *def,
                                         def->virtType,
                                         true))
         return -1;
+
+    if (def->nrngs == 0) {
+        virCHDomainDefAddImplicitRng(&def->rngs);
+        def->nrngs = 1;
+    }
 
     return 0;
 }
