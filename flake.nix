@@ -27,14 +27,20 @@
       # libvirt requires a populated submodule to build successfully. As we
       # cannot reference a local git directory as a flake input to let nix
       # handle the submodule population, we assemble it ourself.
-      sourceWithSubmodules = pkgs.runCommand "source-with-submodules" { } ''
-        mkdir -p $out
+      sourceWithSubmodules =
+        (pkgs.runCommand "source-with-submodules" { } ''
+          mkdir -p $out
 
-        cp -r ${self}/* $out/
+          cp -r ${self}/* $out/
 
-        mkdir -p $out/subprojects/keycodemapdb
-        cp -r ${keycodemapdb}/* $out/subprojects/keycodemapdb/
-      '';
+          mkdir -p $out/subprojects/keycodemapdb
+          cp -r ${keycodemapdb}/* $out/subprojects/keycodemapdb/
+        '')
+        # We make the source behave somewhat like a real flake input.
+        .overrideAttrs
+          {
+            rev = if self ? rev then self.rev else self.dirtyRev;
+          };
 
       systems = [ "x86_64-linux" ];
       forAllSystems =
