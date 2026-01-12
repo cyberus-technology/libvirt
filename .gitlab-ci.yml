@@ -86,5 +86,5 @@ test:nixos-tests:
     paths:
       - logs/
   script:
-    - mkdir logs
-    - nix run -L .#tests.x86_64-linux.default.driver 2>&1 | tee logs/nixos_driver.log
+    - mkdir "${DBG_LOG_DIR}"
+    - nix run -L .#tests.x86_64-linux.default.driver 2>&1 | tee "${DBG_LOG_DIR}/nixos_driver.log"
