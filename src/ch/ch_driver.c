@@ -31,15 +31,18 @@
 #include "ch_process.h"
 #include "domain_capabilities.h"
 #include "domain_cgroup.h"
+#include "domain_conf.h"
 #include "domain_event.h"
 #include "domain_interface.h"
 #include "domain_validate.h"
 #include "domain_postparse.h"
 #include "datatypes.h"
 #include "driver.h"
+#include "libvirt/libvirt.h"
 #include "viralloc.h"
 #include "viraccessapicheck.h"
 #include "virchrdev.h"
+#include "virconftypes.h"
 #include "virerror.h"
 #include "virjson.h"
 #include "virinhibitor.h"
@@ -3785,6 +3788,119 @@ chDomainAttachDeviceLiveAndConfigHomogenize(const virDomainDeviceDef *devConf,
 
 }
 
+/* Syncs the addresses of a given disk between two domain definitions.
+ *
+ * Finds the disk in both, `dest` and `source` and copies the address
+ * member of the disk in `source` to `dest`.
+ *
+ * @dest: Domain definition that contains the destination disk
+ * @source: Domain definition that contains the source disk
+ * @disk: Disk definition used to identify the disk in `source` and `destination`
+ * 
+ * 0 indicates success, -1 failure 
+ */
+static int chSyncDiskAddressesBetweenConfigs(virDomainDef *dest, virDomainDef *source, virDomainDiskDef* disk) {
+    virDomainDiskDef* disk_def_live = NULL;
+    virDomainDiskDef* disk_def_pers = NULL;
+    if (!(disk_def_live = virDomainDiskByName(source, disk->dst, true))) {
+        virReportError(VIR_ERR_OPERATION_INVALID,
+                        _("target %1$s does not exists in live configuration"), disk->dst);
+        return -1;
+    }
+    if (!(disk_def_pers = virDomainDiskByName(dest, disk->dst, true))) {
+        virReportError(VIR_ERR_OPERATION_INVALID,
+                        _("target %1$s does not exists in persistent configuration"), disk->dst);
+        return -1;
+    }
+    if (disk_def_live->info.type == VIR_DOMAIN_DEVICE_ADDRESS_TYPE_PCI) {
+        disk_def_pers->info.type = disk_def_live->info.type;
+        disk_def_pers->info.addr = disk_def_live->info.addr;
+    }
+    return 0;
+}
+
+/* Syncs the addresses of a given network device between two domain definitions.
+ *
+ * Finds the network device in both, `dest` and `source` and copies the address
+ * member of the network definition in `source` to `dest`.
+ *
+ * @dest: Domain definition that contains the destination network device definition
+ * @source: Domain definition that contains the source network device definition
+ * @disk: Network device definition used to identify the disk in `source` and `destination`
+ * 
+ * 0 indicates success, -1 failure 
+ */
+static int chSyncNetAddressesBetweenConfigs(virDomainDef *dest, virDomainDef *source, virDomainNetDef* net) {
+    virDomainNetDef* dev_live = NULL;
+    virDomainNetDef* dev_pers = NULL;
+    if (!(dev_live = virDomainNetFindByName(source, net->ifname))) {
+        virReportError(VIR_ERR_OPERATION_INVALID,
+                        _("target %1$s does not exists in live configuration"), net->ifname);
+        return -1;
+    }
+    if (!(dev_pers = virDomainNetFindByName(dest, net->ifname))) {
+        virReportError(VIR_ERR_OPERATION_INVALID,
+                        _("target %1$s does not exists in persistent configuration"), net->ifname);
+        return -1;
+    }
+    if (dev_live->info.type == VIR_DOMAIN_DEVICE_ADDRESS_TYPE_PCI) {
+        dev_pers->info.type = dev_live->info.type;
+        dev_pers->info.addr = dev_live->info.addr;
+    }
+    return 0;
+}
+
+/* Syncs the addresses of a given device between two domain definitions.
+ *
+ * Finds the device in both, `dest` and `source` and copies the address
+ * member of the device definition found in `source` to that found in  `dest`.
+ *
+ * @dest: Domain definition that contains the destination device definition
+ * @source: Domain definition that contains the source device definition
+ * @dev: Device definition used to identify the device in `source` and `destination`
+ * 
+ * 0 indicates success, -1 failure 
+ */
+static int chSyncDeviceAddressLiveAndPersistent(virDomainDef *dest, virDomainDef *source, virDomainDeviceDef* dev) {
+    switch (dev->type) {
+    case VIR_DOMAIN_DEVICE_DISK:
+        return chSyncDiskAddressesBetweenConfigs(dest, source, dev->data.disk);
+        break;
+    case VIR_DOMAIN_DEVICE_NET:
+        return chSyncNetAddressesBetweenConfigs(dest, source, dev->data.net);
+        break;
+    case VIR_DOMAIN_DEVICE_SOUND:
+    case VIR_DOMAIN_DEVICE_HOSTDEV:
+    case VIR_DOMAIN_DEVICE_LEASE:
+    case VIR_DOMAIN_DEVICE_CONTROLLER:
+    case VIR_DOMAIN_DEVICE_CHR:
+    case VIR_DOMAIN_DEVICE_FS:
+    case VIR_DOMAIN_DEVICE_RNG:
+    case VIR_DOMAIN_DEVICE_MEMORY:
+    case VIR_DOMAIN_DEVICE_REDIRDEV:
+    case VIR_DOMAIN_DEVICE_SHMEM:
+    case VIR_DOMAIN_DEVICE_WATCHDOG:
+    case VIR_DOMAIN_DEVICE_INPUT:
+    case VIR_DOMAIN_DEVICE_VSOCK:
+    case VIR_DOMAIN_DEVICE_IOMMU:
+    case VIR_DOMAIN_DEVICE_VIDEO:
+    case VIR_DOMAIN_DEVICE_GRAPHICS:
+    case VIR_DOMAIN_DEVICE_HUB:
+    case VIR_DOMAIN_DEVICE_SMARTCARD:
+    case VIR_DOMAIN_DEVICE_MEMBALLOON:
+    case VIR_DOMAIN_DEVICE_NVRAM:
+    case VIR_DOMAIN_DEVICE_NONE:
+    case VIR_DOMAIN_DEVICE_TPM:
+    case VIR_DOMAIN_DEVICE_PANIC:
+    case VIR_DOMAIN_DEVICE_AUDIO:
+    case VIR_DOMAIN_DEVICE_CRYPTO:
+    case VIR_DOMAIN_DEVICE_PSTORE:
+    case VIR_DOMAIN_DEVICE_LAST:
+         DBG("Device does not need to sync addresses");
+    }
+    return 0;
+}
+
 static int
 chDomainAttachDeviceLiveAndConfig(virDomainObj *vm,
                                   virCHDriver *driver,
@@ -3857,8 +3973,16 @@ chDomainAttachDeviceLiveAndConfig(virDomainObj *vm,
                                         true) < 0) {
             return -1;
         }
+        // Store the device definition for later syncing. Below we assign an address to the device, then attach it and
+        // finally clear the pointer. 
+        devConfSave = *devLive;
         if (chDomainAttachDeviceLive(vm, devLive, driver) < 0) {
             return -1;
+        }
+        // If we add the device to both, the runtime and persistent config, we need to ensure that we persist the
+        // device address. Else we might see the device pop up on another address after restarting the domain.
+        if (flags & VIR_DOMAIN_AFFECT_CONFIG) {
+            chSyncDeviceAddressLiveAndPersistent(vmdef, vm->def, &devConfSave);
         }
 
         if (virDomainObjIsActive(vm)) {
