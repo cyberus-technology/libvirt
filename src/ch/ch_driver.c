@@ -285,6 +285,26 @@ chDomainCreateXML(virConnectPtr conn,
     return dom;
 }
 
+/**
+ * Helpful debug info to see which libvirt version is active from the log.
+ */
+static void print_chv_info(void) {
+    unsigned long includeVersion;
+    unsigned int major;
+    unsigned int minor;
+    unsigned int rel;
+
+    includeVersion = LIBVIR_VERSION_NUMBER;
+    major = includeVersion / 1000000;
+    includeVersion %= 1000000;
+    minor = includeVersion / 1000;
+    rel = includeVersion % 1000;
+
+    VIR_WARN("Cloud Hypervisor driver with the patches of Cyberus Technology");
+    VIR_WARN("  libvirt     : %d.%d.%d", major, minor, rel);
+    VIR_WARN("  commit hash : " COMMIT_HASH);
+}
+
 static int
 chDomainCreateWithFlags(virDomainPtr dom, unsigned int flags)
 {
@@ -295,13 +315,11 @@ chDomainCreateWithFlags(virDomainPtr dom, unsigned int flags)
     int ret = -1;
     g_autoptr(virCHDriverConfig) cfg = NULL;
 
+    print_chv_info();
+
     cfg = virCHDriverGetConfig(driver);
 
     virCheckFlags(0, -1);
-
-#ifdef COMMIT_HASH
-    DBG("Commit hash: %s", COMMIT_HASH);
-#endif
 
     if (!(vm = virCHDomainObjFromDomain(dom)))
         goto cleanup;
