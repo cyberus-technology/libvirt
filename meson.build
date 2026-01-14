@@ -39,6 +39,8 @@ if git and git_cmd.found() and not get_option('no_git')
   add_project_arguments(commit_define, language: 'c')
 elif get_option('commit_hash') != ''
   commit_hash = get_option('commit_hash')
+  commit_define = '-DCOMMIT_HASH="@0@"'.format(commit_hash)
+  add_project_arguments(commit_define, language: 'c')
 else
   commit_define = '-DCOMMIT_HASH="0000000000000000000000000000000000000000"'
   add_project_arguments(commit_define, language: 'c')
