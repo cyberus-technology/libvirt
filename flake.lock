@@ -51,11 +51,11 @@
     "edk2-src": {
       "flake": false,
       "locked": {
-        "lastModified": 1768294662,
-        "narHash": "sha256-RWWKcjHqldQhanfaygrpYgILQj7jfYigIRlaihGeE04=",
+        "lastModified": 1768399783,
+        "narHash": "sha256-AyKYmRGgRMgFJTxEYh3jcmCcbeXHvAhnTymXbx3khPM=",
         "ref": "gardenlinux",
-        "rev": "f26d94ce652b15f067108c933798be57ead4e3a1",
-        "revCount": 34306,
+        "rev": "0417bca8caed638502f7575be937359878eac683",
+        "revCount": 34309,
         "submodules": true,
         "type": "git",
         "url": "https://github.com/cyberus-technology/edk2"
@@ -139,11 +139,11 @@
         "rust-overlay": "rust-overlay"
       },
       "locked": {
-        "lastModified": 1768397104,
-        "narHash": "sha256-iuYMIRaoj5Y8E6YH6m25I+yFrY6RHujLWcGBMpROkpI=",
+        "lastModified": 1768469676,
+        "narHash": "sha256-g6/y90fngO/K0maKIDMOVfPgbNKmR0x3cg0R36BW/sA=",
         "owner": "cyberus-technology",
         "repo": "libvirt-tests",
-        "rev": "b5a0b542952e69d4d4e306cdcc873db62700048b",
+        "rev": "d54bdc40b0aa670416b9a3bfc1f5fc13eb2156a1",
         "type": "github"
       },
       "original": {
