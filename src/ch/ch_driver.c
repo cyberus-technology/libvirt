@@ -4623,6 +4623,18 @@ virDomainCapsCPUModels* getCpuModels(void)
     return cpuModels;
 }
 
+/**
+ * Return the capabilities of the emulator with respect to host and libvirt.
+ *
+ * This function is called in the context of a `virsh domcapabilities` CLI
+ * invocation.
+ *
+ * It returns information around supported features and capabilities of this
+ * libvirt instance, e.g.
+ * * the actual emulator binary path
+ * * the supported CPU models
+ * * supported virtual device models
+ */
 static
 virDomainCaps *
 virCHDriverGetDomainCapabilities(virCHDriver *driver,
