@@ -3805,8 +3805,8 @@ chDomainAttachDeviceLiveAndConfigHomogenize(const virDomainDeviceDef *devConf,
  * @dest: Domain definition that contains the destination disk
  * @source: Domain definition that contains the source disk
  * @disk: Disk definition used to identify the disk in `source` and `destination`
- * 
- * 0 indicates success, -1 failure 
+ *
+ * 0 indicates success, -1 failure
  */
 static int chSyncDiskAddressesBetweenConfigs(virDomainDef *dest, virDomainDef *source, virDomainDiskDef* disk) {
     virDomainDiskDef* disk_def_live = NULL;
@@ -3836,8 +3836,8 @@ static int chSyncDiskAddressesBetweenConfigs(virDomainDef *dest, virDomainDef *s
  * @dest: Domain definition that contains the destination network device definition
  * @source: Domain definition that contains the source network device definition
  * @disk: Network device definition used to identify the disk in `source` and `destination`
- * 
- * 0 indicates success, -1 failure 
+ *
+ * 0 indicates success, -1 failure
  */
 static int chSyncNetAddressesBetweenConfigs(virDomainDef *dest, virDomainDef *source, virDomainNetDef* net) {
     virDomainNetDef* dev_live = NULL;
@@ -3867,8 +3867,8 @@ static int chSyncNetAddressesBetweenConfigs(virDomainDef *dest, virDomainDef *so
  * @dest: Domain definition that contains the destination device definition
  * @source: Domain definition that contains the source device definition
  * @dev: Device definition used to identify the device in `source` and `destination`
- * 
- * 0 indicates success, -1 failure 
+ *
+ * 0 indicates success, -1 failure
  */
 static int chSyncDeviceAddressLiveAndPersistent(virDomainDef *dest, virDomainDef *source, virDomainDeviceDef* dev) {
     switch (dev->type) {
@@ -3983,7 +3983,7 @@ chDomainAttachDeviceLiveAndConfig(virDomainObj *vm,
             return -1;
         }
         // Store the device definition for later syncing. Below we assign an address to the device, then attach it and
-        // finally clear the pointer. 
+        // finally clear the pointer.
         devConfSave = *devLive;
         if (chDomainAttachDeviceLive(vm, devLive, driver) < 0) {
             return -1;
@@ -4128,7 +4128,7 @@ chDomainDetachPrepDisk(virDomainObj *vm,
  * @match: Device configuration to search in the VM for removal
  * @driver: Unused
  * @async: Unused
- * @free_addr: Instruction the function to either free the address (if true) 
+ * @free_addr: Instruction the function to either free the address (if true)
  * or keep it allocated (if false).
  */
 static int
@@ -4210,7 +4210,7 @@ chDomainDetachDeviceLive(virDomainObj *vm,
         // Free PCI device addresses
         if (info->type == VIR_DOMAIN_DEVICE_ADDRESS_TYPE_PCI) {
             chDomainReleaseDeviceAddress(vm, info);
-        } 
+        }
     }
 
     if (match->type == VIR_DOMAIN_DEVICE_DISK) {
@@ -4389,7 +4389,7 @@ chDomainDetachDeviceLiveAndConfig(virCHDriver *driver,
         !(flags & VIR_DOMAIN_AFFECT_LIVE))
         parse_flags |= VIR_DOMAIN_DEF_PARSE_INACTIVE;
 
-    // Get config from both, live and config. We need `dev_config` in any case to 
+    // Get config from both, live and config. We need `dev_config` in any case to
     // decide if we should keep the address allocated in the live domain.
     vmdef = virDomainObjCopyPersistentDef(vm, driver->xmlopt, NULL);
     /* Make a copy for updated domain. */
@@ -4401,12 +4401,12 @@ chDomainDetachDeviceLiveAndConfig(virCHDriver *driver,
              return -1;
 
         if (!dev_config) {
-            VIR_ERROR("%s:%d: Tried to detach non-present device from config!", 
+            VIR_ERROR("%s:%d: Tried to detach non-present device from config!",
                       __FILE_NAME__,
                       __LINE__);
         }
 
-         
+
          if (chDomainDetachDeviceConfig(vmdef, dev_config, NULL,
                                           parse_flags,
                                           driver->xmlopt) < 0)
@@ -4419,11 +4419,11 @@ chDomainDetachDeviceLiveAndConfig(virCHDriver *driver,
 
         // Only release the address, if the device is not present in the persistent config
         // or if it is removed from both, the live and persistent config.
-        if (!chDomainContainsDevice(vmdef, dev_live) || (flags & VIR_DOMAIN_AFFECT_CONFIG)) 
+        if (!chDomainContainsDevice(vmdef, dev_live) || (flags & VIR_DOMAIN_AFFECT_CONFIG))
             free_addr = true;
 
         if (!dev_live) {
-            VIR_ERROR("%s:%d: Tried to detach non-present device from live!", 
+            VIR_ERROR("%s:%d: Tried to detach non-present device from live!",
                       __FILE_NAME__,
                       __LINE__);
         }
