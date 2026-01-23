@@ -2832,6 +2832,8 @@ chDoMigrateDstReceive(void *opaque)
     DBG("Migration thread executing");
     if (!priv->monitor) {
         VIR_ERROR(_("VMs monitor not initialized"));
+        args->success = false;
+        return;
     }
 
     rcv_uri = g_strdup_printf("tcp:0.0.0.0:%d", args->port);
