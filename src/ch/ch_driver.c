@@ -3202,6 +3202,7 @@ chDomainMigratePerform3Impl(virDomainObj *vm,
     g_autoptr(virURI) uri_parsed = NULL;
     g_autofree char *uri_out = NULL;
     g_autofree char *dom_xml = NULL;
+    g_autofree char *source_xml = NULL;
     virDomainPtr ddomain = NULL;
     int rc = -1;
     g_autoptr(virCHDriverConfig) cfg = virCHDriverGetConfig(driver);
@@ -3233,6 +3234,8 @@ chDomainMigratePerform3Impl(virDomainObj *vm,
     if (dconnuri) {
         DBG("Got dconnuri. Probably p2p/direct migration. Do special extra handling");
 
+        source_xml = virDomainDefFormat(vm->def, driver->xmlopt, VIR_DOMAIN_DEF_FORMAT_SECURE);
+
         /* The caller of the migration is able to specify a domain XML
          * description used for the domain on the destination side. This is
          * required e.g. to adapt some ip or port binding in the TCP serial
@@ -3241,10 +3244,11 @@ chDomainMigratePerform3Impl(virDomainObj *vm,
             /* dom_xml will be cleaned up by us but the caller expects to cleanup xmlin. */
             dom_xml = g_strdup(xmlin);
         } else {
-            dom_xml = virDomainDefFormat(vm->def, driver->xmlopt, VIR_DOMAIN_DEF_FORMAT_SECURE);
+            dom_xml = g_strdup(source_xml);
         }
 
-        DBG("Got domain xml: %s", dom_xml);
+        DBG("Source domain configuration: \n%s\n", source_xml);
+        DBG("Target domain configuration: \n%s\n", dom_xml);
 
         dconn = virConnectOpenAuth(dconnuri, &virConnectAuthConfig, 0);
         if (dconn == NULL) {
