@@ -64,7 +64,7 @@ build:packages:
     - nix build -L .#libvirt
     - nix build -L .#libvirt-debugoptimized
 
-build:nixos-tests:
+.build_nixos_tests:
   stage: build
   rules:
     - when: always
@@ -74,9 +74,27 @@ build:nixos-tests:
   dependencies: []
   needs: []
   script:
-    - nix build -L .#tests.x86_64-linux.default.driver
+    - nix build -L .#tests.x86_64-linux.$TEST_ATTR.driver
 
-test:nixos-tests:
+build:default-tests:
+  extends:
+    - .build_nixos_tests
+  variables:
+    TEST_ATTR: default
+
+build:live-migration-tests:
+  extends:
+    - .build_nixos_tests
+  variables:
+    TEST_ATTR: live_migration
+
+build:hugepage-tests:
+  extends:
+    - .build_nixos_tests
+  variables:
+    TEST_ATTR: hugepage
+
+.test_nixos_tests:
   stage: test
   rules:
     # Resource groups do not work across forks. However, we need the resource
@@ -108,17 +126,35 @@ test:nixos-tests:
     # ports. This here, however, is the more pragmatic workaround for now.
     - |
       echo "Checking if any orphaned QEMU process needs to be killed ..."
-      
+
       kill_qemu() {
         local port=$1
         local pid=$(nix shell nixpkgs#procps --command bash -c "pgrep -f 'qemu.*[h]ostfwd=tcp::$port' || echo -1")
         if [ "${pid}" -gt 1 ]; then
-          nix shell nixpkgs#ansi --command bash -c "echo -e \"\$(ansi red bold)FOUND ORPHANED QEMU (pid=$pid) blocking port $port: Killing to unblock pipeline\$(ansi reset)\"" 
+          nix shell nixpkgs#ansi --command bash -c "echo -e \"\$(ansi red bold)FOUND ORPHANED QEMU (pid=$pid) blocking port $port: Killing to unblock pipeline\$(ansi reset)\""
           kill -KILL "${pid}"
         fi
       }
-      
+
       kill_qemu 2222
       kill_qemu 3333
     - mkdir "${DBG_LOG_DIR}"
-    - nix run -L .#tests.x86_64-linux.default.driver 2>&1 | tee "${DBG_LOG_DIR}/nixos_driver.log"
+    - nix run -L .#tests.x86_64-linux.$TEST_ATTR.driver 2>&1 | tee "${DBG_LOG_DIR}/nixos_driver.log"
+
+test:default-tests:
+  extends:
+    - .test_nixos_tests
+  variables:
+    TEST_ATTR: default
+
+test:live-migration-tests:
+  extends:
+    - .test_nixos_tests
+  variables:
+    TEST_ATTR: live_migration
+
+test:hugepage-tests:
+  extends:
+    - .test_nixos_tests
+  variables:
+    TEST_ATTR: hugepage
