@@ -51,6 +51,19 @@ lint:nix-fmt:
   script:
     - nix fmt -- --ci
 
+build:packages:
+  stage: build
+  rules:
+    - when: always
+  extends:
+    - .nix_build_template
+  # No dependency to lint stage.
+  dependencies: []
+  needs: []
+  script:
+    - nix build -L .#libvirt
+    - nix build -L .#libvirt-debugoptimized
+
 build:nixos-tests:
   stage: build
   rules:
