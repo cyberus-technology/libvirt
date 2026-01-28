@@ -53,7 +53,7 @@
 
           # If someone fetched this flake with `submodules=1`, then we are good
           # to go. If not, we populate the submodules.
-          if [ ! -d $out/subprojects/keycodemapdb ]; then
+          if [ ! -f $out/subprojects/keycodemapdb/meson.build ]; then
             echo "Was fetched without submodules: populating ..."
             mkdir -p $out/subprojects/keycodemapdb
             cp -r ${keycodemapdb}/* $out/subprojects/keycodemapdb/
