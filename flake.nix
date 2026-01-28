@@ -138,6 +138,15 @@
           ${name} = value.override {
             libvirt = self.packages.${system}.libvirt-debugoptimized;
           };
+          ${name} =
+            value.override {
+              libvirt = self.packages.${system}.libvirt-debugoptimized;
+            }
+            // {
+              passthru.no_port_forwarding = value.passthru.no_port_forwarding.override {
+                libvirt = self.packages.${system}.libvirt-debugoptimized;
+              };
+            };
         }) libvirt-tests.tests.${system}
       );
     };
