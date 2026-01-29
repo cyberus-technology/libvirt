@@ -121,3 +121,9 @@ virCHDomainValidateActualNetDef(virDomainNetDef *net);
 int
 virCHDomainJobGetTimeElapsed(virDomainJobObj *job,
                              unsigned long long *timeElapsed);
+
+int
+chDomainMigrationJobDataToParams(chMigrationProgress *progress,
+                                 int *type,
+                                 virTypedParameterPtr *params,
+                                 int *nparams);
