@@ -64,7 +64,7 @@ build:packages:
     - nix build -L .#libvirt
     - nix build -L .#libvirt-debugoptimized
 
-.build_nixos_tests:
+build:nixos_tests:
   stage: build
   rules:
     - when: always
@@ -74,25 +74,7 @@ build:packages:
   dependencies: []
   needs: []
   script:
-    - nix build -L .#tests.x86_64-linux.$TEST_ATTR.driver
-
-build:default-tests:
-  extends:
-    - .build_nixos_tests
-  variables:
-    TEST_ATTR: default
-
-build:live-migration-tests:
-  extends:
-    - .build_nixos_tests
-  variables:
-    TEST_ATTR: live_migration
-
-build:hugepage-tests:
-  extends:
-    - .build_nixos_tests
-  variables:
-    TEST_ATTR: hugepage
+    - nix build -L .#tests.x86_64-linux.all_drivers
 
 .test_nixos_tests:
   stage: test
