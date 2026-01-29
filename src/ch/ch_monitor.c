@@ -2435,3 +2435,17 @@ static int chMigrationParseProgress(virJSONValue * json, chMigrationProgress * p
 
     return 0;
 }
+
+int
+chMonitorJSONGetMigrationStatsReply(virCHMonitor *mon,
+                                    chMigrationProgress *progress)
+{
+    g_autoptr(virJSONValue) response;
+
+    // Unlocked access as the migration might still be going on.
+    if (virCHMonitorGet(mon, URL_VM_MIGRATION_PROGRESS, &response) != 0) {
+        return -1;
+    }
+
+    return chMigrationParseProgress(response, progress);
+}
