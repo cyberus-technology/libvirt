@@ -154,7 +154,7 @@ virCHDomainVcpuPrivateNew(void)
  */
 static int virCHDomainDefAddImplicitRng(virDomainRNGDef ***deviceDefs) {
     int ret = -1;
-    char* rng_source_file = g_strdup("/dev/urandom"); 
+    char* rng_source_file = g_strdup("/dev/urandom");
     char* rng_device_alias = g_strdup("implicit-rng-device");
     virDomainDeviceInfo implicit_rng_device_info = {
         .alias = NULL,
@@ -169,7 +169,7 @@ static int virCHDomainDefAddImplicitRng(virDomainRNGDef ***deviceDefs) {
         goto cleanup;
     }
 
-    // Create the default RNG device 
+    // Create the default RNG device
     implicit_rng_device->model = VIR_DOMAIN_RNG_MODEL_VIRTIO;
     implicit_rng_device->backend = VIR_DOMAIN_RNG_BACKEND_RANDOM;
     implicit_rng_device->info = implicit_rng_device_info;
@@ -192,7 +192,7 @@ static int virCHDomainDefAddImplicitRng(virDomainRNGDef ***deviceDefs) {
         g_free(rng_device_alias);
     if(NULL != implicit_rng_device)
         g_free(implicit_rng_device);
-    
+
     return ret;
 }
 
@@ -379,8 +379,8 @@ virCHDomainRefreshThreadInfo(virDomainObj *vm)
 static int
 chDomainDefAssignAddresses(virDomainDef *def,
                              unsigned int parseFlags G_GNUC_UNUSED,
-                             void *opaque,
-                             void *parseOpaque)
+                             void *opaque G_GNUC_UNUSED,
+                             void *parseOpaque G_GNUC_UNUSED)
 {
     return chAssignPciAddresses(def, NULL);
 }
