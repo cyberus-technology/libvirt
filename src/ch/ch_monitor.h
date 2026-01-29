@@ -239,3 +239,7 @@ virCHMonitorPut(virCHMonitor *mon, const char *endpoint,
 
 int
 virCHMonitorBuildMemoryZonesJson(virJSONValue *content, virDomainDef *def);
+
+int
+chMonitorJSONGetMigrationStatsReply(virCHMonitor *mon,
+                                    chMigrationProgress *progress);

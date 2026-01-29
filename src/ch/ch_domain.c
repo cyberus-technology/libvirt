@@ -515,3 +515,121 @@ virCHDomainValidateActualNetDef(virDomainNetDef *net)
 
     return 0;
 }
+
+int
+chDomainMigrationJobDataToParams(chMigrationProgress *progress,
+                                 int *type,
+                                 virTypedParameterPtr *params,
+                                 int *nparams)
+{
+    virTypedParameterPtr par = NULL;
+    int int_tmp = 0;
+    int npar = 0;
+    int maxpar = 0;
+    unsigned long long now = 0;
+
+    ignore_value(virTimeMillisNow(&now));
+    if (virTypedParamsAddULLong(&par, &npar, &maxpar,
+                            VIR_DOMAIN_JOB_TIME_ELAPSED,
+                            now - progress->timestamp_begin_ms) < 0) {
+        goto error;
+    }
+
+    if (virTypedParamsAddULLong(&par, &npar, &maxpar,
+                            VIR_DOMAIN_JOB_DOWNTIME,
+                            progress->downtime_configured_ms) < 0) {
+        goto error;
+    }
+
+    if (virTypedParamsAddULLong(&par, &npar, &maxpar,
+                            VIR_DOMAIN_JOB_DOWNTIME_NET,
+                            progress->downtime_estimated_ms) < 0) {
+        goto error;
+    }
+
+    if (virTypedParamsAddULLong(&par, &npar, &maxpar,
+                            VIR_DOMAIN_JOB_DATA_TOTAL,
+                            progress->memory_transmission_info.memory_bytes_total) < 0) {
+        goto error;
+    }
+
+    if (virTypedParamsAddULLong(&par, &npar, &maxpar,
+                            VIR_DOMAIN_JOB_DATA_PROCESSED,
+                            progress->memory_transmission_info.memory_bytes_transmitted) < 0) {
+        goto error;
+    }
+
+    if (virTypedParamsAddULLong(&par, &npar, &maxpar,
+                            VIR_DOMAIN_JOB_DATA_REMAINING,
+                            progress->memory_transmission_info.memory_bytes_remaining_iteration) < 0) {
+        goto error;
+    }
+
+    if (virTypedParamsAddULLong(&par, &npar, &maxpar,
+                            VIR_DOMAIN_JOB_MEMORY_TOTAL,
+                            // TODO unsure what ths right things is here
+                            progress->memory_transmission_info.memory_bytes_total) < 0) {
+        goto error;
+    }
+
+    if (virTypedParamsAddULLong(&par, &npar, &maxpar,
+                            VIR_DOMAIN_JOB_MEMORY_PROCESSED,
+                            // TODO unsure what ths right things is here
+                            progress->memory_transmission_info.memory_bytes_transmitted) < 0) {
+        goto error;
+    }
+
+    if (virTypedParamsAddULLong(&par, &npar, &maxpar,
+                            VIR_DOMAIN_JOB_MEMORY_REMAINING,
+                            // TODO unsure what ths right things is here
+                            progress->memory_transmission_info.memory_bytes_remaining_iteration) < 0) {
+        goto error;
+    }
+
+    if (virTypedParamsAddULLong(&par, &npar, &maxpar,
+                            VIR_DOMAIN_JOB_MEMORY_PAGE_SIZE,
+                            4096) < 0) {
+        goto error;
+    }
+
+    if (virTypedParamsAddULLong(&par, &npar, &maxpar,
+                            VIR_DOMAIN_JOB_MEMORY_BPS,
+                            progress->memory_transmission_info.memory_transmission_bps) < 0) {
+        goto error;
+    }
+
+    int_tmp = progress->vcpu_throttle_percent;
+    if (virTypedParamsAddInt(&par, &npar, &maxpar,
+                            VIR_DOMAIN_JOB_AUTO_CONVERGE_THROTTLE,
+                            int_tmp) < 0) {
+        goto error;
+    }
+
+    if (virTypedParamsAddULLong(&par, &npar, &maxpar,
+                            VIR_DOMAIN_JOB_MEMORY_ITERATION,
+                            progress->memory_transmission_info.memory_iteration) < 0) {
+        goto error;
+    }
+
+    if (virTypedParamsAddULLong(&par, &npar, &maxpar,
+                            VIR_DOMAIN_JOB_MEMORY_DIRTY_RATE,
+                             progress->memory_transmission_info.memory_dirty_rate_pps) < 0) {
+        goto error;
+    }
+
+    if (virTypedParamsAddULLong(&par, &npar, &maxpar,
+                            VIR_DOMAIN_JOB_MEMORY_CONSTANT,
+                            progress->memory_transmission_info.memory_pages_constant_count) < 0) {
+        goto error;
+    }
+
+    *type = virDomainJobStatusToType(VIR_DOMAIN_JOB_STATUS_MIGRATING);
+    *params = par;
+    *nparams = npar;
+
+    return 0;
+
+error:
+    virTypedParamsFree(par, npar);
+    return -1;
+}
