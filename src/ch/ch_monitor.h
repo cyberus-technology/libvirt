@@ -44,6 +44,7 @@
 #define URL_VM_REMOVE_DEVICE "vm.remove-device"
 #define URL_VM_ADD_DISK "vm.add-disk"
 #define URL_VM_RESIZE_DISK "vm.resize-disk"
+#define URL_VM_MIGRATION_PROGRESS "vm.migration-progress"
 
 #define VIRCH_THREAD_NAME_LEN   16
 
@@ -115,6 +116,71 @@ struct _virCHMonitor {
     size_t nthreads;
     virCHMonitorThreadInfo *threads;
 };
+
+typedef enum {
+    VIR_CH_MIGRATION_PROGRESS_STATE_INVALID = 0,
+    VIR_CH_MIGRATION_PROGRESS_STATE_CANCELLED,
+    VIR_CH_MIGRATION_PROGRESS_STATE_FAILED,
+    VIR_CH_MIGRATION_PROGRESS_STATE_FINISHED,
+    VIR_CH_MIGRATION_PROGRESS_STATE_ONGOING,
+
+    VIR_CH_MIGRATION_PROGRESS_STATE_LAST
+} virCHMigrationProgressState;
+
+VIR_ENUM_DECL(virCHMigrationProgressState);
+
+typedef enum {
+    VIR_CH_MIGRATION_PROGRESS_ONGOING_PHASE_INVALID = 0,
+    VIR_CH_MIGRATION_PROGRESS_ONGOING_PHASE_STARTING,
+    VIR_CH_MIGRATION_PROGRESS_ONGOING_PHASE_MEMORY_FDS,
+    VIR_CH_MIGRATION_PROGRESS_ONGOING_PHASE_MEMORY_PRECOPY,
+    VIR_CH_MIGRATION_PROGRESS_ONGOING_PHASE_COMPLETING,
+
+    VIR_CH_MIGRATION_PROGRESS_ONGOING_PHASE_LAST
+} virCHMigrationProgressOngoingPhase;
+
+VIR_ENUM_DECL(virCHMigrationProgressOngoingPhase);
+
+typedef enum {
+    VIR_CH_MIGRATION_TRANSPORT_MODE_LOCAL = 0,
+    VIR_CH_MIGRATION_TRANSPORT_MODE_TCP,
+
+    VIR_CH_MIGRATION_TRANSPORT_MODE_LAST
+} virCHMigrationTransportMode;
+
+VIR_ENUM_DECL(virCHMigrationTransportMode);
+
+/**
+ * C-friendly representation of the migration progress.
+ */
+typedef struct _chMigrationProgress chMigrationProgress;
+struct _chMigrationProgress {
+    uint8_t vcpu_throttle_percent;
+    uint64_t timestamp_begin_ms;
+    uint64_t timestamp_snapshot_ms;
+    uint64_t timestamp_snapshot_relative_ms;
+    uint64_t downtime_configured_ms;
+    uint64_t downtime_estimated_ms;
+    // "Tcp" or "Local"
+    // String with static lifetime.
+    virCHMigrationTransportMode transportation_mode;
+    uint16_t tcp_connections;
+    bool tcp_tls;
+    virCHMigrationProgressState state;
+    virCHMigrationProgressOngoingPhase ongoing_phase;
+    struct {
+        uint64_t memory_iteration;
+        uint64_t memory_transmission_bps;
+        uint64_t memory_bytes_total;
+        uint64_t memory_bytes_transmitted;
+        uint64_t memory_bytes_remaining_iteration;
+        uint64_t memory_pages_4k_transmitted;
+        uint64_t memory_pages_4k_remaining_iteration;
+        uint64_t memory_pages_constant_count;
+        uint64_t memory_dirty_rate_pps;
+    } memory_transmission_info;
+};
+
 
 virCHMonitor *virCHMonitorNew(virDomainObj *vm, virCHDriverConfig *cfg,
                               int logfile);
