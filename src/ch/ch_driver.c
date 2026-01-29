@@ -3177,6 +3177,37 @@ chDomainMigrateConfirm3Params(virDomainPtr domain,
     return chDomainMigrateConfirm3(domain, cookiein, cookieinlen, flags, cancelled);
 }
 
+/**
+ * Try to detect if a migration destination targets the current host, thus a
+ * migration to itself.
+ *
+ * Note: This function still misses self migrations expresses via IP addresses.
+ */
+static bool
+chIsSelfMigration(virURI* desturi)
+{
+    g_autofree char *localHost = NULL;
+    g_autofree char *destHost = NULL;
+
+    if (!desturi || !desturi->server)
+        return false;
+
+    localHost = virGetHostname();
+    if (!localHost)
+        return false;
+
+    destHost = g_strdup(desturi->server);
+
+    // Normalize both (resolve "localhost" to actual hostname)
+    if (STREQ(destHost, "localhost") || STREQ(destHost, "127.0.0.1"))
+        destHost = virGetHostname();
+
+    if (STREQ(localHost, destHost))
+        return true;
+
+    return false;
+}
+
 static int virConnectCredType[] = {
     VIR_CRED_AUTHNAME,
     VIR_CRED_PASSPHRASE,
@@ -3239,7 +3270,14 @@ chDomainMigratePerform3Impl(virDomainObj *vm,
      * right order from here.
      */
     if (dconnuri) {
+        g_autoptr(virURI) dest_uri = virURIParse(dconnuri);
         DBG("Got dconnuri. Probably p2p/direct migration. Do special extra handling");
+
+        if (chIsSelfMigration(dest_uri)) {
+            virReportError(VIR_ERR_INVALID_ARG, "%s",
+                        _("Cannot migrate to the same host"));
+            goto cleanup;
+        }
 
         source_xml = virDomainDefFormat(vm->def, driver->xmlopt, VIR_DOMAIN_DEF_FORMAT_SECURE);
 
