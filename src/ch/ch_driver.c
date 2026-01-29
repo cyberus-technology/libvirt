@@ -2744,6 +2744,13 @@ chDomainMigrateBegin3(virDomainPtr domain,
 
     VIR_INFO("chDomainMigrateBegin3 %p %s %p %p %lu %s",
               domain, xmlin, cookieout, cookieoutlen, flags, dname);
+
+    if (!(flags & VIR_MIGRATE_PEER2PEER)) {
+        virReportError(VIR_ERR_INVALID_ARG, "%s",
+                       _("Only Peer2Peer migration is supported"));
+        return NULL;
+    }
+
     if (!(vm = virCHDomainObjFromDomain(domain)))
         return NULL;
 
