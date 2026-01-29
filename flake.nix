@@ -132,22 +132,32 @@
         let
           lib = pkgs.lib;
           system = pkgs.stdenv.hostPlatform.system;
-        in
-        # New attribute set with updated `libvirt-src` input for each test.
-        lib.concatMapAttrs (name: value: {
-          ${name} = value.override {
-            libvirt = self.packages.${system}.libvirt-debugoptimized;
-          };
-          ${name} =
-            value.override {
-              libvirt = self.packages.${system}.libvirt-debugoptimized;
-            }
-            // {
-              passthru.no_port_forwarding = value.passthru.no_port_forwarding.override {
+
+          # New attribute set with updated `libvirt-src` input for each test.
+          tests = lib.concatMapAttrs (name: value: {
+            ${name} =
+              value.override {
                 libvirt = self.packages.${system}.libvirt-debugoptimized;
+              }
+              // {
+                passthru.no_port_forwarding = value.passthru.no_port_forwarding.override {
+                  libvirt = self.packages.${system}.libvirt-debugoptimized;
+                };
               };
-            };
-        }) libvirt-tests.tests.${system}
+          }) libvirt-tests.tests.${system};
+        in
+        tests
+        // {
+          all_drivers = pkgs.symlinkJoin {
+            name = "all-test-drivers";
+            paths = with tests; [
+              default.driver
+              live_migration.driver
+              hugepage.driver
+              long_migration_with_load.driver
+            ];
+          };
+        }
       );
     };
 }
