@@ -51,6 +51,30 @@
 
 VIR_LOG_INIT("ch.ch_monitor");
 
+VIR_ENUM_IMPL(virCHMigrationProgressOngoingPhase,
+              VIR_CH_MIGRATION_PROGRESS_ONGOING_PHASE_LAST,
+              "none",
+              /* naming corresponds to serde JSON deserialization from Rust */
+              "Starting",
+              "MemoryFds",
+              "MemoryPrecopy",
+              "Completing");
+
+VIR_ENUM_IMPL(virCHMigrationProgressState,
+              VIR_CH_MIGRATION_PROGRESS_STATE_LAST,
+              "invalid",
+              /* naming corresponds to serde JSON deserialization from Rust */
+              "Cancelled",
+              "Failed",
+              "Finished",
+              "Ongoing");
+
+VIR_ENUM_IMPL(virCHMigrationTransportMode,
+              VIR_CH_MIGRATION_TRANSPORT_MODE_LAST,
+              /* naming corresponds to serde JSON deserialization from Rust */
+              "Local",
+              "Tcp",);
+
 static virClass *virCHMonitorClass;
 static void virCHMonitorDispose(void *obj);
 static void virCHMonitorThreadInfoFree(virCHMonitor *mon);
@@ -2301,4 +2325,114 @@ virCHMonitorGetIOThreads(virCHMonitor *mon,
     }
     virDomainIOThreadInfoFree(iothreadinfo);
     return -1;
+}
+
+static int chMigrationParseProgress(virJSONValue * json, chMigrationProgress * progress) {
+    virJSONValue *jsonState = NULL;
+    virJSONValue *jsonStateOngoing = NULL;
+    virJSONValue *jsonStateCancelled = NULL;
+    virJSONValue *jsonStateFinished = NULL;
+    virJSONValue *jsonStateFailed = NULL;
+    virJSONValue *jsonTransportationMode = NULL;
+    virJSONValue *jsonTransportationModeTcp = NULL;
+    virJSONValue *jsonMemoryInfo = NULL;
+
+    long long unsigned int tmp_ulong = 0;
+    bool tmp_bool = 0;
+    const char * tmp_str = NULL;
+
+    ignore_value(virJSONValueObjectGetNumberUlong(json, "timestamp_begin_ms", &tmp_ulong));
+    progress->timestamp_begin_ms = tmp_ulong;
+    ignore_value(virJSONValueObjectGetNumberUlong(json, "timestamp_snapshot_ms", &tmp_ulong));
+    progress->timestamp_snapshot_ms = tmp_ulong;
+    ignore_value(virJSONValueObjectGetNumberUlong(json, "timestamp_snapshot_relative_ms", &tmp_ulong));
+    progress->timestamp_snapshot_relative_ms = tmp_ulong;
+    ignore_value(virJSONValueObjectGetNumberUlong(json, "downtime_configured_ms", &tmp_ulong));
+    progress->downtime_configured_ms = tmp_ulong;
+    ignore_value(virJSONValueObjectGetNumberUlong(json, "downtime_estimated_ms", &tmp_ulong));
+    progress->downtime_estimated_ms = tmp_ulong;
+
+    jsonMemoryInfo = virJSONValueObjectGetObject(
+        json,
+        "memory_transmission_info"
+    );
+
+    if (jsonMemoryInfo != NULL) {
+        ignore_value(virJSONValueObjectGetNumberUlong(jsonMemoryInfo, "memory_iteration", &tmp_ulong));
+        progress->memory_transmission_info.memory_iteration = tmp_ulong;
+        ignore_value(virJSONValueObjectGetNumberUlong(jsonMemoryInfo, "memory_transmission_bps", &tmp_ulong));
+        progress->memory_transmission_info.memory_transmission_bps = tmp_ulong;
+        ignore_value(virJSONValueObjectGetNumberUlong(jsonMemoryInfo, "memory_bytes_total", &tmp_ulong));
+        progress->memory_transmission_info.memory_bytes_total = tmp_ulong;
+        ignore_value(virJSONValueObjectGetNumberUlong(jsonMemoryInfo, "memory_bytes_transmitted", &tmp_ulong));
+        progress->memory_transmission_info.memory_bytes_transmitted = tmp_ulong;
+        ignore_value(virJSONValueObjectGetNumberUlong(jsonMemoryInfo, "memory_bytes_remaining_iteration", &tmp_ulong));
+        progress->memory_transmission_info.memory_bytes_remaining_iteration = tmp_ulong;
+        ignore_value(virJSONValueObjectGetNumberUlong(jsonMemoryInfo, "memory_pages_4k_transmitted", &tmp_ulong));
+        progress->memory_transmission_info.memory_pages_4k_transmitted = tmp_ulong;
+        ignore_value(virJSONValueObjectGetNumberUlong(jsonMemoryInfo, "memory_pages_4k_remaining_iteration", &tmp_ulong));
+        progress->memory_transmission_info.memory_pages_4k_remaining_iteration = tmp_ulong;
+        ignore_value(virJSONValueObjectGetNumberUlong(jsonMemoryInfo, "memory_pages_constant_count", &tmp_ulong));
+        progress->memory_transmission_info.memory_pages_constant_count = tmp_ulong;
+        ignore_value(virJSONValueObjectGetNumberUlong(jsonMemoryInfo, "memory_dirty_rate_pps", &tmp_ulong));
+        progress->memory_transmission_info.memory_dirty_rate_pps = tmp_ulong;
+    }
+
+
+    jsonState = virJSONValueObjectGetObject(json, "state");
+    jsonStateOngoing = virJSONValueObjectGetObject(
+        jsonState,
+        virCHMigrationProgressStateTypeToString(VIR_CH_MIGRATION_PROGRESS_STATE_ONGOING)
+    );
+    jsonStateCancelled = virJSONValueObjectGetObject(
+        jsonState,
+        virCHMigrationProgressStateTypeToString(VIR_CH_MIGRATION_PROGRESS_STATE_CANCELLED)
+    );
+    jsonStateFinished = virJSONValueObjectGetObject(
+        jsonState,
+        virCHMigrationProgressStateTypeToString(VIR_CH_MIGRATION_PROGRESS_STATE_FINISHED)
+    );
+    jsonStateFailed = virJSONValueObjectGetObject(
+        jsonState,
+        virCHMigrationProgressStateTypeToString(VIR_CH_MIGRATION_PROGRESS_STATE_FAILED)
+    );
+
+    progress->state = VIR_CH_MIGRATION_PROGRESS_STATE_INVALID;
+    progress->ongoing_phase = VIR_CH_MIGRATION_PROGRESS_ONGOING_PHASE_INVALID;
+    if (jsonStateOngoing != NULL) {
+        progress->state = VIR_CH_MIGRATION_PROGRESS_STATE_ONGOING;
+        tmp_str = virJSONValueObjectGetString(jsonStateOngoing, "phase");
+        if (tmp_str != NULL) {
+            progress->ongoing_phase = virCHMigrationProgressOngoingPhaseTypeFromString(tmp_str);
+            tmp_str = NULL;
+        }
+        ignore_value(virJSONValueObjectGetNumberUlong(jsonStateOngoing, "vcpu_throttle_percent", &tmp_ulong));
+        progress->vcpu_throttle_percent = tmp_ulong;
+    }
+    else if (jsonStateCancelled != NULL) {
+        progress->state = VIR_CH_MIGRATION_PROGRESS_STATE_CANCELLED;
+    }
+    else if (jsonStateFinished != NULL) {
+        progress->state = VIR_CH_MIGRATION_PROGRESS_STATE_FINISHED;
+    }
+    else if (jsonStateFailed != NULL) {
+        progress->state = VIR_CH_MIGRATION_PROGRESS_STATE_FAILED;
+    }
+
+    jsonTransportationMode = virJSONValueObjectGetObject(
+        json,
+        "transportation_mode"
+    );
+    jsonTransportationModeTcp = virJSONValueObjectGetObject(
+        jsonTransportationMode,
+        "Tcp"
+    );
+
+    progress->transportation_mode = VIR_CH_MIGRATION_TRANSPORT_MODE_TCP;
+    ignore_value(virJSONValueObjectGetNumberUlong(jsonTransportationModeTcp, "connections", &tmp_ulong));
+    progress->tcp_connections = tmp_ulong;
+    ignore_value(virJSONValueObjectGetBoolean(jsonTransportationModeTcp, "tls", &tmp_bool));
+    progress->tcp_tls = tmp_bool;
+
+    return 0;
 }
