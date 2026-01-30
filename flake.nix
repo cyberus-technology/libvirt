@@ -2,12 +2,13 @@
   description = "libvirt with Cloud Hypervisor patches by Cyberus Technology";
 
   inputs = {
-    cloud-hypervisor-src.url = "github:cyberus-technology/cloud-hypervisor?ref=gardenlinux";
-    cloud-hypervisor-src.flake = false;
+    cloud-hypervisor.url = "github:cyberus-technology/cloud-hypervisor?ref=gardenlinux";
+    cloud-hypervisor.inputs.nixpkgs.follows = "nixpkgs";
     keycodemapdb.url = "git+https://gitlab.com/keycodemap/keycodemapdb.git";
     keycodemapdb.flake = false;
-    libvirt-tests.url = "github:cyberus-technology/libvirt-tests";
-    libvirt-tests.inputs.cloud-hypervisor-src.follows = "cloud-hypervisor-src";
+    # Temporarily fix to commit that introduced the switched to cloud-hypervisor flake.
+    libvirt-tests.url = "github:cyberus-technology/libvirt-tests?rev=ba7700353bf4a2af49fd6c5d2bacef06c13ac0ec";
+    libvirt-tests.inputs.cloud-hypervisor.follows = "cloud-hypervisor";
     libvirt-tests.inputs.nixpkgs.follows = "nixpkgs";
     # We follow the latest stable release of nixpkgs
     nixpkgs.url = "github:nixos/nixpkgs/nixos-25.11";
@@ -107,7 +108,7 @@
               ./patches/libvirt/0001-meson-patch-in-an-install-prefix-for-building-on-nix.patch
               ./patches/libvirt/0002-substitute-zfs-and-zpool-commands.patch
             ];
-            mesonFlags = old ++ [
+            mesonFlags = (old.mesonFlags or [ ]) ++ [
               # Helps to keep track of the commit hash in the libvirt log. Nix strips
               # all `.git`, so we need to be explicit here.
               #
