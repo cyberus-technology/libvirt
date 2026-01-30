@@ -2,12 +2,12 @@
   description = "libvirt with Cloud Hypervisor patches by Cyberus Technology";
 
   inputs = {
-    cloud-hypervisor.url = "github:cyberus-technology/cloud-hypervisor?rev=ba8014e664f985043d737d36910cb71537f6d760";
+    cloud-hypervisor.url = "github:cyberus-technology/cloud-hypervisor?ref=gardenlinux";
     cloud-hypervisor.inputs.nixpkgs.follows = "nixpkgs";
     keycodemapdb.url = "git+https://gitlab.com/keycodemap/keycodemapdb.git";
     keycodemapdb.flake = false;
     # Temporarily fix to commit that introduced the switched to cloud-hypervisor flake.
-    libvirt-tests.url = "github:cyberus-technology/libvirt-tests?rev=ba7700353bf4a2af49fd6c5d2bacef06c13ac0ec";
+    libvirt-tests.url = "github:cyberus-technology/libvirt-tests?rev=76813fbd8c6e165e33b32edf604ace92ed2ca314";
     libvirt-tests.inputs.cloud-hypervisor.follows = "cloud-hypervisor";
     libvirt-tests.inputs.nixpkgs.follows = "nixpkgs";
     # We follow the latest stable release of nixpkgs
