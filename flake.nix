@@ -2,7 +2,7 @@
   description = "libvirt with Cloud Hypervisor patches by Cyberus Technology";
 
   inputs = {
-    cloud-hypervisor.url = "github:cyberus-technology/cloud-hypervisor?ref=gardenlinux";
+    cloud-hypervisor.url = "github:cyberus-technology/cloud-hypervisor?rev=ba8014e664f985043d737d36910cb71537f6d760";
     cloud-hypervisor.inputs.nixpkgs.follows = "nixpkgs";
     keycodemapdb.url = "git+https://gitlab.com/keycodemap/keycodemapdb.git";
     keycodemapdb.flake = false;
