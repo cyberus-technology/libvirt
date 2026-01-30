@@ -88,7 +88,7 @@
         pkgs:
         let
           # This builds libvirt with our own sources and the normal upstream libvirt configuration.
-          libvirt = pkgs.libvirt.overrideAttrs (_old: {
+          libvirt = pkgs.libvirt.overrideAttrs (old: {
             name = "libvirt-chv";
             src = cleanSourceWithSubmodules;
             version =
@@ -106,6 +106,13 @@
             patches = [
               ./patches/libvirt/0001-meson-patch-in-an-install-prefix-for-building-on-nix.patch
               ./patches/libvirt/0002-substitute-zfs-and-zpool-commands.patch
+            ];
+            mesonFlags = old ++ [
+              # Helps to keep track of the commit hash in the libvirt log. Nix strips
+              # all `.git`, so we need to be explicit here.
+              #
+              # This is a non-standard functionality of our own libvirt fork.
+              "-Dcommit_hash=${if self ? rev then self.rev else self.dirtyRev}"
             ];
           });
           # This builds libvirt with our own sources and:
