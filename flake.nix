@@ -7,7 +7,7 @@
     keycodemapdb.url = "git+https://gitlab.com/keycodemap/keycodemapdb.git";
     keycodemapdb.flake = false;
     # Temporarily fix to commit that introduced the switched to cloud-hypervisor flake.
-    libvirt-tests.url = "github:cyberus-technology/libvirt-tests?rev=76813fbd8c6e165e33b32edf604ace92ed2ca314";
+    libvirt-tests.url = "github:cyberus-technology/libvirt-tests?ref=main";
     libvirt-tests.inputs.cloud-hypervisor.follows = "cloud-hypervisor";
     libvirt-tests.inputs.nixpkgs.follows = "nixpkgs";
     # We follow the latest stable release of nixpkgs
@@ -46,29 +46,21 @@
       # libvirt requires a populated submodule to build successfully. As we
       # cannot reference a local git directory as a flake input to let nix
       # handle the submodule population, we assemble it ourself.
-      cleanSourceWithSubmodules =
-        (pkgs.runCommand "source-with-submodules" { } ''
-          mkdir -p $out
+      cleanSourceWithSubmodules = pkgs.runCommand "source-with-submodules" { } ''
+        mkdir -p $out
 
-          cp -r ${cleanSource}/* $out/
+        cp -r ${cleanSource}/* $out/
 
-          # If someone fetched this flake with `submodules=1`, then we are good
-          # to go. If not, we populate the submodules.
-          if [ ! -f $out/subprojects/keycodemapdb/meson.build ]; then
-            echo "Was fetched without submodules: populating ..."
-            mkdir -p $out/subprojects/keycodemapdb
-            cp -r ${keycodemapdb}/* $out/subprojects/keycodemapdb/
-          else
-            echo "Was fetched with 'submodules=1'"
-          fi
-        '')
-        # We make the source behave somewhat like a real flake input.
-        # TODO: Remove once libvirt-tests does not consume `libvirt-src` any longer
-        # but consumes the package from this flake instead!
-        .overrideAttrs
-          {
-            rev = if self ? rev then self.rev else self.dirtyRev;
-          };
+        # If someone fetched this flake with `submodules=1`, then we are good
+        # to go. If not, we populate the submodules.
+        if [ ! -f $out/subprojects/keycodemapdb/meson.build ]; then
+          echo "Was fetched without submodules: populating ..."
+          mkdir -p $out/subprojects/keycodemapdb
+          cp -r ${keycodemapdb}/* $out/subprojects/keycodemapdb/
+        else
+          echo "Was fetched with 'submodules=1'"
+        fi
+      '';
 
       systems = [ "x86_64-linux" ];
       forAllSystems =
@@ -144,9 +136,7 @@
         # New attribute set with updated `libvirt-src` input for each test.
         lib.concatMapAttrs (name: value: {
           ${name} = value.override {
-            # TODO use the package of this flake in libvirt-tests once libvirt-tests supports this
-            # libvirt-chv = self.packages.${system}.libvirt-debugoptimized;
-            libvirt-src = cleanSourceWithSubmodules;
+            libvirt = self.packages.${system}.libvirt-debugoptimized;
           };
         }) libvirt-tests.tests.${system}
       );
