@@ -3228,6 +3228,46 @@ chIsSelfMigration(virURI* desturi)
     return false;
 }
 
+/**
+ * The Cloud Hypervisor API 'send_migration' API call returns immediately. The
+ * 'virsh migrate' call must block until the live migration is finished.
+ * Therefore, we wait in a loop and poll the migration status (and statistics)
+ * frequently.
+ * The statistics are passed to a shared buffer and are read when the user
+ * calls 'virsh domjobinfo' during a migration.
+ */
+static int virCHMonitorWaitForMigrationCompletion(virDomainObj *vm)
+{
+    chMigrationProgress progress = {0};
+    virCHDomainObjPrivate *priv = vm->privateData;
+
+    while(1) {
+        if (chMonitorJSONGetMigrationStatsReply(priv->monitor, &progress) < 0) {
+            DBG("Could not retrieve migration stats");
+            return -1;
+        }
+
+        switch (progress.state) {
+        case VIR_CH_MIGRATION_PROGRESS_STATE_ONGOING:
+            g_usleep(100 * 1000); // wait 100ms
+            break;
+        case VIR_CH_MIGRATION_PROGRESS_STATE_FINISHED:
+            DBG("Migration finished successfully!");
+            rc = 0;
+            goto out;
+        case VIR_CH_MIGRATION_PROGRESS_STATE_INVALID:
+        case VIR_CH_MIGRATION_PROGRESS_STATE_CANCELLED:
+        case VIR_CH_MIGRATION_PROGRESS_STATE_FAILED:
+        case VIR_CH_MIGRATION_PROGRESS_STATE_LAST:
+            DBG("Unexpected migration state: %u", progress.state);
+            rc = -1;
+            goto out;
+        };
+    }
+
+    return -1;
+}
+
 static int virConnectCredType[] = {
     VIR_CRED_AUTHNAME,
     VIR_CRED_PASSPHRASE,
@@ -3333,6 +3373,14 @@ chDomainMigratePerform3Impl(virDomainObj *vm,
 
     if (virCHMonitorMigrationSend(priv->monitor, uri, parallel_connections, use_tls, driver->config->migrateTLSx509certdir) < 0) {
         DBG("Migration send failed.");
+        ddomain = dconn->driver->domainMigrateFinish3(dconn, vm->def->name, NULL, 0, NULL, NULL, NULL, uri, flags, 1);
+        virObjectUnref(ddomain);
+        rc = -1;
+        goto cleanup;
+    }
+
+    if (virCHMonitorWaitForMigrationCompletion(vm) < 0) {
+        DBG("Waiting for migration to complete failed");
         ddomain = dconn->driver->domainMigrateFinish3(dconn, vm->def->name, NULL, 0, NULL, NULL, NULL, uri, flags, 1);
         virObjectUnref(ddomain);
         rc = -1;
