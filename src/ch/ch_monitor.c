@@ -2327,7 +2327,7 @@ virCHMonitorGetIOThreads(virCHMonitor *mon,
     return -1;
 }
 
-static int chMigrationParseProgress(virJSONValue * json, chMigrationProgress * progress) {
+G_GNUC_UNUSED static int chMigrationParseProgress(virJSONValue * json, chMigrationProgress * progress) {
     virJSONValue *jsonState = NULL;
     virJSONValue *jsonStateOngoing = NULL;
     virJSONValue *jsonStateCancelled = NULL;
