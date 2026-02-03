@@ -1865,6 +1865,10 @@ int virCHMonitorMigrationSend(virCHMonitor *mon,
         ret = -1;
         goto out;
     }
+    if (virJSONValueObjectAppendBoolean(content, "keep_alive", true) < 0) {
+        ret = -1;
+        goto out;
+    }
 
     if (parallel_connections > 1) {
         if (virJSONValueObjectAppendNumberInt(content, "connections", parallel_connections) != 0) {
