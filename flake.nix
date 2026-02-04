@@ -25,7 +25,6 @@
     let
       pkgs = nixpkgs.legacyPackages.x86_64-linux;
       lib = pkgs.lib;
-      fs = lib.fileset;
 
       # Clean source for libvirt. No GitLab CI, no Nix
       cleanSource = lib.cleanSourceWith {
