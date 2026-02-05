@@ -22,6 +22,7 @@
 
 #include "virdomainobjlist.h"
 #include "virhostdev.h"
+#include "virsysinfo.h"
 #include "virthread.h"
 #include "ch_capabilities.h"
 #include "virebtables.h"
@@ -108,6 +109,9 @@ struct _virCHDriver
     // The inhibitor prevents the virtchd daemon to shutdown if there are
     // running VMs.
     virInhibitor *inhibitor;
+
+    /* Host SMBIOS information (privileged only). */
+    virSysinfoDef *hostsysinfo;
 };
 
 #define CH_SAVE_MAGIC "libvirt-xml\n \0 \r"
