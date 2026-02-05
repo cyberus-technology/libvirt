@@ -767,18 +767,113 @@ virCHMonitorBuildDevicesJson(virJSONValue *content,
 }
 
 static int
-virCHMonitorBuildPlatformJson(virJSONValue *content, virDomainDef *vmdef)
+virCHMonitorEnsurePlatform(g_autoptr(virJSONValue) *platform)
 {
-    if (vmdef->sec &&
-        vmdef->sec->sectype == VIR_DOMAIN_LAUNCH_SECURITY_SEV_SNP) {
-        g_autoptr(virJSONValue) platform = virJSONValueNewObject();
+    if (!*platform)
+        *platform = virJSONValueNewObject();
+
+    return *platform ? 0 : -1;
+}
+
+static int
+virCHMonitorBuildPlatformJson(virCHDriver *driver,
+                              virJSONValue *content,
+                              virDomainDef *vmdef)
+{
+    size_t i;
+    virSysinfoDef *sysinfo = NULL;
+    g_autoptr(virJSONValue) platform = NULL;
+    const bool sevSnpEnabled = vmdef->sec &&
+                               vmdef->sec->sectype == VIR_DOMAIN_LAUNCH_SECURITY_SEV_SNP;
+
+    switch (vmdef->os.smbios_mode) {
+    case VIR_DOMAIN_SMBIOS_HOST:
+        if (!driver->hostsysinfo) {
+            virReportError(VIR_ERR_CONFIG_UNSUPPORTED, "%s",
+                           _("Host SMBIOS information is not available"));
+            return -1;
+        }
+        sysinfo = driver->hostsysinfo;
+        break;
+
+    case VIR_DOMAIN_SMBIOS_SYSINFO:
+        for (i = 0; i < vmdef->nsysinfo; i++) {
+            if (vmdef->sysinfo[i]->type == VIR_SYSINFO_SMBIOS) {
+                sysinfo = vmdef->sysinfo[i];
+                break;
+            }
+        }
+
+        if (!sysinfo) {
+            virReportError(VIR_ERR_XML_ERROR,
+                           _("Domain '%1$s' sysinfo are not available"),
+                           vmdef->name);
+            return -1;
+        }
+        break;
+
+    default:
+        break;
+    }
+
+    if (sevSnpEnabled) {
+        if (virCHMonitorEnsurePlatform(&platform) < 0)
+            return -1;
 
         if (virJSONValueObjectAppendBoolean(platform, "sev_snp", 1) < 0)
             return -1;
+    }
 
-        if (virJSONValueObjectAppend(content, "platform", &platform) < 0)
+    if (sysinfo) {
+        if (virCHMonitorEnsurePlatform(&platform) < 0)
+            return -1;
+
+        if (sysinfo->system) {
+            if (sysinfo->system->manufacturer &&
+                virJSONValueObjectAppendString(platform, "system_manufacturer",
+                                               sysinfo->system->manufacturer) < 0)
+                return -1;
+
+            if (sysinfo->system->product &&
+                virJSONValueObjectAppendString(platform, "system_product_name",
+                                               sysinfo->system->product) < 0)
+                return -1;
+
+            if (sysinfo->system->version &&
+                virJSONValueObjectAppendString(platform, "system_version",
+                                               sysinfo->system->version) < 0)
+                return -1;
+
+            if (sysinfo->system->serial &&
+                virJSONValueObjectAppendString(platform, "system_serial_number",
+                                               sysinfo->system->serial) < 0)
+                return -1;
+
+            if (sysinfo->system->uuid &&
+                virJSONValueObjectAppendString(platform, "system_uuid",
+                                               sysinfo->system->uuid) < 0)
+                return -1;
+
+            if (sysinfo->system->sku &&
+                virJSONValueObjectAppendString(platform, "system_sku_number",
+                                           sysinfo->system->sku) < 0)
+                return -1;
+
+            if (sysinfo->system->family &&
+                virJSONValueObjectAppendString(platform, "system_family",
+                                               sysinfo->system->family) < 0)
+                return -1;
+        }
+
+        if (sysinfo->chassis && sysinfo->chassis->asset &&
+            virJSONValueObjectAppendString(platform, "chassis_asset_tag",
+                                           sysinfo->chassis->asset) < 0)
             return -1;
     }
+
+    if (platform &&
+        virJSONValueObjectAppend(content, "platform", &platform) < 0)
+        return -1;
 
     return 0;
 }
@@ -816,7 +911,7 @@ virCHMonitorBuildVMJson(virCHDriver *driver, virDomainDef *vmdef,
             return -1;
     }
 
-    if (virCHMonitorBuildPlatformJson(content, vmdef) < 0)
+    if (virCHMonitorBuildPlatformJson(driver, content, vmdef) < 0)
         return -1;
 
     if (virCHMonitorBuildDisksJson(content, vmdef) < 0)
