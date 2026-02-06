@@ -96,8 +96,6 @@ typedef struct _virCHMonitor virCHMonitor;
 struct _virCHMonitor {
     virObjectLockable parent;
 
-    CURL *handle;
-
     char *socketpath;
 
     char *eventmonitorpath;

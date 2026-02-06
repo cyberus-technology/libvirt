@@ -991,9 +991,6 @@ virCHMonitorReattach(virDomainObj *vm, virCHDriverConfig *cfg, virCHDriver *driv
         if (virCHStartEventHandler(mon) < 0)
             return NULL;
 
-        /* get a curl handle */
-        mon->handle = curl_easy_init();
-
         virInhibitorHold(driver->inhibitor);
     }
 
@@ -1131,9 +1128,6 @@ virCHMonitorNew(virDomainObj *vm, virCHDriverConfig *cfg, int logfile)
 
         if (virCHStartEventHandler(mon) < 0)
             return NULL;
-
-        /* get a curl handle */
-        mon->handle = curl_easy_init();
     }
 
     return g_steal_pointer(&mon);
@@ -1154,9 +1148,6 @@ void virCHMonitorClose(virCHMonitor *mon)
         return;
 
     VIR_WITH_OBJECT_LOCK_GUARD(mon) {
-        if (mon->handle)
-            curl_easy_cleanup(mon->handle);
-
         if (mon->socketpath) {
             if (virFileRemove(mon->socketpath, -1, -1) < 0 &&
                 errno != ENOENT) {
@@ -1248,26 +1239,23 @@ virCHMonitorPutNoContent(virCHMonitor *mon, const char *endpoint,
     int ret = -1;
     struct curl_data data = {0};
     struct curl_slist *headers = NULL;
+    CURL *handle = NULL;
 
     url = g_strdup_printf("%s/%s", URL_ROOT, endpoint);
 
     VIR_WITH_OBJECT_LOCK_GUARD(mon) {
-        /* reset all options of a libcurl session handle at first */
-        curl_easy_reset(mon->handle);
-
-        curl_easy_setopt(mon->handle, CURLOPT_UNIX_SOCKET_PATH, mon->socketpath);
-        curl_easy_setopt(mon->handle, CURLOPT_URL, url);
-        curl_easy_setopt(mon->handle, CURLOPT_UPLOAD, 1L);
-        curl_easy_setopt(mon->handle, CURLOPT_HTTPHEADER, NULL);
-        curl_easy_setopt(mon->handle, CURLOPT_INFILESIZE, 0L);
-
+        handle = curl_easy_init();
+        curl_easy_setopt(handle, CURLOPT_UNIX_SOCKET_PATH, mon->socketpath);
+        curl_easy_setopt(handle, CURLOPT_URL, url);
+        curl_easy_setopt(handle, CURLOPT_UPLOAD, 1L);
+        curl_easy_setopt(handle, CURLOPT_HTTPHEADER, NULL);
+        curl_easy_setopt(handle, CURLOPT_INFILESIZE, 0L);
         headers = curl_slist_append(headers, "Accept: application/json");
-        curl_easy_setopt(mon->handle, CURLOPT_HTTPHEADER, headers);
-        curl_easy_setopt(mon->handle, CURLOPT_WRITEFUNCTION, curl_callback);
-        curl_easy_setopt(mon->handle, CURLOPT_WRITEDATA, (void *)&data);
-
-        responseCode = virCHMonitorCurlPerform(mon->handle);
-        curl_easy_reset(mon->handle);
+        curl_easy_setopt(handle, CURLOPT_HTTPHEADER, headers);
+        curl_easy_setopt(handle, CURLOPT_WRITEFUNCTION, curl_callback);
+        curl_easy_setopt(handle, CURLOPT_WRITEDATA, (void *)&data);
+        responseCode = virCHMonitorCurlPerform(handle);
+        curl_easy_cleanup(handle);
     }
 
     data.content = g_realloc(data.content, data.size + 1 /* NULL */);
@@ -1298,29 +1286,26 @@ virCHMonitorPutNoResponse(virCHMonitor *mon, const char *endpoint,
     int responseCode = 0;
     struct curl_data data = {0};
     struct curl_slist *headers = NULL;
+    CURL *handle = NULL;
 
     url = g_strdup_printf("%s/%s", URL_ROOT, endpoint);
 
     VIR_WITH_OBJECT_LOCK_GUARD(mon) {
-        /* reset all options of a libcurl session handle at first */
-        curl_easy_reset(mon->handle);
-
-        curl_easy_setopt(mon->handle, CURLOPT_UNIX_SOCKET_PATH, mon->socketpath);
-        curl_easy_setopt(mon->handle, CURLOPT_URL, url);
-        curl_easy_setopt(mon->handle, CURLOPT_UPLOAD, 1L);
-        curl_easy_setopt(mon->handle, CURLOPT_HTTPHEADER, NULL);
-        curl_easy_setopt(mon->handle, CURLOPT_INFILESIZE, 0L);
-
+        handle = curl_easy_init();
+        curl_easy_setopt(handle, CURLOPT_UNIX_SOCKET_PATH, mon->socketpath);
+        curl_easy_setopt(handle, CURLOPT_URL, url);
+        curl_easy_setopt(handle, CURLOPT_UPLOAD, 1L);
+        curl_easy_setopt(handle, CURLOPT_HTTPHEADER, NULL);
+        curl_easy_setopt(handle, CURLOPT_INFILESIZE, 0L);
         headers = curl_slist_append(headers, "Accept: application/json");
         headers = curl_slist_append(headers, "Content-Type: application/json");
-        curl_easy_setopt(mon->handle, CURLOPT_CUSTOMREQUEST, "PUT");
-        curl_easy_setopt(mon->handle, CURLOPT_HTTPHEADER, headers);
-        curl_easy_setopt(mon->handle, CURLOPT_POSTFIELDS, payload);
-        curl_easy_setopt(mon->handle, CURLOPT_WRITEFUNCTION, curl_callback);
-        curl_easy_setopt(mon->handle, CURLOPT_WRITEDATA, (void *)&data);
-
-        responseCode = virCHMonitorCurlPerform(mon->handle);
-        curl_easy_reset(mon->handle);
+        curl_easy_setopt(handle, CURLOPT_CUSTOMREQUEST, "PUT");
+        curl_easy_setopt(handle, CURLOPT_HTTPHEADER, headers);
+        curl_easy_setopt(handle, CURLOPT_POSTFIELDS, payload);
+        curl_easy_setopt(handle, CURLOPT_WRITEFUNCTION, curl_callback);
+        curl_easy_setopt(handle, CURLOPT_WRITEDATA, (void *)&data);
+        responseCode = virCHMonitorCurlPerform(handle);
+        curl_easy_cleanup(handle);
     }
 
     data.content = g_realloc(data.content, data.size + 1);
@@ -1353,29 +1338,26 @@ virCHMonitorPut(virCHMonitor *mon, const char *endpoint,
     int responseCode = 0;
     struct curl_data data = {0};
     struct curl_slist *headers = NULL;
+    CURL *handle = NULL;
 
     url = g_strdup_printf("%s/%s", URL_ROOT, endpoint);
 
     VIR_WITH_OBJECT_LOCK_GUARD(mon) {
-        /* reset all options of a libcurl session handle at first */
-        curl_easy_reset(mon->handle);
-
-        curl_easy_setopt(mon->handle, CURLOPT_UNIX_SOCKET_PATH, mon->socketpath);
-        curl_easy_setopt(mon->handle, CURLOPT_URL, url);
-        curl_easy_setopt(mon->handle, CURLOPT_UPLOAD, 1L);
-        curl_easy_setopt(mon->handle, CURLOPT_HTTPHEADER, NULL);
-        curl_easy_setopt(mon->handle, CURLOPT_INFILESIZE, 0L);
-
+        handle = curl_easy_init();
+        curl_easy_setopt(handle, CURLOPT_UNIX_SOCKET_PATH, mon->socketpath);
+        curl_easy_setopt(handle, CURLOPT_URL, url);
+        curl_easy_setopt(handle, CURLOPT_UPLOAD, 1L);
+        curl_easy_setopt(handle, CURLOPT_HTTPHEADER, NULL);
+        curl_easy_setopt(handle, CURLOPT_INFILESIZE, 0L);
         headers = curl_slist_append(headers, "Accept: application/json");
         headers = curl_slist_append(headers, "Content-Type: application/json");
-        curl_easy_setopt(mon->handle, CURLOPT_CUSTOMREQUEST, "PUT");
-        curl_easy_setopt(mon->handle, CURLOPT_HTTPHEADER, headers);
-        curl_easy_setopt(mon->handle, CURLOPT_POSTFIELDS, payload);
-        curl_easy_setopt(mon->handle, CURLOPT_WRITEFUNCTION, curl_callback);
-        curl_easy_setopt(mon->handle, CURLOPT_WRITEDATA, (void *)&data);
-
-        responseCode = virCHMonitorCurlPerform(mon->handle);
-        curl_easy_reset(mon->handle);
+        curl_easy_setopt(handle, CURLOPT_CUSTOMREQUEST, "PUT");
+        curl_easy_setopt(handle, CURLOPT_HTTPHEADER, headers);
+        curl_easy_setopt(handle, CURLOPT_POSTFIELDS, payload);
+        curl_easy_setopt(handle, CURLOPT_WRITEFUNCTION, curl_callback);
+        curl_easy_setopt(handle, CURLOPT_WRITEDATA, (void *)&data);
+        responseCode = virCHMonitorCurlPerform(handle);
+        curl_easy_cleanup(handle);
     }
 
     data.content = g_realloc(data.content, data.size + 1);
@@ -1412,26 +1394,23 @@ virCHMonitorGet(virCHMonitor *mon, const char *endpoint, virJSONValue **response
     int ret = -1;
     struct curl_slist *headers = NULL;
     struct curl_data data = {0};
+    CURL *handle = NULL;
 
     url = g_strdup_printf("%s/%s", URL_ROOT, endpoint);
 
     VIR_WITH_OBJECT_LOCK_GUARD(mon) {
-        /* reset all options of a libcurl session handle at first */
-        curl_easy_reset(mon->handle);
-
-        curl_easy_setopt(mon->handle, CURLOPT_UNIX_SOCKET_PATH, mon->socketpath);
-        curl_easy_setopt(mon->handle, CURLOPT_URL, url);
-
+        handle = curl_easy_init();
+        curl_easy_setopt(handle, CURLOPT_UNIX_SOCKET_PATH, mon->socketpath);
+        curl_easy_setopt(handle, CURLOPT_URL, url);
         if (response) {
             headers = curl_slist_append(headers, "Accept: application/json");
             headers = curl_slist_append(headers, "Content-Type: application/json");
-            curl_easy_setopt(mon->handle, CURLOPT_HTTPHEADER, headers);
-            curl_easy_setopt(mon->handle, CURLOPT_WRITEFUNCTION, curl_callback);
-            curl_easy_setopt(mon->handle, CURLOPT_WRITEDATA, (void *)&data);
+            curl_easy_setopt(handle, CURLOPT_HTTPHEADER, headers);
+            curl_easy_setopt(handle, CURLOPT_WRITEFUNCTION, curl_callback);
+            curl_easy_setopt(handle, CURLOPT_WRITEDATA, (void *)&data);
         }
-
-        responseCode = virCHMonitorCurlPerform(mon->handle);
-        curl_easy_reset(mon->handle);
+        responseCode = virCHMonitorCurlPerform(handle);
+        curl_easy_cleanup(handle);
     }
 
     if (responseCode == 200 || responseCode == 204) {
@@ -1559,6 +1538,7 @@ virCHMonitorCreateVM(virCHDriver *driver, virCHMonitor *mon)
     int ret = -1;
     g_autofree char *payload = NULL;
     struct curl_slist *headers = NULL;
+    CURL *handle = NULL;
 
     url = g_strdup_printf("%s/%s", URL_ROOT, URL_VM_CREATE);
     headers = curl_slist_append(headers, "Accept: application/json");
@@ -1568,17 +1548,14 @@ virCHMonitorCreateVM(virCHDriver *driver, virCHMonitor *mon)
         return -1;
 
     VIR_WITH_OBJECT_LOCK_GUARD(mon) {
-        /* reset all options of a libcurl session handle at first */
-        curl_easy_reset(mon->handle);
-
-        curl_easy_setopt(mon->handle, CURLOPT_UNIX_SOCKET_PATH, mon->socketpath);
-        curl_easy_setopt(mon->handle, CURLOPT_URL, url);
-        curl_easy_setopt(mon->handle, CURLOPT_CUSTOMREQUEST, "PUT");
-        curl_easy_setopt(mon->handle, CURLOPT_HTTPHEADER, headers);
-        curl_easy_setopt(mon->handle, CURLOPT_POSTFIELDS, payload);
-
-        responseCode = virCHMonitorCurlPerform(mon->handle);
-        curl_easy_reset(mon->handle);
+        handle = curl_easy_init();
+        curl_easy_setopt(handle, CURLOPT_UNIX_SOCKET_PATH, mon->socketpath);
+        curl_easy_setopt(handle, CURLOPT_URL, url);
+        curl_easy_setopt(handle, CURLOPT_CUSTOMREQUEST, "PUT");
+        curl_easy_setopt(handle, CURLOPT_HTTPHEADER, headers);
+        curl_easy_setopt(handle, CURLOPT_POSTFIELDS, payload);
+        responseCode = virCHMonitorCurlPerform(handle);
+        curl_easy_cleanup(handle);
     }
 
     if (responseCode == 200 || responseCode == 204)
@@ -1629,6 +1606,7 @@ virCHMonitorSaveVM(virCHMonitor *mon,
     g_autofree char *path_url = NULL;
     struct curl_slist *headers = NULL;
     struct curl_data data = {0};
+    CURL *handle = NULL;
 
     url = g_strdup_printf("%s/%s", URL_ROOT, URL_VM_SAVE);
 
@@ -1639,21 +1617,17 @@ virCHMonitorSaveVM(virCHMonitor *mon,
     if (virCHMonitorBuildKeyValueStringJson(&payload, "destination_url", path_url) != 0)
         return -1;
 
-
     VIR_WITH_OBJECT_LOCK_GUARD(mon) {
-        /* reset all options of a libcurl session handle at first */
-        curl_easy_reset(mon->handle);
-
-        curl_easy_setopt(mon->handle, CURLOPT_UNIX_SOCKET_PATH, mon->socketpath);
-        curl_easy_setopt(mon->handle, CURLOPT_URL, url);
-        curl_easy_setopt(mon->handle, CURLOPT_CUSTOMREQUEST, "PUT");
-        curl_easy_setopt(mon->handle, CURLOPT_HTTPHEADER, headers);
-        curl_easy_setopt(mon->handle, CURLOPT_POSTFIELDS, payload);
-        curl_easy_setopt(mon->handle, CURLOPT_WRITEFUNCTION, curl_callback);
-        curl_easy_setopt(mon->handle, CURLOPT_WRITEDATA, (void *)&data);
-
-        responseCode = virCHMonitorCurlPerform(mon->handle);
-        curl_easy_reset(mon->handle);
+        handle = curl_easy_init();
+        curl_easy_setopt(handle, CURLOPT_UNIX_SOCKET_PATH, mon->socketpath);
+        curl_easy_setopt(handle, CURLOPT_URL, url);
+        curl_easy_setopt(handle, CURLOPT_CUSTOMREQUEST, "PUT");
+        curl_easy_setopt(handle, CURLOPT_HTTPHEADER, headers);
+        curl_easy_setopt(handle, CURLOPT_POSTFIELDS, payload);
+        curl_easy_setopt(handle, CURLOPT_WRITEFUNCTION, curl_callback);
+        curl_easy_setopt(handle, CURLOPT_WRITEDATA, (void *)&data);
+        responseCode = virCHMonitorCurlPerform(handle);
+        curl_easy_cleanup(handle);
     }
 
     if (responseCode == 200 || responseCode == 204) {
@@ -1679,6 +1653,7 @@ int virCHMonitorRemoveDevice(virCHMonitor *mon,
     g_autofree char *payload = NULL;
     struct curl_slist *headers = NULL;
     struct curl_data data = {0};
+    CURL *handle = NULL;
 
     url = g_strdup_printf("%s/%s", URL_ROOT, URL_VM_REMOVE_DEVICE);
 
@@ -1691,19 +1666,16 @@ int virCHMonitorRemoveDevice(virCHMonitor *mon,
     DBG("Remove device id %s json %s", device_id, payload);
 
     VIR_WITH_OBJECT_LOCK_GUARD(mon) {
-        /* reset all options of a libcurl session handle at first */
-        curl_easy_reset(mon->handle);
-
-        curl_easy_setopt(mon->handle, CURLOPT_UNIX_SOCKET_PATH, mon->socketpath);
-        curl_easy_setopt(mon->handle, CURLOPT_URL, url);
-        curl_easy_setopt(mon->handle, CURLOPT_CUSTOMREQUEST, "PUT");
-        curl_easy_setopt(mon->handle, CURLOPT_HTTPHEADER, headers);
-        curl_easy_setopt(mon->handle, CURLOPT_POSTFIELDS, payload);
-        curl_easy_setopt(mon->handle, CURLOPT_WRITEFUNCTION, curl_callback);
-        curl_easy_setopt(mon->handle, CURLOPT_WRITEDATA, (void *)&data);
-
-        responseCode = virCHMonitorCurlPerform(mon->handle);
-        curl_easy_reset(mon->handle);
+        handle = curl_easy_init();
+        curl_easy_setopt(handle, CURLOPT_UNIX_SOCKET_PATH, mon->socketpath);
+        curl_easy_setopt(handle, CURLOPT_URL, url);
+        curl_easy_setopt(handle, CURLOPT_CUSTOMREQUEST, "PUT");
+        curl_easy_setopt(handle, CURLOPT_HTTPHEADER, headers);
+        curl_easy_setopt(handle, CURLOPT_POSTFIELDS, payload);
+        curl_easy_setopt(handle, CURLOPT_WRITEFUNCTION, curl_callback);
+        curl_easy_setopt(handle, CURLOPT_WRITEDATA, (void *)&data);
+        responseCode = virCHMonitorCurlPerform(handle);
+        curl_easy_cleanup(handle);
     }
 
     if (responseCode == 200 || responseCode == 204) {
@@ -1734,6 +1706,7 @@ int virCHMonitorMigrationSend(virCHMonitor *mon,
     struct curl_slist *headers = NULL;
     struct curl_data data = {0};
     g_autoptr(virJSONValue) content = virJSONValueNewObject();
+    CURL *handle = NULL;
 
     url = g_strdup_printf("%s/%s", URL_ROOT, URL_VM_SEND_MIGRATION);
 
@@ -1782,20 +1755,18 @@ retry:
          * VM in case of migration. */
         virObjectUnlock(mon->vm);
 
-        /* reset all options of a libcurl session handle at first */
-        curl_easy_reset(mon->handle);
-
-        curl_easy_setopt(mon->handle, CURLOPT_UNIX_SOCKET_PATH, mon->socketpath);
-        curl_easy_setopt(mon->handle, CURLOPT_URL, url);
-        curl_easy_setopt(mon->handle, CURLOPT_CUSTOMREQUEST, "PUT");
-        curl_easy_setopt(mon->handle, CURLOPT_HTTPHEADER, headers);
-        curl_easy_setopt(mon->handle, CURLOPT_POSTFIELDS, payload);
-        curl_easy_setopt(mon->handle, CURLOPT_WRITEFUNCTION, curl_callback);
-        curl_easy_setopt(mon->handle, CURLOPT_WRITEDATA, (void *)&data);
-
-        responseCode = virCHMonitorCurlPerform(mon->handle);
-        curl_easy_reset(mon->handle);
+        handle = curl_easy_init();
+        curl_easy_setopt(handle, CURLOPT_UNIX_SOCKET_PATH, mon->socketpath);
+        curl_easy_setopt(handle, CURLOPT_URL, url);
+        curl_easy_setopt(handle, CURLOPT_CUSTOMREQUEST, "PUT");
+        curl_easy_setopt(handle, CURLOPT_HTTPHEADER, headers);
+        curl_easy_setopt(handle, CURLOPT_POSTFIELDS, payload);
+        curl_easy_setopt(handle, CURLOPT_WRITEFUNCTION, curl_callback);
+        curl_easy_setopt(handle, CURLOPT_WRITEDATA, (void *)&data);
+        responseCode = virCHMonitorCurlPerform(handle);
+        curl_easy_cleanup(handle);
     }
+
     virObjectLock(mon->vm);
 
     if (responseCode == 200 || responseCode == 204) {
