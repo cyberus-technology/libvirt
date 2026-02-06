@@ -922,77 +922,79 @@ virCHMonitorReattach(virDomainObj *vm, virCHDriverConfig *cfg, virCHDriver *driv
     if (!(mon = virObjectLockableNew(virCHMonitorClass)))
         return NULL;
 
-    /* avoid VIR_FORCE_CLOSE()-ing garbage fd value in virCHMonitorClose */
-    mon->eventmonitorfd = -1;
+    VIR_WITH_OBJECT_LOCK_GUARD(mon) {
+        /* avoid VIR_FORCE_CLOSE()-ing garbage fd value in virCHMonitorClose */
+        mon->eventmonitorfd = -1;
 
-    if (!vm->def) {
-        virReportError(VIR_ERR_INTERNAL_ERROR, "%s",
-                       _("VM is not defined"));
-        return NULL;
-    }
-
-    /* prepare to launch Cloud-Hypervisor socket */
-    mon->socketpath = g_strdup_printf("%s/%s-socket", cfg->stateDir, vm->def->name);
-
-    /* Event monitor file to listen for VM state changes */
-    mon->eventmonitorpath = g_strdup_printf("%s/%s-event-monitor-fifo",
-                                            cfg->stateDir, vm->def->name);
-
-
-    socket_fd = chMonitorSocketConnect(mon);
-    if (socket_fd < 0) {
-        virReportSystemError(errno,
-                             _("Cannot create socket '%1$s'"),
-                             mon->socketpath);
-        return NULL;
-    }
-
-    // if ((rv = virPidFileReadPath(priv->pidfile, &vm->pid)) < 0) {
-    //     virReportSystemError(-rv,
-    //                          _("Domain %1$s didn't show up"),
-    //                          vm->def->name);
-    //     return NULL;
-    // }
-    // VIR_DEBUG("CH vm=%p name=%s running with pid=%lld",
-    //           vm, vm->def->name, (long long)vm->pid);
-
-    /* open the reader end of fifo before start Event Handler */
-    while ((event_monitor_fd = open(mon->eventmonitorpath, O_RDONLY)) < 0) {
-        if (errno == EINTR) {
-            /* 100 milli seconds */
-            g_usleep(100000);
-            continue;
+        if (!vm->def) {
+            virReportError(VIR_ERR_INTERNAL_ERROR, "%s",
+                           _("VM is not defined"));
+            return NULL;
         }
-        /* Any other error should be a BUG(kernel/libc/libvirtd)
-         * (ENOMEM can happen on exceeding per-user limits)
-         */
-        VIR_ERROR(_("%1$s: Failed to open the event monitor FIFO(%2$s) read end!"),
-                  vm->def->name, mon->eventmonitorpath);
-        /* CH process(Writer) is blocked at this point as EventHandler(Reader)
-         * fails to open the FIFO.
-         */
-        return NULL;
+
+        /* prepare to launch Cloud-Hypervisor socket */
+        mon->socketpath = g_strdup_printf("%s/%s-socket", cfg->stateDir, vm->def->name);
+
+        /* Event monitor file to listen for VM state changes */
+        mon->eventmonitorpath = g_strdup_printf("%s/%s-event-monitor-fifo",
+                                                cfg->stateDir, vm->def->name);
+
+
+        socket_fd = chMonitorSocketConnect(mon);
+        if (socket_fd < 0) {
+            virReportSystemError(errno,
+                                 _("Cannot create socket '%1$s'"),
+                                 mon->socketpath);
+            return NULL;
+        }
+
+        // if ((rv = virPidFileReadPath(priv->pidfile, &vm->pid)) < 0) {
+        //     virReportSystemError(-rv,
+        //                          _("Domain %1$s didn't show up"),
+        //                          vm->def->name);
+        //     return NULL;
+        // }
+        // VIR_DEBUG("CH vm=%p name=%s running with pid=%lld",
+        //           vm, vm->def->name, (long long)vm->pid);
+
+        /* open the reader end of fifo before start Event Handler */
+        while ((event_monitor_fd = open(mon->eventmonitorpath, O_RDONLY)) < 0) {
+            if (errno == EINTR) {
+                /* 100 milli seconds */
+                g_usleep(100000);
+                continue;
+            }
+            /* Any other error should be a BUG(kernel/libc/libvirtd)
+             * (ENOMEM can happen on exceeding per-user limits)
+             */
+            VIR_ERROR(_("%1$s: Failed to open the event monitor FIFO(%2$s) read end!"),
+                      vm->def->name, mon->eventmonitorpath);
+            /* CH process(Writer) is blocked at this point as EventHandler(Reader)
+             * fails to open the FIFO.
+             */
+            return NULL;
+        }
+        mon->eventmonitorfd = event_monitor_fd;
+        VIR_DEBUG("%s: Opened the event monitor FIFO(%s)", vm->def->name, mon->eventmonitorpath);
+
+        // Attach all devices from the config to the PCI bus
+        if (chAssignPciAddresses(vm->def, vm)) {
+            virReportError(VIR_ERR_INTERNAL_ERROR,
+                        "Failed to assign addresses to PCI devices defined in XML!");
+            return NULL;
+        }
+
+        /* now has its own reference */
+        mon->vm = virObjectRef(vm);
+
+        if (virCHStartEventHandler(mon) < 0)
+            return NULL;
+
+        /* get a curl handle */
+        mon->handle = curl_easy_init();
+
+        virInhibitorHold(driver->inhibitor);
     }
-    mon->eventmonitorfd = event_monitor_fd;
-    VIR_DEBUG("%s: Opened the event monitor FIFO(%s)", vm->def->name, mon->eventmonitorpath);
-
-    // Attach all devices from the config to the PCI bus
-    if (chAssignPciAddresses(vm->def, vm)) {
-        virReportError(VIR_ERR_INTERNAL_ERROR,
-                    "Failed to assign addresses to PCI devices defined in XML!");
-        return NULL;
-    }
-
-    /* now has its own reference */
-    mon->vm = virObjectRef(vm);
-
-    if (virCHStartEventHandler(mon) < 0)
-        return NULL;
-
-    /* get a curl handle */
-    mon->handle = curl_easy_init();
-
-    virInhibitorHold(driver->inhibitor);
 
     return g_steal_pointer(&mon);
 }
@@ -1013,123 +1015,125 @@ virCHMonitorNew(virDomainObj *vm, virCHDriverConfig *cfg, int logfile)
     if (!(mon = virObjectLockableNew(virCHMonitorClass)))
         return NULL;
 
-    /* avoid VIR_FORCE_CLOSE()-ing garbage fd value in virCHMonitorClose */
-    mon->eventmonitorfd = -1;
+    VIR_WITH_OBJECT_LOCK_GUARD(mon) {
+        /* avoid VIR_FORCE_CLOSE()-ing garbage fd value in virCHMonitorClose */
+        mon->eventmonitorfd = -1;
 
-    if (!vm->def) {
-        virReportError(VIR_ERR_INTERNAL_ERROR, "%s",
-                       _("VM is not defined"));
-        return NULL;
-    }
-
-    /* prepare to launch Cloud-Hypervisor socket */
-    mon->socketpath = g_strdup_printf("%s/%s-socket", cfg->stateDir, vm->def->name);
-    if (g_mkdir_with_parents(cfg->stateDir, 0777) < 0) {
-        virReportSystemError(errno,
-                             _("Cannot create socket directory '%1$s'"),
-                             cfg->stateDir);
-        return NULL;
-    }
-
-    if (g_mkdir_with_parents(cfg->saveDir, 0777) < 0) {
-        virReportSystemError(errno,
-                             _("Cannot create save directory '%1$s'"),
-                             cfg->saveDir);
-        return NULL;
-    }
-
-    /* Event monitor file to listen for VM state changes */
-    mon->eventmonitorpath = g_strdup_printf("%s/%s-event-monitor-fifo",
-                                            cfg->stateDir, vm->def->name);
-    if (virFileExists(mon->eventmonitorpath)) {
-        VIR_WARN("Monitor file (%s) already exists, trying to delete!",
-                  mon->eventmonitorpath);
-        if (virFileRemove(mon->eventmonitorpath, -1, -1) < 0) {
-            virReportError(VIR_ERR_INTERNAL_ERROR,
-                           _("Failed to remove the file: %1$s"),
-                           mon->eventmonitorpath);
+        if (!vm->def) {
+            virReportError(VIR_ERR_INTERNAL_ERROR, "%s",
+                           _("VM is not defined"));
             return NULL;
         }
-    }
 
-    if (mkfifo(mon->eventmonitorpath, S_IWUSR | S_IRUSR) < 0 &&
-            errno != EEXIST) {
-        virReportSystemError(errno, "%s",
-                             _("Cannot create monitor FIFO"));
-        return NULL;
-    }
-
-    VIR_DEBUG("Start emulator with cmd: %s", vm->def->emulator);
-
-    cmd = virCommandNew(vm->def->emulator);
-    virCommandSetOutputFD(cmd, &logfile);
-    virCommandSetErrorFD(cmd, &logfile);
-    virCommandNonblockingFDs(cmd);
-    virCommandSetUmask(cmd, 0x002);
-
-    socket_fd = chMonitorCreateSocket(mon->socketpath);
-    if (socket_fd < 0) {
-        virReportSystemError(errno,
-                             _("Cannot create socket '%1$s'"),
-                             mon->socketpath);
-        return NULL;
-    }
-
-    virCommandAddArg(cmd, "--api-socket");
-    virCommandAddArgFormat(cmd, "fd=%d", socket_fd);
-    virCommandPassFD(cmd, socket_fd, VIR_COMMAND_PASS_FD_CLOSE_PARENT);
-    virCommandAddArg(cmd, "-v");
-    virCommandAddArg(cmd, "--seccomp");
-    virCommandAddArg(cmd, "true");
-    virCommandAddArg(cmd, "--event-monitor");
-    virCommandAddArgFormat(cmd, "path=%s", mon->eventmonitorpath);
-    virCommandSetPidFile(cmd, priv->pidfile);
-    virCommandDaemonize(cmd);
-
-    /* launch Cloud-Hypervisor socket */
-    if (virCommandRun(cmd, NULL) < 0) {
-        VIR_DEBUG("CH vm=%p name=%s failed to spawn",
-                  vm, vm->def->name);
-        return NULL;
-    }
-
-    if ((rv = virPidFileReadPath(priv->pidfile, &vm->pid)) < 0) {
-        virReportSystemError(-rv,
-                             _("Domain %1$s didn't show up"),
-                             vm->def->name);
-        return NULL;
-    }
-    VIR_DEBUG("CH vm=%p name=%s running with pid=%lld",
-              vm, vm->def->name, (long long)vm->pid);
-
-    /* open the reader end of fifo before start Event Handler */
-    while ((event_monitor_fd = open(mon->eventmonitorpath, O_RDONLY)) < 0) {
-        if (errno == EINTR) {
-            /* 100 milli seconds */
-            g_usleep(100000);
-            continue;
+        /* prepare to launch Cloud-Hypervisor socket */
+        mon->socketpath = g_strdup_printf("%s/%s-socket", cfg->stateDir, vm->def->name);
+        if (g_mkdir_with_parents(cfg->stateDir, 0777) < 0) {
+            virReportSystemError(errno,
+                                 _("Cannot create socket directory '%1$s'"),
+                                 cfg->stateDir);
+            return NULL;
         }
-        /* Any other error should be a BUG(kernel/libc/libvirtd)
-         * (ENOMEM can happen on exceeding per-user limits)
-         */
-        VIR_ERROR(_("%1$s: Failed to open the event monitor FIFO(%2$s) read end!"),
-                  vm->def->name, mon->eventmonitorpath);
-        /* CH process(Writer) is blocked at this point as EventHandler(Reader)
-         * fails to open the FIFO.
-         */
-        return NULL;
+
+        if (g_mkdir_with_parents(cfg->saveDir, 0777) < 0) {
+            virReportSystemError(errno,
+                                 _("Cannot create save directory '%1$s'"),
+                                 cfg->saveDir);
+            return NULL;
+        }
+
+        /* Event monitor file to listen for VM state changes */
+        mon->eventmonitorpath = g_strdup_printf("%s/%s-event-monitor-fifo",
+                                                cfg->stateDir, vm->def->name);
+        if (virFileExists(mon->eventmonitorpath)) {
+            VIR_WARN("Monitor file (%s) already exists, trying to delete!",
+                      mon->eventmonitorpath);
+            if (virFileRemove(mon->eventmonitorpath, -1, -1) < 0) {
+                virReportError(VIR_ERR_INTERNAL_ERROR,
+                               _("Failed to remove the file: %1$s"),
+                               mon->eventmonitorpath);
+                return NULL;
+            }
+        }
+
+        if (mkfifo(mon->eventmonitorpath, S_IWUSR | S_IRUSR) < 0 &&
+                errno != EEXIST) {
+            virReportSystemError(errno, "%s",
+                                 _("Cannot create monitor FIFO"));
+            return NULL;
+        }
+
+        VIR_DEBUG("Start emulator with cmd: %s", vm->def->emulator);
+
+        cmd = virCommandNew(vm->def->emulator);
+        virCommandSetOutputFD(cmd, &logfile);
+        virCommandSetErrorFD(cmd, &logfile);
+        virCommandNonblockingFDs(cmd);
+        virCommandSetUmask(cmd, 0x002);
+
+        socket_fd = chMonitorCreateSocket(mon->socketpath);
+        if (socket_fd < 0) {
+            virReportSystemError(errno,
+                                 _("Cannot create socket '%1$s'"),
+                                 mon->socketpath);
+            return NULL;
+        }
+
+        virCommandAddArg(cmd, "--api-socket");
+        virCommandAddArgFormat(cmd, "fd=%d", socket_fd);
+        virCommandPassFD(cmd, socket_fd, VIR_COMMAND_PASS_FD_CLOSE_PARENT);
+        virCommandAddArg(cmd, "-v");
+        virCommandAddArg(cmd, "--seccomp");
+        virCommandAddArg(cmd, "true");
+        virCommandAddArg(cmd, "--event-monitor");
+        virCommandAddArgFormat(cmd, "path=%s", mon->eventmonitorpath);
+        virCommandSetPidFile(cmd, priv->pidfile);
+        virCommandDaemonize(cmd);
+
+        /* launch Cloud-Hypervisor socket */
+        if (virCommandRun(cmd, NULL) < 0) {
+            VIR_DEBUG("CH vm=%p name=%s failed to spawn",
+                      vm, vm->def->name);
+            return NULL;
+        }
+
+        if ((rv = virPidFileReadPath(priv->pidfile, &vm->pid)) < 0) {
+            virReportSystemError(-rv,
+                                 _("Domain %1$s didn't show up"),
+                                 vm->def->name);
+            return NULL;
+        }
+        VIR_DEBUG("CH vm=%p name=%s running with pid=%lld",
+                  vm, vm->def->name, (long long)vm->pid);
+
+        /* open the reader end of fifo before start Event Handler */
+        while ((event_monitor_fd = open(mon->eventmonitorpath, O_RDONLY)) < 0) {
+            if (errno == EINTR) {
+                /* 100 milli seconds */
+                g_usleep(100000);
+                continue;
+            }
+            /* Any other error should be a BUG(kernel/libc/libvirtd)
+             * (ENOMEM can happen on exceeding per-user limits)
+             */
+            VIR_ERROR(_("%1$s: Failed to open the event monitor FIFO(%2$s) read end!"),
+                      vm->def->name, mon->eventmonitorpath);
+            /* CH process(Writer) is blocked at this point as EventHandler(Reader)
+             * fails to open the FIFO.
+             */
+            return NULL;
+        }
+        mon->eventmonitorfd = event_monitor_fd;
+        VIR_DEBUG("%s: Opened the event monitor FIFO(%s)", vm->def->name, mon->eventmonitorpath);
+
+        /* now has its own reference */
+        mon->vm = virObjectRef(vm);
+
+        if (virCHStartEventHandler(mon) < 0)
+            return NULL;
+
+        /* get a curl handle */
+        mon->handle = curl_easy_init();
     }
-    mon->eventmonitorfd = event_monitor_fd;
-    VIR_DEBUG("%s: Opened the event monitor FIFO(%s)", vm->def->name, mon->eventmonitorpath);
-
-    /* now has its own reference */
-    mon->vm = virObjectRef(vm);
-
-    if (virCHStartEventHandler(mon) < 0)
-        return NULL;
-
-    /* get a curl handle */
-    mon->handle = curl_easy_init();
 
     return g_steal_pointer(&mon);
 }
@@ -1148,28 +1152,30 @@ void virCHMonitorClose(virCHMonitor *mon)
     if (!mon)
         return;
 
-    if (mon->handle)
-        curl_easy_cleanup(mon->handle);
+    VIR_WITH_OBJECT_LOCK_GUARD(mon) {
+        if (mon->handle)
+            curl_easy_cleanup(mon->handle);
 
-    if (mon->socketpath) {
-        if (virFileRemove(mon->socketpath, -1, -1) < 0 &&
-            errno != ENOENT) {
-            VIR_WARN("Unable to remove CH socket file '%s': %s",
-                     mon->socketpath, g_strerror(errno));
+        if (mon->socketpath) {
+            if (virFileRemove(mon->socketpath, -1, -1) < 0 &&
+                errno != ENOENT) {
+                VIR_WARN("Unable to remove CH socket file '%s': %s",
+                         mon->socketpath, g_strerror(errno));
+                }
+            g_clear_pointer(&mon->socketpath, g_free);
         }
-        g_clear_pointer(&mon->socketpath, g_free);
-    }
 
-    virCHStopEventHandler(mon);
-    if (mon->eventmonitorfd >= 0) {
-        VIR_FORCE_CLOSE(mon->eventmonitorfd);
-    }
-    if (mon->eventmonitorpath) {
-        if (virFileRemove(mon->eventmonitorpath, -1, -1) < 0) {
-            VIR_WARN("Unable to remove CH event monitor file '%s'",
-                     mon->eventmonitorpath);
+        virCHStopEventHandler(mon);
+        if (mon->eventmonitorfd >= 0) {
+            VIR_FORCE_CLOSE(mon->eventmonitorfd);
         }
-        g_clear_pointer(&mon->eventmonitorpath, g_free);
+        if (mon->eventmonitorpath) {
+            if (virFileRemove(mon->eventmonitorpath, -1, -1) < 0) {
+                VIR_WARN("Unable to remove CH event monitor file '%s'",
+                         mon->eventmonitorpath);
+            }
+            g_clear_pointer(&mon->eventmonitorpath, g_free);
+        }
     }
 
     virObjectUnref(mon);
