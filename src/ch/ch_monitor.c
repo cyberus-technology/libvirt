@@ -1261,6 +1261,7 @@ virCHMonitorPutNoContent(virCHMonitor *mon, const char *endpoint,
     curl_easy_setopt(mon->handle, CURLOPT_WRITEDATA, (void *)&data);
 
     responseCode = virCHMonitorCurlPerform(mon->handle);
+    curl_easy_reset(mon->handle);
 
     data.content = g_realloc(data.content, data.size + 1 /* NULL */);
     data.content[data.size] = 0;
@@ -1312,6 +1313,7 @@ virCHMonitorPutNoResponse(virCHMonitor *mon, const char *endpoint,
     curl_easy_setopt(mon->handle, CURLOPT_WRITEDATA, (void *)&data);
 
     responseCode = virCHMonitorCurlPerform(mon->handle);
+    curl_easy_reset(mon->handle);
 
     data.content = g_realloc(data.content, data.size + 1);
     data.content[data.size] = 0;
@@ -1365,6 +1367,7 @@ virCHMonitorPut(virCHMonitor *mon, const char *endpoint,
     curl_easy_setopt(mon->handle, CURLOPT_WRITEDATA, (void *)&data);
 
     responseCode = virCHMonitorCurlPerform(mon->handle);
+    curl_easy_reset(mon->handle);
 
     data.content = g_realloc(data.content, data.size + 1);
     data.content[data.size] = 0;
@@ -1419,6 +1422,7 @@ virCHMonitorGet(virCHMonitor *mon, const char *endpoint, virJSONValue **response
         }
 
         responseCode = virCHMonitorCurlPerform(mon->handle);
+        curl_easy_reset(mon->handle);
     }
 
     if (responseCode == 200 || responseCode == 204) {
@@ -1435,8 +1439,6 @@ virCHMonitorGet(virCHMonitor *mon, const char *endpoint, virJSONValue **response
  cleanup:
     g_free(data.content);
     curl_slist_free_all(headers);
-    /* reset the libcurl handle to avoid leaking a stack pointer to data */
-    curl_easy_reset(mon->handle);
 
     return ret;
 }
@@ -1567,6 +1569,7 @@ virCHMonitorCreateVM(virCHDriver *driver, virCHMonitor *mon)
         curl_easy_setopt(mon->handle, CURLOPT_POSTFIELDS, payload);
 
         responseCode = virCHMonitorCurlPerform(mon->handle);
+        curl_easy_reset(mon->handle);
     }
 
     if (responseCode == 200 || responseCode == 204)
@@ -1641,6 +1644,7 @@ virCHMonitorSaveVM(virCHMonitor *mon,
         curl_easy_setopt(mon->handle, CURLOPT_WRITEDATA, (void *)&data);
 
         responseCode = virCHMonitorCurlPerform(mon->handle);
+        curl_easy_reset(mon->handle);
     }
 
     if (responseCode == 200 || responseCode == 204) {
@@ -1653,8 +1657,6 @@ virCHMonitorSaveVM(virCHMonitor *mon,
         g_free(data.content);
     }
 
-    /* reset the libcurl handle to avoid leaking a stack pointer to data */
-    curl_easy_reset(mon->handle);
     curl_slist_free_all(headers);
     return ret;
 }
@@ -1692,6 +1694,7 @@ int virCHMonitorRemoveDevice(virCHMonitor *mon,
         curl_easy_setopt(mon->handle, CURLOPT_WRITEDATA, (void *)&data);
 
         responseCode = virCHMonitorCurlPerform(mon->handle);
+        curl_easy_reset(mon->handle);
     }
 
     if (responseCode == 200 || responseCode == 204) {
@@ -1704,8 +1707,6 @@ int virCHMonitorRemoveDevice(virCHMonitor *mon,
         g_free(data.content);
     }
 
-    /* reset the libcurl handle to avoid leaking a stack pointer to data */
-    curl_easy_reset(mon->handle);
     curl_slist_free_all(headers);
     return ret;
 }
@@ -1785,6 +1786,7 @@ retry:
         curl_easy_setopt(mon->handle, CURLOPT_WRITEDATA, (void *)&data);
 
         responseCode = virCHMonitorCurlPerform(mon->handle);
+        curl_easy_reset(mon->handle);
     }
     virObjectLock(mon->vm);
 
@@ -1803,8 +1805,6 @@ retry:
         g_free(data.content);
     }
 
-    /* reset the libcurl handle to avoid leaking a stack pointer to data */
-    curl_easy_reset(mon->handle);
 out:
     curl_slist_free_all(headers);
     return ret;
