@@ -3235,16 +3235,28 @@ chIsSelfMigration(virURI* desturi)
  * frequently.
  * The statistics are passed to a shared buffer and are read when the user
  * calls 'virsh domjobinfo' during a migration.
+ * Further, we unlock the VM lock here to allow parallel **reading** libvirt
+ * API calls (e.g. virsh list) to get the VM lock. We are protected from
+ * modifying API calls by the async job that is active during the whole
+ * migration.
  */
 static int virCHMonitorWaitForMigrationCompletion(virDomainObj *vm)
 {
     chMigrationProgress progress = {0};
     virCHDomainObjPrivate *priv = vm->privateData;
+    int rc = -1;
 
+    /* See qemuDomainObjEnterMonitorAsync for how qemu handles unlocking the
+     * VM in case of migration. We are guarded by the job lock that is active
+     * during the whole migration procedure. This prevents any modifying API
+     * calls to the domain.
+     */
+    virObjectUnlock(priv->monitor->vm);
     while(1) {
         if (chMonitorJSONGetMigrationStatsReply(priv->monitor, &progress) < 0) {
             DBG("Could not retrieve migration stats");
-            return -1;
+            rc = -1;
+            goto out;
         }
 
         switch (progress.state) {
@@ -3265,7 +3277,9 @@ static int virCHMonitorWaitForMigrationCompletion(virDomainObj *vm)
         };
     }
 
-    return -1;
+out:
+    virObjectLock(priv->monitor->vm);
+    return rc;
 }
 
 static int virConnectCredType[] = {
