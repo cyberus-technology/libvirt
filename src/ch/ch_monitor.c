@@ -1568,6 +1568,8 @@ virCHMonitorGet(virCHMonitor *mon, const char *endpoint, virJSONValue **response
                 goto cleanup;
         }
         ret = 0;
+    } else {
+        DBG("Error response code from CHV: %d", responseCode);
     }
 
  cleanup:
