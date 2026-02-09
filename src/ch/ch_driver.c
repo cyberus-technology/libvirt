@@ -431,6 +431,7 @@ chDomainGetJobStats(virDomainPtr dom,
                     unsigned int flags)
 {
     virDomainObj *vm;
+    virCHDomainObjPrivate *priv = NULL;
     int ret = -1;
     int maxparams = 0;
     unsigned long long timeElapsed = 0;
@@ -441,13 +442,23 @@ chDomainGetJobStats(virDomainPtr dom,
     if (!(vm = virCHDomainObjFromDomain(dom)))
         goto cleanup;
 
-    if (!vm->job->active) {
+    priv = vm->privateData;
+
+    if (!vm->job->active && vm->job->asyncJob == VIR_ASYNC_JOB_NONE) {
         *type = VIR_DOMAIN_JOB_NONE;
         *params = NULL;
         *nparams = 0;
         ret = 0;
         goto cleanup;
     }
+
+    if (vm->job->asyncJob == VIR_ASYNC_JOB_MIGRATION_OUT) {
+        VIR_WITH_MUTEX_LOCK_GUARD(&priv->migrationStatsMutex) {
+            ret = chDomainMigrationJobDataToParams(&priv->migrationStats, type, params, nparams);
+        }
+        goto cleanup;
+    }
+
 
     /* In libxl we don't have an estimated completion time
      * thus we always set to unbounded and update time
@@ -3261,6 +3272,9 @@ static int virCHMonitorWaitForMigrationCompletion(virDomainObj *vm)
 
         switch (progress.state) {
         case VIR_CH_MIGRATION_PROGRESS_STATE_ONGOING:
+            VIR_WITH_MUTEX_LOCK_GUARD(&priv->migrationStatsMutex) {
+                priv->migrationStats = progress;
+            }
             g_usleep(100 * 1000); // wait 100ms
             break;
         case VIR_CH_MIGRATION_PROGRESS_STATE_FINISHED:
