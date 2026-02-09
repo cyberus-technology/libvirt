@@ -9,6 +9,8 @@
     # Temporarily fix to commit that introduced the switched to cloud-hypervisor flake.
     libvirt-tests.url = "github:cyberus-technology/libvirt-tests?ref=main";
     libvirt-tests.inputs.cloud-hypervisor.follows = "cloud-hypervisor";
+    # Breaking the chain of cyclic dependencies:
+    libvirt-tests.inputs.libvirt.inputs.libvirt-tests.follows = "libvirt-tests";
     libvirt-tests.inputs.nixpkgs.follows = "nixpkgs";
     # We follow the latest stable release of nixpkgs
     nixpkgs.url = "github:nixos/nixpkgs/nixos-25.11";
