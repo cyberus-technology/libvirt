@@ -887,7 +887,10 @@ chDomainDestroyFlags(virDomainPtr dom, unsigned int flags)
     if (virDomainDestroyFlagsEnsureACL(dom->conn, vm->def) < 0)
         goto cleanup;
 
-    if (virDomainObjBeginJob(vm, VIR_JOB_DESTROY) < 0)
+    // FIXME: we use VIR_JOB_MODIFY instead of VIR_JOB_DESTROY here because
+    // otherwise, an active migration can be interrupted by `virsh destroy`
+    // which causes major issues with our state machine.
+    if (virDomainObjBeginJob(vm, VIR_JOB_MODIFY) < 0)
         goto cleanup;
 
     if (virDomainObjCheckActive(vm) < 0)
