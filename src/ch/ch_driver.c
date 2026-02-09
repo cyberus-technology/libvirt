@@ -3526,6 +3526,7 @@ chDomainMigrateFinish3(virConnectPtr dconn,
                        _("no domain with matching name '%1$s'"), dname);
         return NULL;
     }
+    DBG("Domain %s has been found", dname);
 
     if (virDomainMigrateFinish3EnsureACL(dconn, vm->def) < 0) {
         virDomainObjEndAPI(&vm);
