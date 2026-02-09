@@ -74,6 +74,10 @@ virCHDomainObjPrivateAlloc(void *opaque)
         g_free(priv);
         return NULL;
     }
+    if (virMutexInit(&priv->migrationStatsMutex) < 0) {
+        g_free(priv);
+        return NULL;
+    }
     priv->driver = opaque;
 
     return priv;
@@ -90,6 +94,7 @@ virCHDomainObjPrivateFree(void *data)
     virBitmapFree(priv->autoCpuset);
     virBitmapFree(priv->autoNodeset);
     virCgroupFree(priv->cgroup);
+    virMutexDestroy(&priv->migrationStatsMutex);
     g_free(priv->pidfile);
     g_free(priv);
 }

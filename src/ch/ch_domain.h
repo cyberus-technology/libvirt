@@ -49,6 +49,14 @@ struct _virCHDomainObjPrivate {
      */
     int shutdown_done;
     virDomainPCIAddressSet *pciAddrSet;
+
+    /**
+     * Migration stats are shared between the thread handling the migration on
+     * the sending side and threads trying to obtain the migration stats via
+     * 'virsh domjobinfo'.
+     */
+    virMutex migrationStatsMutex;
+    chMigrationProgress migrationStats;
 };
 
 struct _chMigrationDstArgs {
