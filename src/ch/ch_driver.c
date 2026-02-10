@@ -3240,6 +3240,27 @@ chIsSelfMigration(virURI* desturi)
 }
 
 /**
+ * Retrieve the current migration stats and sync them into the shared member.
+ * Makes sure access to the shared progress is properly locked.
+ */
+static
+int virCHRetrieveAndSyncMigrationProgress(virCHDomainObjPrivate *priv)
+{
+    chMigrationProgress progress = {0};
+
+    if (chMonitorJSONGetMigrationStatsReply(priv->monitor, &progress) < 0) {
+        DBG("Could not retrieve migration stats");
+        return -1;
+    }
+
+    VIR_WITH_MUTEX_LOCK_GUARD(&priv->migrationStatsMutex) {
+        priv->migrationStats = progress;
+    }
+
+    return 0;
+}
+
+/**
  * The Cloud Hypervisor API 'send_migration' API call returns immediately. The
  * 'virsh migrate' call must block until the live migration is finished.
  * Therefore, we wait in a loop and poll the migration status (and statistics)
@@ -3253,7 +3274,6 @@ chIsSelfMigration(virURI* desturi)
  */
 static int virCHMonitorWaitForMigrationCompletion(virDomainObj *vm)
 {
-    chMigrationProgress progress = {0};
     virCHDomainObjPrivate *priv = vm->privateData;
     int rc = -1;
 
@@ -3264,17 +3284,14 @@ static int virCHMonitorWaitForMigrationCompletion(virDomainObj *vm)
      */
     virObjectUnlock(priv->monitor->vm);
     while(1) {
-        if (chMonitorJSONGetMigrationStatsReply(priv->monitor, &progress) < 0) {
-            DBG("Could not retrieve migration stats");
-            rc = -1;
+        if (virCHRetrieveAndSyncMigrationProgress(priv) < 0) {
+            DBG("Waiting for migration to finish failed because migration stats "
+                "could not be retrieved.");
             goto out;
         }
 
-        switch (progress.state) {
+        switch (priv->migrationStats.state) {
         case VIR_CH_MIGRATION_PROGRESS_STATE_ONGOING:
-            VIR_WITH_MUTEX_LOCK_GUARD(&priv->migrationStatsMutex) {
-                priv->migrationStats = progress;
-            }
             g_usleep(100 * 1000); // wait 100ms
             break;
         case VIR_CH_MIGRATION_PROGRESS_STATE_FINISHED:
@@ -3285,7 +3302,9 @@ static int virCHMonitorWaitForMigrationCompletion(virDomainObj *vm)
         case VIR_CH_MIGRATION_PROGRESS_STATE_CANCELLED:
         case VIR_CH_MIGRATION_PROGRESS_STATE_FAILED:
         case VIR_CH_MIGRATION_PROGRESS_STATE_LAST:
-            DBG("Unexpected migration state: %u", progress.state);
+            DBG("Unexpected migration state: %u %s",
+                priv->migrationStats.state,
+                virCHMigrationProgressStateTypeToString(priv->migrationStats.state));
             rc = -1;
             goto out;
         };
