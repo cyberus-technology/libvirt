@@ -870,6 +870,20 @@ virCHMonitorBuildPlatformJson(virCHDriver *driver,
             virJSONValueObjectAppendString(platform, "chassis_asset_tag",
                                            sysinfo->chassis->asset) < 0)
             return -1;
+
+        if (sysinfo->oemStrings && sysinfo->oemStrings->nvalues > 0) {
+            g_autoptr(virJSONValue) oem_strings = virJSONValueNewArray();
+
+            for (i = 0; i < sysinfo->oemStrings->nvalues; i++) {
+                if (virJSONValueArrayAppendString(oem_strings,
+                                                  sysinfo->oemStrings->values[i]) < 0)
+                    return -1;
+            }
+
+            if (virJSONValueObjectAppend(platform, "oem_strings",
+                                         &oem_strings) < 0)
+                return -1;
+        }
     }
 
     if (platform &&
