@@ -141,7 +141,12 @@ int virCHMonitorMigrationSend(virCHMonitor *mon,
                               char *tls_dir);
 int virCHMonitorMigrationReceive(virCHMonitor *mon,
                                  const char *rcv_uri,
-                                 virDomainDef *vmdef, virCHDriver *driver, virCond *cond, char* tcp_serial_url, bool use_tls);
+                                 virDomainDef *vmdef,
+                                 virCHDriver *driver,
+                                 virCond *cond,
+                                 char* tcp_serial_url,
+                                 bool use_tls,
+                                 virJSONValue *mem_zones);
 int virCHMonitorRemoveDevice(virCHMonitor *mon, const char* device_id);
 int virCHMonitorGetInfo(virCHMonitor *mon, virJSONValue **info);
 
@@ -165,3 +170,6 @@ virCHMonitorPutNoResponse(virCHMonitor *mon, const char *endpoint,
 virJSONValue*
 virCHMonitorPut(virCHMonitor *mon, const char *endpoint,
                 const char *payload, domainLogContext *logCtxt);
+
+int
+virCHMonitorBuildMemoryZonesJson(virJSONValue *content, virDomainDef *def);
