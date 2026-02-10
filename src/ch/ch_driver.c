@@ -39,8 +39,10 @@
 #include "datatypes.h"
 #include "driver.h"
 #include "libvirt/libvirt.h"
+#include "numa_conf.h"
 #include "viralloc.h"
 #include "viraccessapicheck.h"
+#include "virbitmap.h"
 #include "virchrdev.h"
 #include "virconftypes.h"
 #include "virerror.h"
@@ -2858,7 +2860,8 @@ chDoMigrateDstReceive(void *opaque)
                                      args->driver,
                                      &args->cond,
                                      args->tcp_serial_url,
-                                     args->use_tls) < 0) {
+                                     args->use_tls,
+                                     args->cells) < 0) {
         DBG("Migration receive failed.");
         args->success = false;
         return;
@@ -3039,12 +3042,22 @@ chDomainMigratePrepare3(virConnectPtr dconn,
     args->success = false;
     args->tcp_serial_url = NULL;
     args->use_tls = flags & VIR_MIGRATE_TLS;
+    args->cells = NULL;
 
     if (vm->def->nserials > 0 &&
         vm->def->serials[0]->source->type == VIR_DOMAIN_CHR_TYPE_TCP) {
         args->tcp_serial_url = g_strdup_printf("%s:%s",
                                                vm->def->serials[0]->source->data.tcp.host,
                                                vm->def->serials[0]->source->data.tcp.service);
+    }
+
+    if (vm->def->numa) {
+        args->cells = virJSONValueNewObject();
+        if (virCHMonitorBuildMemoryZonesJson(args->cells, vm->def) != 0) {
+            DBG("failed to process numa info");
+            rc = -1;
+            goto cleanup;
+        }
     }
 
     // VM receiving is blocking which we cannot do here, because it would block
@@ -3623,6 +3636,9 @@ chDomainMigrateFinish3(virConnectPtr dconn,
 error:
     if (priv->args->tcp_serial_url) {
         VIR_FREE(priv->args->tcp_serial_url);
+    }
+    if (priv->args->cells) {
+        virJSONValueFree(priv->args->cells);
     }
     VIR_FREE(priv->args);
     virDomainObjEndAsyncJob(vm);

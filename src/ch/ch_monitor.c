@@ -35,6 +35,7 @@
 #include "ch_socket.h"
 #include "domain_interface.h"
 #include "libvirt/libvirt.h"
+#include "numa_conf.h"
 #include "viralloc.h"
 #include "vircommand.h"
 #include "virerror.h"
@@ -365,7 +366,7 @@ static void virCHMonitorBuildHugePageJson(virJSONValue *content, size_t size, bo
 
   In this function we only define the memory zones
  */
-static int
+int
 virCHMonitorBuildMemoryZonesJson(virJSONValue *content, virDomainDef *def)
 {
     size_t ncells = virDomainNumaGetNodeCount(def->numa);
@@ -953,7 +954,7 @@ virCHMonitorBuildVMJson(virCHDriver *driver, virDomainDef *vmdef,
     if (!(*jsonstr = virJSONValueToString(content, false)))
         return -1;
 
-    VIR_DEBUG("Build VM JSON: \n %s \n", *jsonstr);
+    DBG("Build VM JSON: \n %s \n", *jsonstr);
     return 0;
 }
 
@@ -1894,7 +1895,7 @@ retry:
         ret = 0;
     } else {
         if (retries++ < 3) {
-            DBG("Error code when sending migration. Retrying.");
+            DBG("Error when sending migration, response is %d; Retrying.", responseCode);
             sleep(1);
             goto retry;
         }
@@ -1985,7 +1986,8 @@ int virCHMonitorMigrationReceive(virCHMonitor *mon,
                                  virCHDriver *driver,
                                  virCond *cond,
                                  char *tcp_serial_url,
-                                 bool use_tls)
+                                 bool use_tls,
+                                 virJSONValue *mem_zones)
 {
     size_t i = 0;
     VIR_AUTOCLOSE mon_sockfd = -1;
@@ -2015,6 +2017,20 @@ int virCHMonitorMigrationReceive(virCHMonitor *mon,
         DBG("TCP serial in use. Pass adapted TCP serial url: %s", tcp_serial_url);
         if (virJSONValueObjectAppendString(content, "tcp_serial_url", tcp_serial_url) < 0) {
             DBG("virJSONValueObjectAppendString failed for tcp_serial_url");
+            rc = -1;
+            goto err;
+        }
+    }
+
+    if (vmdef->numa && virDomainNumaGetNodeCount(vmdef->numa)) {
+        virJSONValue *zones_value = virJSONValueObjectGet(mem_zones, "zones");
+        DBG("Append numa data to request");
+        // Create a copy of the object so we don't mess with the numa member of args
+        if (zones_value) {
+            zones_value = virJSONValueCopy(zones_value);
+        }
+        if (!zones_value || virJSONValueObjectAppend(content, "zones", &zones_value) != 0) {
+            DBG("virJSONValueObjectAppend failed for zones");
             rc = -1;
             goto err;
         }

@@ -375,7 +375,6 @@ virCHDomainRefreshThreadInfo(virDomainObj *vm)
                  maxvcpus, ncpus);
 }
 
-
 static int
 chDomainDefAssignAddresses(virDomainDef *def,
                              unsigned int parseFlags G_GNUC_UNUSED,
