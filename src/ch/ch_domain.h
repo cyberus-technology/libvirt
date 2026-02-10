@@ -61,6 +61,7 @@ struct _chMigrationDstArgs {
     volatile bool success;
     char *tcp_serial_url;
     bool use_tls;
+    virJSONValue *cells;
 };
 
 #define CH_DOMAIN_PRIVATE(vm) \
