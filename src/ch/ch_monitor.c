@@ -801,6 +801,10 @@ virCHMonitorBuildPlatformJson(virCHDriver *driver,
     const bool sevSnpEnabled = vmdef->sec &&
                                vmdef->sec->sectype == VIR_DOMAIN_LAUNCH_SECURITY_SEV_SNP;
 
+    if (vmdef->os.smbios_mode == VIR_DOMAIN_SMBIOS_NONE ||
+        vmdef->os.smbios_mode == VIR_DOMAIN_SMBIOS_EMULATE)
+        return 0;
+
     switch (vmdef->os.smbios_mode) {
     case VIR_DOMAIN_SMBIOS_HOST:
         if (!driver->hostsysinfo) {
