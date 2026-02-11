@@ -776,6 +776,19 @@ virCHMonitorEnsurePlatform(g_autoptr(virJSONValue) *platform)
     return *platform ? 0 : -1;
 }
 
+static virSysinfoDef *
+virCHMonitorFindDomainSysinfo(virDomainDef *vmdef)
+{
+    size_t i;
+
+    for (i = 0; i < vmdef->nsysinfo; i++) {
+        if (vmdef->sysinfo[i]->type == VIR_SYSINFO_SMBIOS)
+            return vmdef->sysinfo[i];
+    }
+
+    return NULL;
+}
+
 static int
 virCHMonitorBuildPlatformJson(virCHDriver *driver,
                               virJSONValue *content,
@@ -783,6 +796,7 @@ virCHMonitorBuildPlatformJson(virCHDriver *driver,
 {
     size_t i;
     virSysinfoDef *sysinfo = NULL;
+    virSysinfoDef *domainSysinfo = virCHMonitorFindDomainSysinfo(vmdef);
     g_autoptr(virJSONValue) platform = NULL;
     const bool sevSnpEnabled = vmdef->sec &&
                                vmdef->sec->sectype == VIR_DOMAIN_LAUNCH_SECURITY_SEV_SNP;
@@ -798,13 +812,7 @@ virCHMonitorBuildPlatformJson(virCHDriver *driver,
         break;
 
     case VIR_DOMAIN_SMBIOS_SYSINFO:
-        for (i = 0; i < vmdef->nsysinfo; i++) {
-            if (vmdef->sysinfo[i]->type == VIR_SYSINFO_SMBIOS) {
-                sysinfo = vmdef->sysinfo[i];
-                break;
-            }
-        }
-
+        sysinfo = domainSysinfo;
         if (!sysinfo) {
             virReportError(VIR_ERR_XML_ERROR,
                            _("Domain '%1$s' sysinfo are not available"),
@@ -850,7 +858,8 @@ virCHMonitorBuildPlatformJson(virCHDriver *driver,
                                                sysinfo->system->serial) < 0)
                 return -1;
 
-            if (sysinfo->system->uuid &&
+            if (vmdef->os.smbios_mode != VIR_DOMAIN_SMBIOS_HOST &&
+                sysinfo->system->uuid &&
                 virJSONValueObjectAppendString(platform, "system_uuid",
                                                sysinfo->system->uuid) < 0)
                 return -1;
