@@ -3459,6 +3459,10 @@ chDomainMigratePerform3Impl(virDomainObj *vm,
         DBG("Target domain configuration: \n%s\n", dom_xml);
 
         dconn = virConnectOpenAuth(dconnuri, &virConnectAuthConfig, 0);
+
+        if (virConnectSetKeepAlive(dconn, 5 /* interval */, 5 /* timeout */) < 0)
+            goto cleanup;
+
         if (dconn == NULL) {
             DBG("Could not open connection to remote libvirt daemon");
             goto cleanup;
@@ -3476,6 +3480,7 @@ chDomainMigratePerform3Impl(virDomainObj *vm,
 
     if (virCHMonitorMigrationSend(priv->monitor, uri, parallel_connections, use_tls, driver->config->migrateTLSx509certdir) < 0) {
         DBG("Migration send failed.");
+
         ddomain = dconn->driver->domainMigrateFinish3(dconn, vm->def->name, NULL, 0, NULL, NULL, NULL, uri, flags, 1);
         virObjectUnref(ddomain);
         rc = -1;
