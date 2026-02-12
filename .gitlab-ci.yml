@@ -124,3 +124,9 @@ test:hugepage-tests:
     - .test_nixos_tests
   variables:
     TEST_ATTR: hugepage
+
+test:numa-host-tests:
+  extends:
+    - .test_nixos_tests
+  variables:
+    TEST_ATTR: numa_hosts
