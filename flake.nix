@@ -6,7 +6,6 @@
     cloud-hypervisor.inputs.nixpkgs.follows = "nixpkgs";
     keycodemapdb.url = "git+https://gitlab.com/keycodemap/keycodemapdb.git";
     keycodemapdb.flake = false;
-    # Temporarily fix to commit that introduced the switched to cloud-hypervisor flake.
     libvirt-tests.url = "github:cyberus-technology/libvirt-tests?ref=main";
     libvirt-tests.inputs.cloud-hypervisor.follows = "cloud-hypervisor";
     # Breaking the chain of cyclic dependencies:
@@ -156,6 +155,7 @@
               live_migration.driver
               hugepage.driver
               long_migration_with_load.driver
+              numa_hosts.driver
             ];
           };
         }
