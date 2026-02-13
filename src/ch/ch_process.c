@@ -400,6 +400,11 @@ virCHProcessSetupEmulatorThreads(virDomainObj *vm)
                       priv->monitor->threads[thd_index].emuInfo.tid,
                       priv->monitor->threads[thd_index].emuInfo.thrName);
 
+            if (STREQ(priv->monitor->threads[thd_index].emuInfo.thrName, "post-migration")) {
+                DBG("Skipping short lived post migration thread");
+                continue;
+            }
+
             if (virCHProcessSetupEmulatorThread(vm,
                                                 priv->monitor->threads[thd_index].emuInfo) < 0)
                 return -1;
