@@ -2887,12 +2887,109 @@ chMigrationAnyPrepareDef(virCHDriver *driver,
     return def;
 }
 
+struct virCHMigrationCleanupOpaque {
+    virDomainObj *vm;
+    virThread *thr;
+};
+
+static void
+virCHMigrationCleanupFree(void *opaque)
+{
+    struct virCHMigrationCleanupOpaque *data = opaque;
+    if (data->vm)
+        virObjectUnref(data->vm);
+    VIR_FREE(data);
+}
+
+static void
+virCHMigrationCallback(int timer, void *opaque)
+{
+    struct virCHMigrationCleanupOpaque *data = opaque;
+
+    /* one-shot */
+    virEventRemoveTimeout(timer);
+
+    if (data->thr) {
+        virThreadJoin(data->thr);
+        VIR_FREE(data->thr);
+    }
+}
+
+static void
+chDomainMigrateFinish3LocalFailure(char* dname, virCHDriver *driver)
+{
+    virCHDomainObjPrivate *priv = NULL;
+    virDomainObj *vm = NULL;
+    struct virCHMigrationCleanupOpaque *cleanup;
+    g_autoptr(virCHDriverConfig) cfg = virCHDriverGetConfig(driver);
+
+    vm = virDomainObjListFindByName(driver->domains, dname);
+    if (!vm) {
+        virReportError(VIR_ERR_NO_DOMAIN,
+                       _("no domain with matching name '%1$s'"), dname);
+        return;
+    }
+    priv = vm->privateData;
+
+    cleanup = g_new0(struct virCHMigrationCleanupOpaque, 1);
+    cleanup->vm = virObjectRef(vm);
+    cleanup->thr = priv->migrationDstReceiveThr;
+
+    DBG("Migration for VM %s was unsuccessful, killing CHV process", dname);
+
+    if (virCHProcessKill(driver, vm, VIR_DOMAIN_SHUTOFF_DESTROYED) < 0) {
+        VIR_WARN("Unable to terminate cloud-hypervisor");
+    }
+
+    if (virPortAllocatorRelease(priv->args->port) < 0) {
+        DBG("Could not release migration port");
+    }
+
+    virMutexDestroy(&priv->args->mutex);
+
+    if (virCondDestroy(&priv->args->cond) < 0) {
+        DBG("Failed to destroy migration condition variable");
+    }
+
+    virDomainObjRemoveTransientDef(vm);
+
+    if (virDomainDeleteConfig(cfg->stateDir, cfg->autostartDir, vm) < 0) {
+        VIR_WARN("Unable to delete stateDir config");
+    }
+    if (virDomainDeleteConfig(cfg->configDir, cfg->autostartDir, vm) < 0) {
+        VIR_WARN("Unable to delete configDir config");
+    }
+
+    if (priv->args->tcp_serial_url) {
+        VIR_FREE(priv->args->tcp_serial_url);
+    }
+    if (priv->args->cells) {
+        virJSONValueFree(priv->args->cells);
+    }
+
+    VIR_FREE(priv->args);
+
+    virCHDomainRemoveInactive(driver, vm);
+
+    virDomainObjEndAsyncJob(vm);
+    virDomainObjEndAPI(&vm);
+
+    // We must defer freeing migrationDstReceiveThr here because we are currently executing
+    // directly inside this thread. Instead, defer the cleanup via a timer callback
+    // which joins on the thread handle and performs the cleanup after the thread has
+    // terminated.
+    if (virEventAddTimeout(0, virCHMigrationCallback, cleanup, virCHMigrationCleanupFree) <= 0) {
+         VIR_WARN("Unable to add cleanup callback. Memory will be leaked");
+    }
+}
+
 static void
 chDoMigrateDstReceive(void *opaque)
 {
     chMigrationDstArgs *args = opaque;
     virCHDomainObjPrivate *priv = args->priv;
     g_autofree char* rcv_uri = NULL;
+    virDomainObj* vm = priv->monitor->vm;
 
     DBG("Migration thread executing");
     if (!priv->monitor) {
@@ -2913,6 +3010,7 @@ chDoMigrateDstReceive(void *opaque)
                                      args->cells) < 0) {
         DBG("Migration receive failed.");
         args->success = false;
+        chDomainMigrateFinish3LocalFailure(vm->def->name, args->driver);
         return;
     }
 
@@ -3460,12 +3558,13 @@ chDomainMigratePerform3Impl(virDomainObj *vm,
 
         dconn = virConnectOpenAuth(dconnuri, &virConnectAuthConfig, 0);
 
-        if (virConnectSetKeepAlive(dconn, 5 /* interval */, 5 /* timeout */) < 0)
-            goto cleanup;
-
         if (dconn == NULL) {
             DBG("Could not open connection to remote libvirt daemon");
             goto cleanup;
+        }
+
+        if (virConnectSetKeepAlive(dconn, 5 /* interval */, 5 /* timeout */) < 0) {
+            DBG("Unable to set KeepAlive timeout");
         }
 
         if (!(uri_parsed = chMigrationAnyParseURI(dconnuri, NULL))) {
@@ -3480,17 +3579,15 @@ chDomainMigratePerform3Impl(virDomainObj *vm,
 
     if (virCHMonitorMigrationSend(priv->monitor, uri, parallel_connections, use_tls, driver->config->migrateTLSx509certdir) < 0) {
         DBG("Migration send failed.");
-
-        ddomain = dconn->driver->domainMigrateFinish3(dconn, vm->def->name, NULL, 0, NULL, NULL, NULL, uri, flags, 1);
-        virObjectUnref(ddomain);
+        // We cannot call domainMigrateFinish3 here because we don't know what happended. If the network has failed, our RPC call will
+        // never reach the destination side. Instead, let the receiver clean it up (see chDomainMigrateFinish3LocalFailure).
         rc = -1;
         goto cleanup;
     }
 
     if (virCHMonitorWaitForMigrationCompletion(vm) < 0) {
         DBG("Waiting for migration to complete failed");
-        ddomain = dconn->driver->domainMigrateFinish3(dconn, vm->def->name, NULL, 0, NULL, NULL, NULL, uri, flags, 1);
-        virObjectUnref(ddomain);
+        // Same as above. We don't know what happened, it is the receivers responsibility to do the proper cleanup.
         rc = -1;
         goto cleanup;
     }
