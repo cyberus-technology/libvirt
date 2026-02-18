@@ -10,11 +10,11 @@
         "rust-overlay": "rust-overlay"
       },
       "locked": {
-        "lastModified": 1770798639,
-        "narHash": "sha256-ze3ZuHDbCahaEZCOL8QWa81W1V+O7RBPrZDf83/KVuo=",
+        "lastModified": 1771352320,
+        "narHash": "sha256-duM5v8uGHzjAmbVwL/57VOIGos+/nWhE2OhwR+96oJ8=",
         "owner": "cyberus-technology",
         "repo": "cloud-hypervisor",
-        "rev": "409b4affe32ac1ae9a6f4c42793c59099d76ecbd",
+        "rev": "f6731640d3846e9b6050876c2b9f3944623108d3",
         "type": "github"
       },
       "original": {
@@ -26,11 +26,11 @@
     },
     "crane": {
       "locked": {
-        "lastModified": 1769287525,
-        "narHash": "sha256-gABuYA6BzoRMLuPaeO5p7SLrpd4qExgkwEmYaYQY4bM=",
+        "lastModified": 1770419512,
+        "narHash": "sha256-o8Vcdz6B6bkiGUYkZqFwH3Pv1JwZyXht3dMtS7RchIo=",
         "owner": "ipetkov",
         "repo": "crane",
-        "rev": "0314e365877a85c9e5758f9ea77a9972afbb4c21",
+        "rev": "2510f2cbc3ccd237f700bb213756a8f35c32d8d7",
         "type": "github"
       },
       "original": {
@@ -158,11 +158,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1770625785,
-        "narHash": "sha256-cgFg5Q2SejgCK9GKPs7ppoAqnvrpaibvlbRkhfpR/Ic=",
+        "lastModified": 1770808379,
+        "narHash": "sha256-EjP8Wrp27kCTNZOiDiKmzi/ssgS/fD+8nQo6vRfwRt0=",
         "ref": "gardenlinux",
-        "rev": "4c2c91ea939f009990db1b72e55bd6663bcfb764",
-        "revCount": 53615,
+        "rev": "be575f7b06806e84aec56bf531e7029a1d44dd01",
+        "revCount": 53623,
         "submodules": true,
         "type": "git",
         "url": "https://github.com/cyberus-technology/libvirt"
@@ -188,11 +188,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1770807650,
-        "narHash": "sha256-3VnSEJQQZy/069/CfuqrXaEd3KEHdqLOnMSC67275YA=",
+        "lastModified": 1771417553,
+        "narHash": "sha256-2tDazkJ1HkKYjG2l0tIHfruCkk2af02WyYE6UPhFVH0=",
         "owner": "cyberus-technology",
         "repo": "libvirt-tests",
-        "rev": "2c3565fe66d4dcdb2ff7d029f18090d0522d71f0",
+        "rev": "879b2b6caf09ef84c235e53c2d8b3e820a81bace",
         "type": "github"
       },
       "original": {
@@ -234,11 +234,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1769568593,
-        "narHash": "sha256-vf3cZf8imUlPzFtICa1uyReDzoPV0XhHOIRM3tqI5VY=",
+        "lastModified": 1770952264,
+        "narHash": "sha256-CjymNrJZWBtpavyuTkfPVPaZkwzIzGaf0E/3WgcwM14=",
         "owner": "oxalica",
         "repo": "rust-overlay",
-        "rev": "6fe5039018d05cee5d01dda7df1c0846fb7943a4",
+        "rev": "ec6a3d5cdf14bb5a1dd03652bd3f6351004d2188",
         "type": "github"
       },
       "original": {
