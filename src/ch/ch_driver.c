@@ -1800,7 +1800,8 @@ chStateInitialize(bool privileged,
         !virCapabilitiesDomainSupported(ch_driver->caps, -1,
                                         VIR_ARCH_NONE, VIR_DOMAIN_VIRT_HYPERV, false)) {
         VIR_INFO("/dev/kvm and /dev/mshv are missing. CH driver failed to initialize.");
-        return VIR_DRV_STATE_INIT_SKIPPED;
+        ret = VIR_DRV_STATE_INIT_SKIPPED;
+        goto cleanup;
     }
 
     if (!(ch_driver->xmlopt = chDomainXMLConfInit(ch_driver)))
