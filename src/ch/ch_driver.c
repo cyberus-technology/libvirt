@@ -723,6 +723,7 @@ chDomainReboot(virDomainPtr dom, unsigned int flags)
     virCHDomainObjPrivate *priv;
     virDomainObj *vm;
     virDomainState state;
+    g_autoptr(virCHDriverConfig) cfg = NULL;
     int ret = -1;
 
     virCheckFlags(VIR_DOMAIN_REBOOT_ACPI_POWER_BTN, -1);
@@ -731,6 +732,7 @@ chDomainReboot(virDomainPtr dom, unsigned int flags)
         goto cleanup;
 
     priv = vm->privateData;
+    cfg = virCHDriverGetConfig(priv->driver);
 
     if (virDomainRebootEnsureACL(dom->conn, vm->def, flags) < 0)
         goto cleanup;
@@ -758,7 +760,7 @@ chDomainReboot(virDomainPtr dom, unsigned int flags)
         virDomainObjSetState(vm, VIR_DOMAIN_RUNNING, VIR_DOMAIN_RUNNING_BOOTED);
     else
         virDomainObjSetState(vm, VIR_DOMAIN_RUNNING, VIR_DOMAIN_RUNNING_UNPAUSED);
-    if (virDomainObjSave(vm, priv->driver->xmlopt, virCHDriverGetConfig(priv->driver)->stateDir) < 0) {
+    if (virDomainObjSave(vm, priv->driver->xmlopt, cfg->stateDir) < 0) {
         DBG("Failed to save status on vm %s", vm->def->name);
     }
 
@@ -777,12 +779,14 @@ chDomainSuspend(virDomainPtr dom)
 {
     virCHDomainObjPrivate *priv;
     virDomainObj *vm;
+    g_autoptr(virCHDriverConfig) cfg = NULL;
     int ret = -1;
 
     if (!(vm = virCHDomainObjFromDomain(dom)))
         goto cleanup;
 
     priv = vm->privateData;
+    cfg = virCHDriverGetConfig(priv->driver);
 
     if (virDomainSuspendEnsureACL(dom->conn, vm->def) < 0)
         goto cleanup;
@@ -806,7 +810,7 @@ chDomainSuspend(virDomainPtr dom)
     }
 
     virDomainObjSetState(vm, VIR_DOMAIN_PAUSED, VIR_DOMAIN_PAUSED_USER);
-    if (virDomainObjSave(vm, priv->driver->xmlopt, virCHDriverGetConfig(priv->driver)->stateDir) < 0) {
+    if (virDomainObjSave(vm, priv->driver->xmlopt, cfg->stateDir) < 0) {
         DBG("Failed to save status on vm %s", vm->def->name);
     }
 
@@ -825,12 +829,14 @@ chDomainResume(virDomainPtr dom)
 {
     virCHDomainObjPrivate *priv;
     virDomainObj *vm;
+    g_autoptr(virCHDriverConfig) cfg = NULL;
     int ret = -1;
 
     if (!(vm = virCHDomainObjFromDomain(dom)))
         goto cleanup;
 
     priv = vm->privateData;
+    cfg = virCHDriverGetConfig(priv->driver);
 
     if (virDomainResumeEnsureACL(dom->conn, vm->def) < 0)
         goto cleanup;
@@ -854,7 +860,7 @@ chDomainResume(virDomainPtr dom)
     }
 
     virDomainObjSetState(vm, VIR_DOMAIN_RUNNING, VIR_DOMAIN_RUNNING_UNPAUSED);
-    if (virDomainObjSave(vm, priv->driver->xmlopt, virCHDriverGetConfig(priv->driver)->stateDir) < 0) {
+    if (virDomainObjSave(vm, priv->driver->xmlopt, cfg->stateDir) < 0) {
         DBG("Failed to save status on vm %s", vm->def->name);
     }
 
