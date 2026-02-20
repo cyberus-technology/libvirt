@@ -3699,10 +3699,6 @@ chDomainMigrateFinish3(virConnectPtr dconn,
             goto error;
         }
 
-        if (virCHProcessSetup(vm) < 0) {
-            goto error;
-        }
-
         if (virDomainObjSave(vm, driver->xmlopt, cfg->stateDir) < 0) {
             DBG("Failed to save status on vm %s", vm->def->name);
         }
