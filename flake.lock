@@ -10,11 +10,11 @@
         "rust-overlay": "rust-overlay"
       },
       "locked": {
-        "lastModified": 1771490192,
-        "narHash": "sha256-mnizMEljul3De2mt/2wawx7VGTBh/T1fXohileWX3oE=",
+        "lastModified": 1771512144,
+        "narHash": "sha256-t63hih7K5awFhj6N8XzRKETH/OWqyiIAphWGKQSPGy4=",
         "owner": "cyberus-technology",
         "repo": "cloud-hypervisor",
-        "rev": "415c957495b6000386968c4764051c4d604731c0",
+        "rev": "31b620083c8bf481d383f5af798db8118e0118dd",
         "type": "github"
       },
       "original": {
@@ -158,11 +158,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1770808379,
-        "narHash": "sha256-EjP8Wrp27kCTNZOiDiKmzi/ssgS/fD+8nQo6vRfwRt0=",
+        "lastModified": 1771500320,
+        "narHash": "sha256-7EW2DAnll/ho141FBZ0Lf1HTeb9Qn9fqgXTZz4pL7mc=",
         "ref": "gardenlinux",
-        "rev": "be575f7b06806e84aec56bf531e7029a1d44dd01",
-        "revCount": 53623,
+        "rev": "2ee2ab5b67bbe0f81ec6b588fed61e675e951a8a",
+        "revCount": 53638,
         "submodules": true,
         "type": "git",
         "url": "https://github.com/cyberus-technology/libvirt"
@@ -188,11 +188,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1771499653,
-        "narHash": "sha256-qE3lvedwhcHfjUoW/Xd8hLh/SAQUsM1iTd5zZ/5DFKI=",
+        "lastModified": 1771580966,
+        "narHash": "sha256-bImU58jRS14pmZ82TpoEJxVIuXnvu7M9Og6DcEdQId4=",
         "owner": "cyberus-technology",
         "repo": "libvirt-tests",
-        "rev": "c1388f8f1ddf01f470ceec8c1f461b47177c3c7a",
+        "rev": "0cd0ed57e8912d385626911ca0d9347b4a15050b",
         "type": "github"
       },
       "original": {
@@ -204,11 +204,11 @@
     },
     "nixpkgs": {
       "locked": {
-        "lastModified": 1769598131,
-        "narHash": "sha256-e7VO/kGLgRMbWtpBqdWl0uFg8Y2XWFMdz0uUJvlML8o=",
+        "lastModified": 1771419570,
+        "narHash": "sha256-bxAlQgre3pcQcaRUm/8A0v/X8d2nhfraWSFqVmMcBcU=",
         "owner": "nixos",
         "repo": "nixpkgs",
-        "rev": "fa83fd837f3098e3e678e6cf017b2b36102c7211",
+        "rev": "6d41bc27aaf7b6a3ba6b169db3bd5d6159cfaa47",
         "type": "github"
       },
       "original": {
