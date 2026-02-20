@@ -95,16 +95,13 @@ virCHProcessEvent(virCHMonitor *mon,
     switch (ev) {
     case VIR_CH_EVENT_VMM_STARTING:
     case VIR_CH_EVENT_VM_BOOTING:
-    case VIR_CH_EVENT_VM_BOOTED:
     case VIR_CH_EVENT_VM_REBOOTING:
     case VIR_CH_EVENT_VM_PAUSING:
     case VIR_CH_EVENT_VM_PAUSED:
     case VIR_CH_EVENT_VM_RESUMING:
-    case VIR_CH_EVENT_VM_RESUMED:
     case VIR_CH_EVENT_VM_SNAPSHOTTING:
     case VIR_CH_EVENT_VM_SNAPSHOTTED:
     case VIR_CH_EVENT_VM_RESTORING:
-    case VIR_CH_EVENT_VM_RESTORED:
     case VIR_CH_EVENT_VM_DELETED:
         break;
     case VIR_CH_EVENT_VMM_SHUTDOWN:
@@ -118,7 +115,11 @@ virCHProcessEvent(virCHMonitor *mon,
             // live-migrations.
         }
         break;
+    /* Events causing new vCPU threads: */
+    case VIR_CH_EVENT_VM_BOOTED:
     case VIR_CH_EVENT_VM_REBOOTED:
+    case VIR_CH_EVENT_VM_RESUMED /* also after live migration */:
+    case VIR_CH_EVENT_VM_RESTORED:
         virObjectLock(vm);
         virCHProcessSetup(vm);
         virObjectUnlock(vm);
