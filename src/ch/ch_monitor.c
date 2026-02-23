@@ -1376,6 +1376,82 @@ curl_callback(void *contents, size_t size, size_t nmemb, void *userp)
     return content_size;
 }
 
+typedef struct _HttpResponse {
+    int code;
+    /* Owned JSON. May be NULL if there is no (valid) JSON response. */
+    virJSONValue *json;
+} HttpResponse;
+
+/*
+ * Performs an HTTP request with JSON as content type.
+ *
+ * - Supports multiple methods (GET, PUT)
+ * - Supports optional payload
+ * - Returns payload parsed as JSON (may be NULL)
+ */
+static HttpResponse
+virCHMonitorRequest(virCHMonitor *mon,
+                    const char *endpoint,
+                    const char *payload,
+                    // "GET" or "PUT"
+                    const char *method,
+                    // If true, the callee takes ownership of the returned JSON (if not NULL).
+                    bool parse_payload_as_json)
+{
+    g_autofree char *url = NULL;
+    virJSONValue *retJson = NULL;
+    int responseCode = 0;
+    struct curl_data data = {0};
+    struct curl_slist *headers = NULL;
+    CURL *handle = NULL;
+
+    url = g_strdup_printf("%s/%s", URL_ROOT, endpoint);
+
+    VIR_WITH_OBJECT_LOCK_GUARD(mon) {
+        handle = curl_easy_init();
+        curl_easy_setopt(handle, CURLOPT_UNIX_SOCKET_PATH, mon->socketpath);
+        curl_easy_setopt(handle, CURLOPT_URL, url);
+        curl_easy_setopt(handle, CURLOPT_UPLOAD, 1L);
+        curl_easy_setopt(handle, CURLOPT_HTTPHEADER, NULL);
+        curl_easy_setopt(handle, CURLOPT_INFILESIZE, 0L);
+        headers = curl_slist_append(headers, "Accept: application/json");
+        headers = curl_slist_append(headers, "Content-Type: application/json");
+        curl_easy_setopt(handle, CURLOPT_CUSTOMREQUEST, method);
+        curl_easy_setopt(handle, CURLOPT_HTTPHEADER, headers);
+        if (payload) {
+            curl_easy_setopt(handle, CURLOPT_POSTFIELDS, payload);
+        }
+        curl_easy_setopt(handle, CURLOPT_WRITEFUNCTION, curl_callback);
+        curl_easy_setopt(handle, CURLOPT_WRITEDATA, (void *)&data);
+        responseCode = virCHMonitorCurlPerform(handle);
+        curl_easy_cleanup(handle);
+    }
+
+    data.content = g_realloc(data.content, data.size + 1);
+    data.content[data.size] = 0;
+
+    if (parse_payload_as_json && data.size != 0) {
+        retJson = virJSONValueFromString(data.content);
+    }
+
+    DBG("HTTP request was: %s /%s", method, endpoint);
+    DBG("HTTP response code from CH: %d", responseCode);
+    if (data.size) {
+        DBG("Response = %s", data.content);
+    }
+
+    curl_slist_free_all(headers);
+    g_free(data.content);
+
+    return (HttpResponse) {
+        .code = responseCode,
+        // This may be null if
+        // - caller doesn't request a JSON response
+        // - server response could not be parsed as JSON
+        .json = retJson
+    };
+}
+
 int
 virCHMonitorPutNoContent(virCHMonitor *mon, const char *endpoint,
                          domainLogContext *logCtxt)
