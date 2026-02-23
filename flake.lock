@@ -188,11 +188,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1771580966,
-        "narHash": "sha256-bImU58jRS14pmZ82TpoEJxVIuXnvu7M9Og6DcEdQId4=",
+        "lastModified": 1771846318,
+        "narHash": "sha256-HiuEIo3gzlxhEXZWNJwzkEYxaOuHDbL64iTJpepEwM8=",
         "owner": "cyberus-technology",
         "repo": "libvirt-tests",
-        "rev": "0cd0ed57e8912d385626911ca0d9347b4a15050b",
+        "rev": "7778025ad5c5d2d840169b5d7cd7d7dcf268cc20",
         "type": "github"
       },
       "original": {
