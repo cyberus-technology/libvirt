@@ -2984,21 +2984,24 @@ chDomainMigratePrepare3(virConnectPtr dconn,
     DBG("%p %s %u %p %p %s %p %lu %s %s",
         dconn, cookiein, cookieinlen, cookieout, cookieoutlen, uri_in, uri_out, flags, dname, dom_xml);
 
+    if (uri_out)
+        *uri_out = NULL;
+
     if (virDomainMigratePrepare3EnsureACL(dconn, def) < 0) {
         rc = -1;
-        goto cleanup;
+        goto cleanup_local_allocs;
     }
 
     if (!(def = chMigrationAnyPrepareDef(driver, dom_xml, dname))) {
         rc = -1;
-        goto cleanup;
+        goto cleanup_local_allocs;
     }
 
     VIR_INFO("Got DomainDef prepared successfully");
 
     if (virPortAllocatorAcquire(driver->migrationPorts, &port) < 0) {
         rc = -1;
-        goto cleanup;
+        goto cleanup_local_allocs;
     }
     VIR_DEBUG("Got port %i", port);
 
@@ -3008,7 +3011,7 @@ chDomainMigratePrepare3(virConnectPtr dconn,
     if (uri_in) {
         server_addr = g_strdup_printf("%s", uri_in);
     } else if ((server_addr = virGetHostname()) == NULL) {
-        goto cleanup;
+        goto cleanup_local_allocs;
     }
 
     *uri_out = g_strdup_printf(incFormat, "tcp", server_addr, port);
@@ -3023,20 +3026,20 @@ chDomainMigratePrepare3(virConnectPtr dconn,
         virReportError(VIR_ERR_INTERNAL_ERROR, "%s",
                        _("Could not add Domain Obj to List"));
         rc = -1;
-        goto cleanup;
+        goto cleanup_local_allocs;
     }
 
     if (chMigrationJobStart(vm, VIR_ASYNC_JOB_MIGRATION_IN) < 0) {
         virReportError(VIR_ERR_INTERNAL_ERROR, "%s",
                        _("Could not begin async migration job"));
         rc = -1;
-        goto cleanup;
+        goto cleanup_local_allocs;
     }
 
     if (virCHProcessInit(driver, vm) < 0) {
         DBG("Could not init process");
         rc = -1;
-        goto cleanup;
+        goto cleanup_local_allocs;
     }
 
     DBG("Try creating migration thread for domain: %s", vm->def->name);
@@ -3074,7 +3077,7 @@ chDomainMigratePrepare3(virConnectPtr dconn,
         if (virCHMonitorBuildMemoryZonesJson(args->cells, vm->def) != 0) {
             DBG("failed to process numa info");
             rc = -1;
-            goto cleanup;
+            goto cleanup_after_args_shared;
         }
     }
 
@@ -3091,7 +3094,7 @@ chDomainMigratePrepare3(virConnectPtr dconn,
         virReportError(VIR_ERR_OPERATION_FAILED, "%s",
                        _("Failed to create thread for receiving migration data"));
         rc = -1;
-        goto cleanup;
+        goto cleanup_after_args_shared;
     }
 
     DBG("Finished creating migration thread");
@@ -3115,6 +3118,21 @@ chDomainMigratePrepare3(virConnectPtr dconn,
     rc = 0;
     DBG("Fin migrationPrepare");
 
+
+    goto cleanup;
+
+ cleanup_local_allocs:
+    VIR_FREE(def);
+
+    if (args) {
+        VIR_FREE(args->tcp_serial_url);
+        virJSONValueFree(args->cells);
+    }
+    VIR_FREE(args);
+
+ cleanup_after_args_shared:
+    if (uri_out)
+        VIR_FREE(*uri_out);
 
  cleanup:
     if (vm != NULL) {
