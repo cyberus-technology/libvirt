@@ -327,15 +327,19 @@ virIdentity *virIdentityGetSystem(void)
         virIdentitySetProcessTime(ret, startTime) < 0)
         return NULL;
 
-    if (!(username = virGetUserName(geteuid())))
-        return ret;
+    if (!(username = virGetUserName(geteuid()))) {
+        VIR_WARN("virGetUserName failed, returning partial identity");
+        return g_steal_pointer(&ret);
+    }
     if (virIdentitySetUserName(ret, username) < 0)
         return NULL;
     if (virIdentitySetUNIXUserID(ret, getuid()) < 0)
         return NULL;
 
-    if (!(groupname = virGetGroupName(getegid())))
-        return ret;
+    if (!(groupname = virGetGroupName(getegid()))) {
+        VIR_WARN("virGetGroupName failed, returning partial identity");
+        return g_steal_pointer(&ret);
+    }
     if (virIdentitySetGroupName(ret, groupname) < 0)
         return NULL;
     if (virIdentitySetUNIXGroupID(ret, getgid()) < 0)
