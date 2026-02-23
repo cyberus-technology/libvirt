@@ -790,7 +790,7 @@ virCHMonitorBuildDevicesJson(virJSONValue *content,
 }
 
 static int
-virCHMonitorEnsurePlatform(g_autoptr(virJSONValue) *platform)
+virCHMonitorEnsurePlatform(virJSONValue **platform)
 {
     if (!*platform)
         *platform = virJSONValueNewObject();
