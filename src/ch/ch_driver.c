@@ -3817,7 +3817,7 @@ chDomainAttachDeviceLive(virDomainObj *vm,
 
         VIR_DEBUG("Attach disk %s", payload);
 
-        response = virCHMonitorPut(priv->monitor, URL_VM_ADD_DISK, payload, NULL);
+        response = virCHMonitorPut(priv->monitor, URL_VM_ADD_DISK, payload);
 
         if (!response) {
             DBG("Attach disk failed. Invalid CH response.");
@@ -4983,7 +4983,7 @@ chDomainBlockResize(virDomainPtr dom,
 
     payload = virJSONValueToString(resize, false);
 
-    success = virCHMonitorPutNoResponse(priv->monitor, URL_VM_RESIZE_DISK, payload, NULL);
+    success = virCHMonitorPutNoResponse(priv->monitor, URL_VM_RESIZE_DISK, payload);
 
     if (success) {
         ret = 0;

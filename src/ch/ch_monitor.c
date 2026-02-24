@@ -92,8 +92,7 @@ chMonitorSocketConnect(virCHMonitor *mon);
 VIR_ONCE_GLOBAL_INIT(virCHMonitor);
 
 int virCHMonitorShutdownVMM(virCHMonitor *mon);
-int virCHMonitorPutNoContent(virCHMonitor *mon, const char *endpoint,
-                             domainLogContext *logCtxt);
+int virCHMonitorPutNoContent(virCHMonitor *mon, const char *endpoint);
 
 static int
 virCHMonitorBuildCPUTopologyJson(virJSONValue *content, virDomainDef *vmdef)
@@ -1454,8 +1453,7 @@ virCHMonitorRequest(virCHMonitor *mon,
 }
 
 int
-virCHMonitorPutNoContent(virCHMonitor *mon, const char *endpoint,
-                         G_GNUC_UNUSED domainLogContext *logCtxt)
+virCHMonitorPutNoContent(virCHMonitor *mon, const char *endpoint)
 {
     int responseCode = virCHMonitorRequest(mon, endpoint, NULL, "PUT", false).code;
 
@@ -1464,7 +1462,7 @@ virCHMonitorPutNoContent(virCHMonitor *mon, const char *endpoint,
 
 bool
 virCHMonitorPutNoResponse(virCHMonitor *mon, const char *endpoint,
-                const char *payload, G_GNUC_UNUSED domainLogContext *logCtxt)
+                          const char *payload)
 {
     int responseCode = virCHMonitorRequest(mon, endpoint, payload, "PUT", false).code;
 
@@ -1473,7 +1471,7 @@ virCHMonitorPutNoResponse(virCHMonitor *mon, const char *endpoint,
 
 virJSONValue*
 virCHMonitorPut(virCHMonitor *mon, const char *endpoint,
-                const char *payload, G_GNUC_UNUSED domainLogContext *logCtxt)
+                const char *payload)
 {
     HttpResponse response = virCHMonitorRequest(mon, endpoint, payload, "PUT", true);
 
@@ -1595,7 +1593,7 @@ virCHMonitorGetThreadInfo(virCHMonitor *mon,
 int
 virCHMonitorShutdownVMM(virCHMonitor *mon)
 {
-    return virCHMonitorPutNoContent(mon, URL_VMM_SHUTDOWN, NULL);
+    return virCHMonitorPutNoContent(mon, URL_VMM_SHUTDOWN);
 }
 
 int
@@ -1613,33 +1611,33 @@ virCHMonitorCreateVM(virCHDriver *driver, virCHMonitor *mon)
 }
 
 int
-virCHMonitorBootVM(virCHMonitor *mon, domainLogContext *logCtxt)
+virCHMonitorBootVM(virCHMonitor *mon)
 {
-    return virCHMonitorPutNoContent(mon, URL_VM_BOOT, logCtxt);
+    return virCHMonitorPutNoContent(mon, URL_VM_BOOT);
 }
 
 int
 virCHMonitorShutdownVM(virCHMonitor *mon)
 {
-    return virCHMonitorPutNoContent(mon, URL_VM_SHUTDOWN, NULL);
+    return virCHMonitorPutNoContent(mon, URL_VM_SHUTDOWN);
 }
 
 int
 virCHMonitorRebootVM(virCHMonitor *mon)
 {
-    return virCHMonitorPutNoContent(mon, URL_VM_REBOOT, NULL);
+    return virCHMonitorPutNoContent(mon, URL_VM_REBOOT);
 }
 
 int
 virCHMonitorSuspendVM(virCHMonitor *mon)
 {
-    return virCHMonitorPutNoContent(mon, URL_VM_Suspend, NULL);
+    return virCHMonitorPutNoContent(mon, URL_VM_Suspend);
 }
 
 int
 virCHMonitorResumeVM(virCHMonitor *mon)
 {
-    return virCHMonitorPutNoContent(mon, URL_VM_RESUME, NULL);
+    return virCHMonitorPutNoContent(mon, URL_VM_RESUME);
 }
 
 int
