@@ -24,7 +24,6 @@
 
 #include "virobject.h"
 #include "virjson.h"
-#include "domain_logcontext.h"
 #include "ch_conf.h"
 
 #define URL_ROOT "http://localhost/api/v1"
@@ -192,7 +191,7 @@ G_DEFINE_AUTOPTR_CLEANUP_FUNC(virCHMonitor, virCHMonitorClose);
 
 
 int virCHMonitorCreateVM(virCHDriver *driver, virCHMonitor *mon);
-int virCHMonitorBootVM(virCHMonitor *mon, domainLogContext *logCtxt);
+int virCHMonitorBootVM(virCHMonitor *mon);
 int virCHMonitorShutdownVM(virCHMonitor *mon);
 int virCHMonitorShutdownVMM(virCHMonitor *mon);
 int virCHMonitorRebootVM(virCHMonitor *mon);
@@ -232,10 +231,10 @@ int virCHMonitorBuildRestoreJson(virDomainDef *vmdef,
                                  char **jsonstr);
 bool
 virCHMonitorPutNoResponse(virCHMonitor *mon, const char *endpoint,
-                const char *payload, domainLogContext *logCtxt);
+                const char *payload);
 virJSONValue*
 virCHMonitorPut(virCHMonitor *mon, const char *endpoint,
-                const char *payload, domainLogContext *logCtxt);
+                const char *payload);
 
 int
 virCHMonitorBuildMemoryZonesJson(virJSONValue *content, virDomainDef *def);
