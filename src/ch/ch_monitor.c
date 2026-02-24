@@ -2246,7 +2246,7 @@ int
 chMonitorJSONGetMigrationStatsReply(virCHMonitor *mon,
                                     chMigrationProgress *progress)
 {
-    g_autoptr(virJSONValue) response;
+    g_autoptr(virJSONValue) response = NULL;
 
     // Unlocked access as the migration might still be going on.
     if (virCHMonitorGet(mon, URL_VM_MIGRATION_PROGRESS, &response) != 0) {
