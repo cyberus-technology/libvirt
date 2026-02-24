@@ -1600,36 +1600,15 @@ virCHMonitorShutdownVMM(virCHMonitor *mon)
 int
 virCHMonitorCreateVM(virCHDriver *driver, virCHMonitor *mon)
 {
-    g_autofree char *url = NULL;
-    int responseCode = 0;
-    int ret = -1;
+    HttpResponse http_response = {0};
     g_autofree char *payload = NULL;
-    struct curl_slist *headers = NULL;
-    CURL *handle = NULL;
-
-    url = g_strdup_printf("%s/%s", URL_ROOT, URL_VM_CREATE);
-    headers = curl_slist_append(headers, "Accept: application/json");
-    headers = curl_slist_append(headers, "Content-Type: application/json");
 
     if (virCHMonitorBuildVMJson(driver, mon->vm->def, &payload) != 0)
         return -1;
 
-    VIR_WITH_OBJECT_LOCK_GUARD(mon) {
-        handle = curl_easy_init();
-        curl_easy_setopt(handle, CURLOPT_UNIX_SOCKET_PATH, mon->socketpath);
-        curl_easy_setopt(handle, CURLOPT_URL, url);
-        curl_easy_setopt(handle, CURLOPT_CUSTOMREQUEST, "PUT");
-        curl_easy_setopt(handle, CURLOPT_HTTPHEADER, headers);
-        curl_easy_setopt(handle, CURLOPT_POSTFIELDS, payload);
-        responseCode = virCHMonitorCurlPerform(handle);
-        curl_easy_cleanup(handle);
-    }
+    http_response = virCHMonitorRequest(mon, URL_VM_CREATE, payload, "PUT", false);
 
-    if (responseCode == 200 || responseCode == 204)
-        ret = 0;
-
-    curl_slist_free_all(headers);
-    return ret;
+    return !(http_response.code == 200 || http_response.code == 204);
 }
 
 int
