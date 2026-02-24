@@ -1678,21 +1678,11 @@ int virCHMonitorMigrationSend(virCHMonitor *mon,
                               bool use_tls,
                               char *tls_dir)
 {
-    g_autofree char *url = NULL;
-    int responseCode = 0;
-    int ret = -1;
+    int ret = 0;
     int retries = 0;
-    g_autofree char *payload = NULL;
-    struct curl_slist *headers = NULL;
-    struct curl_data data = {0};
     g_autoptr(virJSONValue) content = virJSONValueNewObject();
-    CURL *handle = NULL;
-
-    url = g_strdup_printf("%s/%s", URL_ROOT, URL_VM_SEND_MIGRATION);
-
-    headers = curl_slist_append(headers, "Accept: application/json");
-    headers = curl_slist_append(headers, "Content-Type: application/json");
-
+    HttpResponse http_response = {0};
+    g_autofree char *payload = NULL;
 
     if (virJSONValueObjectAppendString(content, "destination_url", dst_uri) < 0) {
         ret = -1;
@@ -1734,36 +1724,20 @@ int virCHMonitorMigrationSend(virCHMonitor *mon,
     DBG("Send VM to url %s json %s", dst_uri, payload);
 
 retry:
-    VIR_WITH_OBJECT_LOCK_GUARD(mon) {
-        handle = curl_easy_init();
-        curl_easy_setopt(handle, CURLOPT_UNIX_SOCKET_PATH, mon->socketpath);
-        curl_easy_setopt(handle, CURLOPT_URL, url);
-        curl_easy_setopt(handle, CURLOPT_CUSTOMREQUEST, "PUT");
-        curl_easy_setopt(handle, CURLOPT_HTTPHEADER, headers);
-        curl_easy_setopt(handle, CURLOPT_POSTFIELDS, payload);
-        curl_easy_setopt(handle, CURLOPT_WRITEFUNCTION, curl_callback);
-        curl_easy_setopt(handle, CURLOPT_WRITEDATA, (void *)&data);
-        responseCode = virCHMonitorCurlPerform(handle);
-        curl_easy_cleanup(handle);
-    }
+    http_response = virCHMonitorRequest(mon, URL_VM_SEND_MIGRATION, payload, "PUT", false);
 
-    if (responseCode == 200 || responseCode == 204) {
+    if (http_response.code == 200 || http_response.code == 204) {
         ret = 0;
     } else {
         if (retries++ < 3) {
-            DBG("Error when sending migration, response is %d; Retrying.", responseCode);
             sleep(1);
             goto retry;
         }
-        data.content = g_realloc(data.content, data.size + 1);
-        data.content[data.size] = 0;
-        virReportError(VIR_ERR_INTERNAL_ERROR, _("Error sending VM: '%1$s'"),
-                       data.content);
-        g_free(data.content);
+        // Logging of error code and response is done by virCHMonitorRequest() already
+        virReportError(VIR_ERR_INTERNAL_ERROR, _("Error sending VM'"));
     }
 
 out:
-    curl_slist_free_all(headers);
     return ret;
 }
 
