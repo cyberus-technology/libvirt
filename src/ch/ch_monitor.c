@@ -1454,50 +1454,11 @@ virCHMonitorRequest(virCHMonitor *mon,
 
 int
 virCHMonitorPutNoContent(virCHMonitor *mon, const char *endpoint,
-                         domainLogContext *logCtxt)
+                         G_GNUC_UNUSED domainLogContext *logCtxt)
 {
-    g_autofree char *url = NULL;
-    int responseCode = 0;
-    int ret = -1;
-    struct curl_data data = {0};
-    struct curl_slist *headers = NULL;
-    CURL *handle = NULL;
+    int responseCode = virCHMonitorRequest(mon, endpoint, NULL, "PUT", false).code;
 
-    url = g_strdup_printf("%s/%s", URL_ROOT, endpoint);
-
-    VIR_WITH_OBJECT_LOCK_GUARD(mon) {
-        handle = curl_easy_init();
-        curl_easy_setopt(handle, CURLOPT_UNIX_SOCKET_PATH, mon->socketpath);
-        curl_easy_setopt(handle, CURLOPT_URL, url);
-        curl_easy_setopt(handle, CURLOPT_UPLOAD, 1L);
-        curl_easy_setopt(handle, CURLOPT_HTTPHEADER, NULL);
-        curl_easy_setopt(handle, CURLOPT_INFILESIZE, 0L);
-        headers = curl_slist_append(headers, "Accept: application/json");
-        curl_easy_setopt(handle, CURLOPT_HTTPHEADER, headers);
-        curl_easy_setopt(handle, CURLOPT_WRITEFUNCTION, curl_callback);
-        curl_easy_setopt(handle, CURLOPT_WRITEDATA, (void *)&data);
-        responseCode = virCHMonitorCurlPerform(handle);
-        curl_easy_cleanup(handle);
-    }
-
-    data.content = g_realloc(data.content, data.size + 1 /* NULL */);
-    data.content[data.size] = 0;
-
-    if (logCtxt && data.size) {
-        domainLogContextWrite(logCtxt, "HTTP response code from CH: %d\n", responseCode);
-        domainLogContextWrite(logCtxt, "Response = %s\n", data.content);
-    }
-
-    if (data.size) {
-        DBG("HTTP Response: %s", data.content);
-    }
-
-    if (responseCode == 200 || responseCode == 204)
-        ret = 0;
-
-    curl_slist_free_all(headers);
-    g_free(data.content);
-    return ret;
+    return !(responseCode == 200 || responseCode == 204);
 }
 
 bool
