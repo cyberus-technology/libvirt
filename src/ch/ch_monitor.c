@@ -1662,49 +1662,15 @@ virCHMonitorSaveVM(virCHMonitor *mon,
 int virCHMonitorRemoveDevice(virCHMonitor *mon,
                              const char* device_id)
 {
-    g_autofree char *url = NULL;
-    int responseCode = 0;
-    int ret = -1;
+    HttpResponse http_response = {0};
     g_autofree char *payload = NULL;
-    struct curl_slist *headers = NULL;
-    struct curl_data data = {0};
-    CURL *handle = NULL;
-
-    url = g_strdup_printf("%s/%s", URL_ROOT, URL_VM_REMOVE_DEVICE);
-
-    headers = curl_slist_append(headers, "Accept: application/json");
-    headers = curl_slist_append(headers, "Content-Type: application/json");
 
     if (virCHMonitorBuildKeyValueStringJson(&payload, "id", device_id) != 0)
         return -1;
 
-    DBG("Remove device id %s json %s", device_id, payload);
+    http_response = virCHMonitorRequest(mon, URL_VM_REMOVE_DEVICE, payload, "PUT", false);
 
-    VIR_WITH_OBJECT_LOCK_GUARD(mon) {
-        handle = curl_easy_init();
-        curl_easy_setopt(handle, CURLOPT_UNIX_SOCKET_PATH, mon->socketpath);
-        curl_easy_setopt(handle, CURLOPT_URL, url);
-        curl_easy_setopt(handle, CURLOPT_CUSTOMREQUEST, "PUT");
-        curl_easy_setopt(handle, CURLOPT_HTTPHEADER, headers);
-        curl_easy_setopt(handle, CURLOPT_POSTFIELDS, payload);
-        curl_easy_setopt(handle, CURLOPT_WRITEFUNCTION, curl_callback);
-        curl_easy_setopt(handle, CURLOPT_WRITEDATA, (void *)&data);
-        responseCode = virCHMonitorCurlPerform(handle);
-        curl_easy_cleanup(handle);
-    }
-
-    if (responseCode == 200 || responseCode == 204) {
-        ret = 0;
-    } else {
-        data.content = g_realloc(data.content, data.size + 1);
-        data.content[data.size] = 0;
-        virReportError(VIR_ERR_INTERNAL_ERROR, "%s",
-                       data.content);
-        g_free(data.content);
-    }
-
-    curl_slist_free_all(headers);
-    return ret;
+    return !(http_response.code == 200 || http_response.code == 204);
 }
 
 int virCHMonitorMigrationSend(virCHMonitor *mon,
