@@ -1481,6 +1481,7 @@ static int
 virCHMonitorGet(virCHMonitor *mon, const char *endpoint, virJSONValue **response, bool log)
 {
     HttpResponse http_response = virCHMonitorRequest(mon, endpoint, NULL, "GET", true, log);
+
     if (http_response.json) {
         *response = g_steal_pointer(&http_response.json);
     } else {
@@ -1670,7 +1671,7 @@ int virCHMonitorMigrationSend(virCHMonitor *mon,
                               bool use_tls,
                               char *tls_dir)
 {
-    int ret = 0;
+    int ret = -1;
     int retries = 0;
     g_autoptr(virJSONValue) content = virJSONValueNewObject();
     HttpResponse http_response = {0};
@@ -1726,7 +1727,8 @@ retry:
             goto retry;
         }
         // Logging of error code and response is done by virCHMonitorRequest() already
-        virReportError(VIR_ERR_INTERNAL_ERROR, _("Error sending VM'"));
+        virReportError(VIR_ERR_INTERNAL_ERROR, _("Error sending VM"));
+        ret = -1;
     }
 
 out:
@@ -2138,6 +2140,16 @@ G_GNUC_UNUSED static int chMigrationParseProgress(virJSONValue * json, chMigrati
     bool tmp_bool = 0;
     const char * tmp_str = NULL;
 
+    if (!json) {
+        DBG("Response JSON is NULL");
+        return -1;
+    }
+
+    if (virJSONValueGetType(json) != VIR_JSON_TYPE_OBJECT) {
+        DBG("Response JSON is not an object");
+        return -1;
+    }
+
     ignore_value(virJSONValueObjectGetNumberUlong(json, "timestamp_begin_ms", &tmp_ulong));
     progress->timestamp_begin_ms = tmp_ulong;
     ignore_value(virJSONValueObjectGetNumberUlong(json, "timestamp_snapshot_ms", &tmp_ulong));
@@ -2242,6 +2254,12 @@ chMonitorJSONGetMigrationStatsReply(virCHMonitor *mon,
 
     // Unlocked access as the migration might still be going on.
     if (virCHMonitorGet(mon, URL_VM_MIGRATION_PROGRESS, &response, false) != 0) {
+        return -1;
+    }
+
+    if (!response) {
+        // API returns `OK 200: "null"` when no migration was dispatched yet.
+        DBG("No migration progress available");
         return -1;
     }
 
