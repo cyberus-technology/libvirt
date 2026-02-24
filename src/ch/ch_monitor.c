@@ -1488,48 +1488,14 @@ virCHMonitorPut(virCHMonitor *mon, const char *endpoint,
 static int
 virCHMonitorGet(virCHMonitor *mon, const char *endpoint, virJSONValue **response)
 {
-    g_autofree char *url = NULL;
-    int responseCode = 0;
-    int ret = -1;
-    struct curl_slist *headers = NULL;
-    struct curl_data data = {0};
-    CURL *handle = NULL;
-
-    url = g_strdup_printf("%s/%s", URL_ROOT, endpoint);
-
-    VIR_WITH_OBJECT_LOCK_GUARD(mon) {
-        handle = curl_easy_init();
-        curl_easy_setopt(handle, CURLOPT_UNIX_SOCKET_PATH, mon->socketpath);
-        curl_easy_setopt(handle, CURLOPT_URL, url);
-        if (response) {
-            headers = curl_slist_append(headers, "Accept: application/json");
-            headers = curl_slist_append(headers, "Content-Type: application/json");
-            curl_easy_setopt(handle, CURLOPT_HTTPHEADER, headers);
-            curl_easy_setopt(handle, CURLOPT_WRITEFUNCTION, curl_callback);
-            curl_easy_setopt(handle, CURLOPT_WRITEDATA, (void *)&data);
-        }
-        responseCode = virCHMonitorCurlPerform(handle);
-        curl_easy_cleanup(handle);
-    }
-
-    if (responseCode == 200 || responseCode == 204) {
-        if (response) {
-            data.content = g_realloc(data.content, data.size + 1);
-            data.content[data.size] = 0;
-            *response = virJSONValueFromString(data.content);
-            if (!*response)
-                goto cleanup;
-        }
-        ret = 0;
+    HttpResponse http_response = virCHMonitorRequest(mon, endpoint, NULL, "GET", true);
+    if (http_response.json) {
+        *response = g_steal_pointer(&http_response.json);
     } else {
-        DBG("Error response code from CHV: %d", responseCode);
+        *response = NULL;
     }
 
- cleanup:
-    g_free(data.content);
-    curl_slist_free_all(headers);
-
-    return ret;
+    return !(http_response.code == 200 || http_response.code == 204);
 }
 
 static void
