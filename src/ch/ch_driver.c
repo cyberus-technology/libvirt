@@ -423,6 +423,18 @@ cleanup:
     return ret;
 }
 
+/**
+ * Set out parameter so that no job statistics are reported.
+ */
+static void chSetNoJobStats(int *type,
+                            virTypedParameterPtr *params,
+                            int *nparams)
+{
+    *type = VIR_DOMAIN_JOB_NONE;
+    *params = NULL;
+    *nparams = 0;
+}
+
 static int
 chDomainGetJobStats(virDomainPtr dom,
                     int *type,
@@ -435,19 +447,38 @@ chDomainGetJobStats(virDomainPtr dom,
     int ret = -1;
     int maxparams = 0;
     unsigned long long timeElapsed = 0;
+    bool completed = !!(flags & VIR_DOMAIN_JOB_STATS_COMPLETED);
+    bool keep_completed = !!(flags & VIR_DOMAIN_JOB_STATS_KEEP_COMPLETED);
 
-    /* VIR_DOMAIN_JOB_STATS_COMPLETED not supported yet */
-    virCheckFlags(0, -1);
+    virCheckFlags(VIR_DOMAIN_JOB_STATS_COMPLETED |
+                  VIR_DOMAIN_JOB_STATS_KEEP_COMPLETED, -1);
 
     if (!(vm = virCHDomainObjFromDomain(dom)))
         goto cleanup;
 
     priv = vm->privateData;
 
+    // If the user wants to retrieve the data of a completed job and there is
+    // no job running anymore, return the last available data.
+    if (completed && !vm->job->current) {
+        VIR_WITH_MUTEX_LOCK_GUARD(&priv->migrationStatsMutex) {
+            if (priv->migrationStats.state != VIR_CH_MIGRATION_PROGRESS_STATE_INVALID) {
+                ret = chDomainMigrationJobDataToParams(&priv->migrationStats, type, params, nparams);
+            } else {
+                chSetNoJobStats(type, params, nparams);
+                ret = 0;
+            }
+        }
+        if (!keep_completed) {
+            VIR_WITH_MUTEX_LOCK_GUARD(&priv->migrationStatsMutex) {
+                priv->migrationStats.state = VIR_CH_MIGRATION_PROGRESS_STATE_INVALID;
+            }
+        }
+        goto cleanup;
+    }
+
     if (!vm->job->active && vm->job->asyncJob == VIR_ASYNC_JOB_NONE) {
-        *type = VIR_DOMAIN_JOB_NONE;
-        *params = NULL;
-        *nparams = 0;
+        chSetNoJobStats(type, params, nparams);
         ret = 0;
         goto cleanup;
     }
