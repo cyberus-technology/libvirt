@@ -4983,7 +4983,7 @@ chDomainBlockResize(virDomainPtr dom,
 
     payload = virJSONValueToString(resize, false);
 
-    success = virCHMonitorPutNoResponse(priv->monitor, URL_VM_RESIZE_DISK, payload);
+    success = virCHMonitorPutNoResponse(priv->monitor, URL_VM_RESIZE_DISK, payload) == 0;
 
     if (success) {
         ret = 0;
