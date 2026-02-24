@@ -229,7 +229,7 @@ virCHMonitorBuildNetJson(virDomainNetDef *netdef,
 int virCHMonitorBuildRestoreJson(virDomainDef *vmdef,
                                  const char *from,
                                  char **jsonstr);
-bool
+int
 virCHMonitorPutNoResponse(virCHMonitor *mon, const char *endpoint,
                 const char *payload);
 virJSONValue*

@@ -1451,13 +1451,13 @@ virCHMonitorRequest(virCHMonitor *mon,
     };
 }
 
-bool
+int
 virCHMonitorPutNoResponse(virCHMonitor *mon, const char *endpoint,
                           const char *payload)
 {
     int responseCode = virCHMonitorRequest(mon, endpoint, payload, "PUT", false).code;
 
-    return responseCode == 200 || responseCode == 204;
+    return !(responseCode == 200 || responseCode == 204);
 }
 
 virJSONValue*
