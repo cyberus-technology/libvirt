@@ -510,6 +510,86 @@ chDomainGetJobStats(virDomainPtr dom,
     return ret;
 }
 
+static bool
+chMigrationStillOngoing(virCHDomainObjPrivate *priv)
+{
+    bool ongoing = false;
+
+    VIR_WITH_MUTEX_LOCK_GUARD(&priv->migrationStatsMutex) {
+        ongoing = priv->migrationStats.state == VIR_CH_MIGRATION_PROGRESS_STATE_ONGOING;
+    }
+
+    return ongoing;
+}
+
+static int
+chDomainAbortJobMigration(virDomainObj *vm,
+                          virCHDomainObjPrivate *priv) {
+    bool timed_out = false;
+    int elapsed_ms = 0;
+
+    DBG("Trying to cancel migration ... (VM: %s)", vm->def->name);
+    if (virCHMonitorMigrationCancel(priv->monitor) < 0) {
+        DBG("Failed to cancel migration (VM: %s)", vm->def->name);
+        return -1;
+    }
+    DBG("Dispatched migration cancellation in cloud-hypervisor (VM: %s)", vm->def->name);
+
+    DBG("Waiting for migration to be cancelled ... (VM: %s)", vm->def->name);
+    while (chMigrationStillOngoing(priv)) {
+        const int max_wait_ms = 60 * 1000;
+        const int sleep_ms = 100;
+
+        if (elapsed_ms >= max_wait_ms) {
+            timed_out = true;
+            break;
+        }
+        /* We are guarded by the job lock that is active during the whole
+         * migration procedure. This prevents any modifying API calls to
+         * the domain. */
+        virObjectUnlock(vm);
+        g_usleep(sleep_ms * 1000);
+        virObjectLock(vm);
+        elapsed_ms += sleep_ms;
+    }
+
+    if (timed_out) {
+        DBG("Timeout while waiting for migration to be cancelled! (VM: %s)", vm->def->name);
+        return -1;
+    }
+
+    DBG("Migration job cancelled! (VM: %s)", vm->def->name);
+    return 0;
+}
+
+
+static int
+chDomainAbortJob(virDomainPtr dom)
+{
+    virDomainObj *vm;
+    virCHDomainObjPrivate *priv = NULL;
+    int ret = -1;
+
+    if (!(vm = virCHDomainObjFromDomain(dom)))
+        goto cleanup;
+
+    priv = vm->privateData;
+
+    if (vm->job->asyncJob == VIR_ASYNC_JOB_MIGRATION_OUT) {
+        ret = chDomainAbortJobMigration(vm, priv);
+        if (ret < 0) {
+            goto cleanup;
+        }
+        DBG("Successfully cancelled migration job (VM: %s)", vm->def->name);
+    } else {
+        DBG("No migration job to cancel");
+    }
+
+ cleanup:
+       virDomainObjEndAPI(&vm);
+    return ret;
+}
+
 static int
 chDomainCreate(virDomainPtr dom)
 {
@@ -3494,25 +3574,29 @@ static int virCHMonitorWaitForMigrationCompletion(virDomainObj *vm)
     while(1) {
         if (virCHRetrieveAndSyncMigrationProgress(priv) < 0) {
             DBG("Waiting for migration to finish failed because migration stats "
-                "could not be retrieved.");
+                "could not be retrieved. (VM: %s)", vm->def->name);
             goto out;
         }
 
         switch (priv->migrationStats.state) {
         case VIR_CH_MIGRATION_PROGRESS_STATE_ONGOING:
             g_usleep(100 * 1000); // wait 100ms
-            break;
+            continue;
         case VIR_CH_MIGRATION_PROGRESS_STATE_FINISHED:
-            DBG("Migration finished successfully!");
+            DBG("Migration finished successfully! (VM: %s)", vm->def->name);
             rc = 0;
             goto out;
-        case VIR_CH_MIGRATION_PROGRESS_STATE_INVALID:
         case VIR_CH_MIGRATION_PROGRESS_STATE_CANCELLED:
+            DBG("Migration cancelled! (VM: %s)", vm->def->name);
+            rc = -1;
+            goto out;
         case VIR_CH_MIGRATION_PROGRESS_STATE_FAILED:
+            DBG("Migration failed! (VM: %s)", vm->def->name);
+            rc = -1;
+            goto out;
+        case VIR_CH_MIGRATION_PROGRESS_STATE_INVALID:
         case VIR_CH_MIGRATION_PROGRESS_STATE_LAST:
-            DBG("Unexpected migration state: %u %s",
-                priv->migrationStats.state,
-                virCHMigrationProgressStateTypeToString(priv->migrationStats.state));
+            DBG("Unexpected migration state: %u (VM: %s)", priv->migrationStats.state, vm->def->name);
             rc = -1;
             goto out;
         };
@@ -5264,6 +5348,7 @@ static virHypervisorDriver chHypervisorDriver = {
     .domainCreateWithFlags = chDomainCreateWithFlags,       /* 7.5.0 */
     .domainGetJobInfo = chDomainGetJobInfo,                 /* 11.4.0 */
     .domainGetJobStats = chDomainGetJobStats,               /* 11.4.0 */
+    .domainAbortJob = chDomainAbortJob,                     /* 12.1.0 */
     .domainShutdown = chDomainShutdown,                     /* 7.5.0 */
     .domainShutdownFlags = chDomainShutdownFlags,           /* 7.5.0 */
     .domainReboot = chDomainReboot,                         /* 7.5.0 */

@@ -44,6 +44,7 @@
 #define URL_VM_ADD_DISK "vm.add-disk"
 #define URL_VM_RESIZE_DISK "vm.resize-disk"
 #define URL_VM_MIGRATION_PROGRESS "vm.migration-progress"
+#define URL_VM_MIGRATION_CANCEL "vm.cancel-migration"
 
 #define VIRCH_THREAD_NAME_LEN   16
 
@@ -242,3 +243,6 @@ virCHMonitorBuildMemoryZonesJson(virJSONValue *content, virDomainDef *def);
 int
 chMonitorJSONGetMigrationStatsReply(virCHMonitor *mon,
                                     chMigrationProgress *progress);
+
+int
+virCHMonitorMigrationCancel(virCHMonitor *mon);
