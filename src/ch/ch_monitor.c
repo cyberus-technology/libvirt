@@ -1394,7 +1394,8 @@ virCHMonitorRequest(virCHMonitor *mon,
                     // "GET" or "PUT"
                     const char *method,
                     // If true, the callee takes ownership of the returned JSON (if not NULL).
-                    bool parse_payload_as_json)
+                    bool parse_payload_as_json,
+                    bool log)
 {
     g_autofree char *url = NULL;
     virJSONValue *retJson = NULL;
@@ -1432,10 +1433,12 @@ virCHMonitorRequest(virCHMonitor *mon,
         retJson = virJSONValueFromString(data.content);
     }
 
-    DBG("HTTP request was: %s /%s", method, endpoint);
-    DBG("HTTP response code from CH: %d", responseCode);
-    if (data.size) {
-        DBG("Response = %s", data.content);
+    if (log) {
+        DBG("HTTP request was: %s /%s", method, endpoint);
+        DBG("HTTP response code from CH: %d", responseCode);
+        if (data.size) {
+            DBG("Response = %s", data.content);
+        }
     }
 
     curl_slist_free_all(headers);
@@ -1454,7 +1457,7 @@ int
 virCHMonitorPutNoResponse(virCHMonitor *mon, const char *endpoint,
                           const char *payload)
 {
-    int responseCode = virCHMonitorRequest(mon, endpoint, payload, "PUT", false).code;
+    int responseCode = virCHMonitorRequest(mon, endpoint, payload, "PUT", false, true).code;
 
     return !(responseCode == 200 || responseCode == 204);
 }
@@ -1463,7 +1466,7 @@ virJSONValue*
 virCHMonitorPut(virCHMonitor *mon, const char *endpoint,
                 const char *payload)
 {
-    HttpResponse response = virCHMonitorRequest(mon, endpoint, payload, "PUT", true);
+    HttpResponse response = virCHMonitorRequest(mon, endpoint, payload, "PUT", true, true);
 
     if (response.code == 200 || response.code == 204) {
         return g_steal_pointer(&response.json);
@@ -1475,9 +1478,9 @@ virCHMonitorPut(virCHMonitor *mon, const char *endpoint,
 }
 
 static int
-virCHMonitorGet(virCHMonitor *mon, const char *endpoint, virJSONValue **response)
+virCHMonitorGet(virCHMonitor *mon, const char *endpoint, virJSONValue **response, bool log)
 {
-    HttpResponse http_response = virCHMonitorRequest(mon, endpoint, NULL, "GET", true);
+    HttpResponse http_response = virCHMonitorRequest(mon, endpoint, NULL, "GET", true, log);
     if (http_response.json) {
         *response = g_steal_pointer(&http_response.json);
     } else {
@@ -1595,7 +1598,7 @@ virCHMonitorCreateVM(virCHDriver *driver, virCHMonitor *mon)
     if (virCHMonitorBuildVMJson(driver, mon->vm->def, &payload) != 0)
         return -1;
 
-    http_response = virCHMonitorRequest(mon, URL_VM_CREATE, payload, "PUT", false);
+    http_response = virCHMonitorRequest(mon, URL_VM_CREATE, payload, "PUT", false, true);
 
     return !(http_response.code == 200 || http_response.code == 204);
 }
@@ -1642,7 +1645,7 @@ virCHMonitorSaveVM(virCHMonitor *mon,
     if (virCHMonitorBuildKeyValueStringJson(&payload, "destination_url", path_url) != 0)
         return -1;
 
-    http_response = virCHMonitorRequest(mon, URL_VM_SAVE, payload, "PUT", false);
+    http_response = virCHMonitorRequest(mon, URL_VM_SAVE, payload, "PUT", false, true);
 
     return !(http_response.code == 200 || http_response.code == 204);
 }
@@ -1656,7 +1659,7 @@ int virCHMonitorRemoveDevice(virCHMonitor *mon,
     if (virCHMonitorBuildKeyValueStringJson(&payload, "id", device_id) != 0)
         return -1;
 
-    http_response = virCHMonitorRequest(mon, URL_VM_REMOVE_DEVICE, payload, "PUT", false);
+    http_response = virCHMonitorRequest(mon, URL_VM_REMOVE_DEVICE, payload, "PUT", false, true);
 
     return !(http_response.code == 200 || http_response.code == 204);
 }
@@ -1713,7 +1716,7 @@ int virCHMonitorMigrationSend(virCHMonitor *mon,
     DBG("Send VM to url %s json %s", dst_uri, payload);
 
 retry:
-    http_response = virCHMonitorRequest(mon, URL_VM_SEND_MIGRATION, payload, "PUT", false);
+    http_response = virCHMonitorRequest(mon, URL_VM_SEND_MIGRATION, payload, "PUT", false, true);
 
     if (http_response.code == 200 || http_response.code == 204) {
         ret = 0;
@@ -2060,7 +2063,7 @@ virCHMonitorBuildRestoreJson(virDomainDef *vmdef,
 int
 virCHMonitorGetInfo(virCHMonitor *mon, virJSONValue **info)
 {
-    return virCHMonitorGet(mon, URL_VM_INFO, info);
+    return virCHMonitorGet(mon, URL_VM_INFO, info, true);
 }
 
 /**
@@ -2238,7 +2241,7 @@ chMonitorJSONGetMigrationStatsReply(virCHMonitor *mon,
     g_autoptr(virJSONValue) response = NULL;
 
     // Unlocked access as the migration might still be going on.
-    if (virCHMonitorGet(mon, URL_VM_MIGRATION_PROGRESS, &response) != 0) {
+    if (virCHMonitorGet(mon, URL_VM_MIGRATION_PROGRESS, &response, false) != 0) {
         return -1;
     }
 
