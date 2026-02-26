@@ -624,7 +624,7 @@ chDomainUndefineFlags(virDomainPtr dom,
     }
 
     if (virDomainDeleteConfig(cfg->configDir, cfg->autostartDir, vm) < 0)
-        goto endjob;
+        goto cleanup;
 
     event = virDomainEventLifecycleNewFromObj(vm,
                                               VIR_DOMAIN_EVENT_UNDEFINED,
@@ -638,9 +638,6 @@ chDomainUndefineFlags(virDomainPtr dom,
     }
 
     ret = 0;
-
- endjob:
-    virDomainObjEndJob(vm);
 
  cleanup:
     virDomainObjEndAPI(&vm);
