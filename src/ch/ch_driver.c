@@ -3118,19 +3118,19 @@ chDomainMigratePrepare3(virConnectPtr dconn,
 
     if (virDomainMigratePrepare3EnsureACL(dconn, def) < 0) {
         rc = -1;
-        goto cleanup_local_allocs;
+        goto err_cleanup_args;
     }
 
     if (!(def = chMigrationAnyPrepareDef(driver, dom_xml, dname))) {
         rc = -1;
-        goto cleanup_local_allocs;
+        goto err_cleanup_args;
     }
 
     VIR_INFO("Got DomainDef prepared successfully");
 
     if (virPortAllocatorAcquire(driver->migrationPorts, &port) < 0) {
         rc = -1;
-        goto cleanup_local_allocs;
+        goto err_cleanup_def;
     }
     VIR_DEBUG("Got port %i", port);
 
@@ -3140,11 +3140,9 @@ chDomainMigratePrepare3(virConnectPtr dconn,
     if (uri_in) {
         server_addr = g_strdup_printf("%s", uri_in);
     } else if ((server_addr = virGetHostname()) == NULL) {
-        goto cleanup_local_allocs;
+        rc = -1;
+        goto err_cleanup_port_alloc;
     }
-
-    *uri_out = g_strdup_printf(incFormat, "tcp", server_addr, port);
-    VIR_DEBUG("uri out %s", *uri_out);
 
     if (!(vm = virDomainObjListAdd(driver->domains, &def,
                                    driver->xmlopt,
@@ -3155,20 +3153,20 @@ chDomainMigratePrepare3(virConnectPtr dconn,
         virReportError(VIR_ERR_INTERNAL_ERROR, "%s",
                        _("Could not add Domain Obj to List"));
         rc = -1;
-        goto cleanup_local_allocs;
+        goto err_cleanup_port_alloc;
     }
 
     if (chMigrationJobStart(vm, VIR_ASYNC_JOB_MIGRATION_IN) < 0) {
         virReportError(VIR_ERR_INTERNAL_ERROR, "%s",
                        _("Could not begin async migration job"));
         rc = -1;
-        goto cleanup_local_allocs;
+        goto err_cleanup_vm_list;
     }
 
     if (virCHProcessInit(driver, vm) < 0) {
         DBG("Could not init process");
         rc = -1;
-        goto cleanup_local_allocs;
+        goto err_cleanup_job_start;
     }
 
     DBG("Try creating migration thread for domain: %s", vm->def->name);
@@ -3176,11 +3174,15 @@ chDomainMigratePrepare3(virConnectPtr dconn,
     if (virMutexInit(&args->mutex) < 0) {
         virReportError(VIR_ERR_INTERNAL_ERROR, "%s",
                        _("Failed to initialize mutex"));
+        rc = -1;
+        goto err_cleanup_process_init;
     }
 
     if (virCondInit(&args->cond) < 0) {
         virReportError(VIR_ERR_INTERNAL_ERROR, "%s",
                        _("Failed to initialize condition variable"));
+        rc = -1;
+        goto err_cleanup_mutex_init;
     }
 
     priv = vm->privateData;
@@ -3206,7 +3208,7 @@ chDomainMigratePrepare3(virConnectPtr dconn,
         if (virCHMonitorBuildMemoryZonesJson(args->cells, vm->def) != 0) {
             DBG("failed to process numa info");
             rc = -1;
-            goto cleanup_after_args_shared;
+            goto err_cleanup_cells;
         }
     }
 
@@ -3223,7 +3225,7 @@ chDomainMigratePrepare3(virConnectPtr dconn,
         virReportError(VIR_ERR_OPERATION_FAILED, "%s",
                        _("Failed to create thread for receiving migration data"));
         rc = -1;
-        goto cleanup_after_args_shared;
+        goto err_cleanup_thread;
     }
 
     DBG("Finished creating migration thread");
@@ -3244,27 +3246,57 @@ chDomainMigratePrepare3(virConnectPtr dconn,
         }
     }
 
+    // Do this last to prevent cleanup in error case.
+    *uri_out = g_strdup_printf(incFormat, "tcp", server_addr, port);
+    VIR_DEBUG("uri out %s", *uri_out);
+
     rc = 0;
     DBG("Fin migrationPrepare");
 
-
     goto cleanup;
 
- cleanup_local_allocs:
+ err_cleanup_thread:
+    VIR_FREE(priv->migrationDstReceiveThr);
+
+ err_cleanup_cells:
+    if (args->cells) {
+        virJSONValueFree(args->cells);
+    }
+    virCondDestroy(&args->cond);
+
+ err_cleanup_mutex_init:
+    virMutexDestroy(&args->mutex);
+
+ err_cleanup_process_init:
+    virCHProcessStop(driver, vm, VIR_DOMAIN_SHUTOFF_CRASHED);
+
+ err_cleanup_job_start:
+    virDomainObjEndAsyncJob(vm);
+
+ err_cleanup_vm_list:
+    virDomainObjListRemove(driver->domains, vm);
+
+ err_cleanup_port_alloc:
+    if (virPortAllocatorRelease(port) < 0) {
+        DBG("Failed to release port %d for migration in cleanup path", port);
+    }
+
+ err_cleanup_def:
     VIR_FREE(def);
 
-    if (args) {
+ err_cleanup_args:
+    if (priv) {
+        priv->args = NULL;
+    }
+
+    if (args->tcp_serial_url) {
         VIR_FREE(args->tcp_serial_url);
-        virJSONValueFree(args->cells);
     }
     VIR_FREE(args);
 
- cleanup_after_args_shared:
-    if (uri_out)
-        VIR_FREE(*uri_out);
-
  cleanup:
     if (vm != NULL) {
+        // Required by virDomainObjListAddLocked()
         virDomainObjEndAPI(&vm);
     }
     return rc;
