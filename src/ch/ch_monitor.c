@@ -1057,9 +1057,8 @@ virCHMonitorReattach(virDomainObj *vm, virCHDriverConfig *cfg, virCHDriver *driv
     // virCHDomainObjPrivate *priv = vm->privateData;
     g_autoptr(virCHMonitor) mon = NULL;
     g_autoptr(virCommand) cmd = NULL;
-    int socket_fd = 0;
-    int event_monitor_fd;
-    // int rv;
+    VIR_AUTOCLOSE socket_fd = -1;
+    int event_monitor_fd = 0;
 
     if (virCHMonitorInitialize() < 0)
         return NULL;
