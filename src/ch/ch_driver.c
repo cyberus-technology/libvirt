@@ -5086,7 +5086,7 @@ chDomainBlockResize(virDomainPtr dom,
     g_autofree char *device = NULL;
     virDomainDiskDef *disk = NULL;
     g_autofree char *payload = NULL;
-    bool success = NULL;
+    bool success = false;
     g_autoptr(virJSONValue) resize = NULL;
 
     DBG("chDomainBlockResize: path:%s size:%lld, flags:%x", path, size, flags);
