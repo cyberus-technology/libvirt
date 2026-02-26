@@ -650,14 +650,14 @@ chProcessAddNetworkDevice(virCHDriver *driver,
     g_autofree int *tapfds = NULL;
     g_autofree char *payload = NULL;
     g_autofree char *netJson = NULL;
-    g_autofree char *response = NULL;
     g_autofree int *nicindexes = NULL;
     size_t nnicindexes = 0;
-    size_t tapfd_len;
+    size_t tapfd_len = 0;
     size_t payload_len;
     size_t new_net_id = 0;
-    int saved_errno;
-    int rc;
+    int saved_errno = 0;
+    int rc = 0;
+    int ret = -1;
 
     if (!virBitmapIsBitSet(driver->chCaps, CH_MULTIFD_IN_ADDNET)) {
         virReportError(VIR_ERR_INTERNAL_ERROR, "%s",
@@ -681,7 +681,6 @@ chProcessAddNetworkDevice(virCHDriver *driver,
             */
         net->driver.virtio.queues = 1;
     }
-    tapfd_len = net->driver.virtio.queues;
 
     if (virCHDomainValidateActualNetDef(net) < 0) {
         virReportError(VIR_ERR_INTERNAL_ERROR, "%s",
@@ -689,7 +688,7 @@ chProcessAddNetworkDevice(virCHDriver *driver,
         DBG("virCHDomainValidateActualNetDef failed.");
         return -1;
     }
-
+    tapfd_len = net->driver.virtio.queues;
     tapfds = g_new0(int, tapfd_len);
     memset(tapfds, -1, (tapfd_len) * sizeof(int));
 
@@ -697,7 +696,10 @@ chProcessAddNetworkDevice(virCHDriver *driver,
     if (virCHConnetNetworkInterfaces(driver, vmdef, net, tapfds,
                                      &nicindexes, &nnicindexes) < 0) {
         DBG("chProcessAddNetworkDevices failed.");
-        return -1;
+        /* In case a few FDs were opened already, we need to close them as well.
+         * The cleanup takes care that `-1` FDs are ignored. */
+        ret = -1;
+        goto cleanup;
     }
 
     new_net_id = vmdef->nnets - 1; // IDs start at 0
@@ -705,7 +707,8 @@ chProcessAddNetworkDevice(virCHDriver *driver,
         virReportError(VIR_ERR_INTERNAL_ERROR, "%s",
                         _("Failed to build net json"));
         DBG("virCHMonitorBuildNetJson failed.");
-        return -1;
+        ret = -1;
+        goto cleanup;
     }
 
     DBG("payload sent with net-add request to CH = %s", netJson);
@@ -720,19 +723,28 @@ chProcessAddNetworkDevice(virCHDriver *driver,
                                  tapfds, tapfd_len);
     saved_errno = errno;
 
-    /* Close sent tap fds in Libvirt, as they have been dup()ed in CH */
-    chCloseFDs(tapfds, tapfd_len);
-
     if (rc < 0) {
         virReportSystemError(saved_errno, "%s",
                                 _("Failed to send net-add request to CH"));
         return -1;
+                             _("Failed to send net-add request to CH"));
+        ret = -1;
+        goto cleanup;
     }
 
-    if (chSocketProcessHttpResponse(mon_sockfd, true) < 0)
-        return -1;
+    if (chSocketProcessHttpResponse(mon_sockfd, true) < 0) {
+        ret = -1;
+        goto cleanup;
+    }
 
-    return 0;
+    ret = 0;
+
+ cleanup:
+    if (tapfd_len > 0) {
+        /* On success: CH dup()ed the FDs already. */
+        chCloseFDs(tapfds, tapfd_len);
+    }
+    return ret;
 }
 
 /**
