@@ -826,6 +826,7 @@ chProcessAddNetworkDevices(virCHDriver *driver,
             virReportError(VIR_ERR_INTERNAL_ERROR, "%s",
                            _("Failed to build net json"));
             DBG("virCHMonitorBuildNetJson failed.");
+            chCloseFDs(tapfds, tapfd_len);
             return -1;
         }
 
