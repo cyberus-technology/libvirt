@@ -3811,18 +3811,15 @@ chDomainMigrateFinish3(virConnectPtr dconn,
 
     priv = vm->privateData;
 
-    // If cancelled == 1, the sender told us that there was an error on their side and
-    // we need to abort the migration. We cannot expect the monitor to still function
-    // properly at this point because chv currently handles rpc and migration within the
-    // same thread.
-    //
-    // We also need to take care about our migration thread, because
-    // it might be stuck in a recv() system call waiting for the migration to complete.
-    if (cancelled == 0) {
-        if (virCHProcessUpdateInfo(vm) < 0) {
-            DBG("Could not update console info. Consider that non-fatal.");
-        }
-    } else {
+    /* If cancelled == 1, the sender told us that there was an error on their side and
+     * we need to abort the migration. We cannot expect the monitor to still function
+     * properly at this point because chv currently handles rpc and migration within the
+     * same thread.
+     *
+     * We also need to take care about our migration thread, because it might be stuck
+     * in a recv() system call waiting for the migration to complete.
+     */
+    if (cancelled != 0) {
         DBG("Migration was unsuccessful, killing CHV process");
         virCHProcessKill(driver, vm, VIR_DOMAIN_SHUTOFF_DESTROYED);
     }
@@ -3845,6 +3842,10 @@ chDomainMigrateFinish3(virConnectPtr dconn,
     // If priv->args->success is false, our migrationDstReceiveThr indicated an error.
     if (priv->args->success == true && cancelled == 0) {
         virDomainObjSetState(vm, VIR_DOMAIN_RUNNING, VIR_DOMAIN_RUNNING_MIGRATED);
+
+        if (priv->monitor && virCHProcessUpdateInfo(vm) < 0) {
+            DBG("Could not update console info. Consider that non-fatal.");
+        }
 
         if (virCHProcessInitCpuAffinity(vm) < 0) {
             goto error;
