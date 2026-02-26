@@ -2943,6 +2943,8 @@ chDomainMigrateFinish3LocalFailure(char* dname, virCHDriver *driver)
 
     if (virPortAllocatorRelease(priv->args->port) < 0) {
         DBG("Could not release migration port");
+    } else {
+        DBG("Released migration port %d after failed migration!", priv->args->port);
     }
 
     virMutexDestroy(&priv->args->mutex);
@@ -3279,6 +3281,9 @@ chDomainMigratePrepare3(virConnectPtr dconn,
  err_cleanup_port_alloc:
     if (virPortAllocatorRelease(port) < 0) {
         DBG("Failed to release port %d for migration in cleanup path", port);
+    }
+    else {
+        DBG("Released port %d as migration couldn't be prepared!", port);
     }
 
  err_cleanup_def:
@@ -3862,6 +3867,8 @@ chDomainMigrateFinish3(virConnectPtr dconn,
 
     if (virPortAllocatorRelease(priv->args->port) < 0) {
         DBG("Could not release migration port");
+    } else {
+        DBG("Released migration port %d after finished migration!", priv->args->port);
     }
 
     virMutexDestroy(&priv->args->mutex);
