@@ -3574,6 +3574,7 @@ chDomainMigratePerform3Impl(virDomainObj *vm,
         if (chIsSelfMigration(dest_uri)) {
             virReportError(VIR_ERR_INVALID_ARG, "%s",
                         _("Cannot migrate to the same host"));
+            rc = -1;
             goto cleanup;
         }
 
@@ -3597,6 +3598,7 @@ chDomainMigratePerform3Impl(virDomainObj *vm,
 
         if (dconn == NULL) {
             DBG("Could not open connection to remote libvirt daemon");
+            rc = -1;
             goto cleanup;
         }
 
@@ -3608,7 +3610,15 @@ chDomainMigratePerform3Impl(virDomainObj *vm,
             DBG("Parse dconnuri failed.");
         }
 
-        dconn->driver->domainMigratePrepare3(dconn, cookiein, cookieinlen, cookieout, cookieoutlen, uri_parsed ? uri_parsed->server : NULL, &uri_out, flags, dname, 0 /*bandwidth*/, dom_xml);
+        if (dconn->driver->domainMigratePrepare3(dconn, cookiein, cookieinlen,
+                                                 cookieout, cookieoutlen,
+                                                 uri_parsed ? uri_parsed->server : NULL,
+                                                 &uri_out, flags, dname,
+                                                 0 /* bandwidth */, dom_xml) < 0) {
+            DBG("Failed to prepare migration.");
+            rc = -1;
+            goto cleanup;
+        }
 
         DBG("Got uri_out that will be used for CHV migration: %s", uri_out);
         uri = uri_out;
