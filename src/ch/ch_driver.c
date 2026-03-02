@@ -2988,20 +2988,31 @@ chDoMigrateDstReceive(void *opaque)
     chMigrationDstArgs *args = opaque;
     virCHDomainObjPrivate *priv = args->priv;
     g_autofree char* rcv_uri = NULL;
-    virDomainObj* vm = priv->monitor->vm;
 
     DBG("Migration thread executing");
+    if (!priv) {
+        VIR_ERROR(_("Priv is not set"));
+        args->success = false;
+        return;
+    }
     if (!priv->monitor) {
         VIR_ERROR(_("VMs monitor not initialized"));
         args->success = false;
         return;
     }
+    if (!priv->monitor->vm) {
+        VIR_ERROR(_("monitor->vm not set"));
+        args->success = false;
+        return;
+    }
+
+    virDomainObj* vm = priv->monitor->vm;
 
     rcv_uri = g_strdup_printf("tcp:0.0.0.0:%d", args->port);
 
     if (virCHMonitorMigrationReceive(priv->monitor,
                                      rcv_uri,
-                                     args->def,
+                                     priv->monitor->vm->def,
                                      args->driver,
                                      &args->cond,
                                      args->tcp_serial_url,
@@ -3190,7 +3201,6 @@ chDomainMigratePrepare3(virConnectPtr dconn,
     args->priv = priv;
 
     args->cells = NULL;
-    args->def = vm->def;
     args->driver = driver;
     args->port = port;
     args->success = false;

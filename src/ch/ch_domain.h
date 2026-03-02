@@ -62,7 +62,6 @@ struct _virCHDomainObjPrivate {
 struct _chMigrationDstArgs {
     unsigned int port;
     virCHDomainObjPrivate *priv;
-    virDomainDef *def;
     virCHDriver *driver;
     virMutex mutex;
     virCond cond;
