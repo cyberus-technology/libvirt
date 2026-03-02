@@ -3185,15 +3185,17 @@ chDomainMigratePrepare3(virConnectPtr dconn,
     }
 
     priv = vm->privateData;
+    // Caution: We have cyclic dependency between args and priv!
     priv->args = args;
-    args->port = port;
     args->priv = priv;
+
+    args->cells = NULL;
     args->def = vm->def;
     args->driver = driver;
+    args->port = port;
     args->success = false;
     args->tcp_serial_url = NULL;
     args->use_tls = flags & VIR_MIGRATE_TLS;
-    args->cells = NULL;
 
     if (vm->def->nserials > 0 &&
         vm->def->serials[0]->source->type == VIR_DOMAIN_CHR_TYPE_TCP) {
