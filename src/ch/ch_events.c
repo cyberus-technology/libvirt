@@ -29,6 +29,7 @@
 #include "domain_event.h"
 #include "virfile.h"
 #include "virlog.h"
+#include "virstring.h"
 
 VIR_LOG_INIT("ch.ch_events");
 
@@ -39,6 +40,7 @@ VIR_ENUM_IMPL(virCHEvent,
               "vm:booted",
               "vm:booting",
               "vm:deleted",
+              "vm:migration-memory-iteration",
               "vm:paused",
               "vm:pausing",
               "vm:rebooted",
@@ -68,6 +70,32 @@ virCHEventStopProcess(virDomainObj *vm,
     virDomainObjEndJob(vm);
 
     return 0;
+}
+
+static void
+virCHEventEmitMigrationIteration(virDomainObj *vm,
+                                 virJSONValue *eventJSON)
+{
+    virCHDriver *driver = CH_DOMAIN_PRIVATE(vm)->driver;
+    virJSONValue *properties = virJSONValueObjectGetObject(eventJSON, "properties");
+    const char *iterationStr = NULL;
+    int iteration = 0;
+    virObjectEvent *event = NULL;
+
+    if (!properties ||
+        !(iterationStr = virJSONValueObjectGetString(properties, "id")) ||
+        virStrToLong_i(iterationStr, NULL, 10, &iteration) < 0 ||
+        iteration < 0) {
+        VIR_WARN("%s: Invalid migration iteration event payload",
+                 vm->def->name);
+        return;
+    }
+
+    VIR_WITH_OBJECT_LOCK_GUARD(vm) {
+        event = virDomainEventMigrationIterationNewFromObj(vm, iteration);
+    }
+
+    virObjectEventStateQueue(driver->domainEventState, event);
 }
 
 static void
@@ -180,6 +208,9 @@ virCHProcessEvent(virCHMonitor *mon,
         break;
     }
 
+    case VIR_CH_EVENT_VM_MIGRATION_MEMORY_ITERATION:
+        virCHEventEmitMigrationIteration(vm, eventJSON);
+        break;
     case VIR_CH_EVENT_VMM_SHUTDOWN:
     case VIR_CH_EVENT_VM_SHUTDOWN: {
         virCHEventEmitShutdown(vm, ev);
