@@ -822,7 +822,9 @@ chDomainShutdownFlags(virDomainPtr dom,
         goto endjob;
     }
 
+    priv->shutdownInitiatedByHost = true;
     if (virCHMonitorPowerButton(priv->monitor) < 0) {
+        priv->shutdownInitiatedByHost = false;
         virReportError(VIR_ERR_INTERNAL_ERROR, "%s",
                        _("failed to send power button event"));
         goto endjob;
@@ -1047,7 +1049,9 @@ chDomainDestroyFlags(virDomainPtr dom, unsigned int flags)
     // because CHV does not release the network file descriptors
     state = virDomainObjGetState(vm, NULL);
     if (state == VIR_DOMAIN_RUNNING || state == VIR_DOMAIN_PAUSED) {
+        priv->shutdownInitiatedByHost = true;
         if (virCHMonitorShutdownVMM(priv->monitor) < 0) {
+            priv->shutdownInitiatedByHost = false;
             virReportError(VIR_ERR_INTERNAL_ERROR, "%s",
                     _("failed to shutdown VMM"));
         }

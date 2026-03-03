@@ -48,6 +48,14 @@ struct _virCHDomainObjPrivate {
      * events.
      */
     int shutdown_done;
+    /* Set when the management layer requested a shutdown or destroy. The
+     * Cloud Hypervisor vm:shutdown event looks the same for host- and
+     * guest-initiated shutdowns, so this bool tracks the initiator to
+     * report the correct event detail (HOST vs GUEST). Cleared after
+     * shutdown event emit, reboot, failed power button press and failed
+     * VMM shutdown.
+     */
+    bool shutdownInitiatedByHost;
     virDomainPCIAddressSet *pciAddrSet;
 
     /**

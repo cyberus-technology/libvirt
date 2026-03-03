@@ -26,6 +26,7 @@
 #include "ch_domain.h"
 #include "ch_events.h"
 #include "ch_process.h"
+#include "domain_event.h"
 #include "virfile.h"
 #include "virlog.h"
 
@@ -33,22 +34,22 @@ VIR_LOG_INIT("ch.ch_events");
 
 VIR_ENUM_IMPL(virCHEvent,
               VIR_CH_EVENT_LAST,
-              "vmm:starting",
               "vmm:shutdown",
-              "vm:booting",
+              "vmm:starting",
               "vm:booted",
-              "vm:rebooting",
-              "vm:rebooted",
-              "vm:shutdown",
+              "vm:booting",
               "vm:deleted",
-              "vm:pausing",
               "vm:paused",
-              "vm:resuming",
-              "vm:resumed",
-              "vm:snapshotting",
-              "vm:snapshotted",
-              "vm:restoring",
+              "vm:pausing",
+              "vm:rebooted",
+              "vm:rebooting",
               "vm:restored",
+              "vm:restoring",
+              "vm:resumed",
+              "vm:resuming",
+              "vm:shutdown",
+              "vm:snapshotted",
+              "vm:snapshotting",
 );
 
 static int
@@ -67,6 +68,60 @@ virCHEventStopProcess(virDomainObj *vm,
     virDomainObjEndJob(vm);
 
     return 0;
+}
+
+static void
+virCHEventEmitLifecycle(virDomainObj *vm,
+                        int type,
+                        int detail)
+{
+    virCHDriver *driver = CH_DOMAIN_PRIVATE(vm)->driver;
+    virObjectEvent *event = NULL;
+
+    VIR_WITH_OBJECT_LOCK_GUARD(vm) {
+        if (!virDomainObjIsActive(vm)) {
+            DBG("Ignoring lifecycle event from inactive domain %s",
+                vm->def->name);
+            return;
+        }
+
+        event = virDomainEventLifecycleNewFromObj(vm,
+                                                  type,
+                                                  detail);
+    }
+
+    virObjectEventStateQueue(driver->domainEventState, event);
+}
+
+static void
+virCHEventEmitShutdown(virDomainObj *vm,
+                       virCHEvent monitorEvent)
+{
+    virCHDomainObjPrivate *priv = CH_DOMAIN_PRIVATE(vm);
+    virObjectEvent *event = NULL;
+    int detail;
+
+    VIR_WITH_OBJECT_LOCK_GUARD(vm) {
+        if (!virDomainObjIsActive(vm)) {
+            DBG("Ignoring SHUTDOWN event from inactive domain %s",
+                vm->def->name);
+            return;
+        }
+
+        if (monitorEvent == VIR_CH_EVENT_VMM_SHUTDOWN ||
+            priv->shutdownInitiatedByHost) {
+            detail = VIR_DOMAIN_EVENT_SHUTDOWN_HOST;
+        } else {
+            detail = VIR_DOMAIN_EVENT_SHUTDOWN_GUEST;
+        }
+        priv->shutdownInitiatedByHost = false;
+
+        event = virDomainEventLifecycleNewFromObj(vm,
+                                                  VIR_DOMAIN_EVENT_SHUTDOWN,
+                                                  detail);
+    }
+
+    virObjectEventStateQueue(priv->driver->domainEventState, event);
 }
 
 static int
@@ -100,17 +155,35 @@ virCHProcessEvent(virCHMonitor *mon,
     switch (ev) {
     case VIR_CH_EVENT_VMM_STARTING:
     case VIR_CH_EVENT_VM_BOOTING:
-    case VIR_CH_EVENT_VM_REBOOTING:
     case VIR_CH_EVENT_VM_PAUSING:
-    case VIR_CH_EVENT_VM_PAUSED:
     case VIR_CH_EVENT_VM_RESUMING:
     case VIR_CH_EVENT_VM_SNAPSHOTTING:
     case VIR_CH_EVENT_VM_SNAPSHOTTED:
     case VIR_CH_EVENT_VM_RESTORING:
     case VIR_CH_EVENT_VM_DELETED:
         break;
+    case VIR_CH_EVENT_VM_REBOOTING:
+        VIR_WITH_OBJECT_LOCK_GUARD(vm) {
+            CH_DOMAIN_PRIVATE(vm)->shutdownInitiatedByHost = false;
+        }
+        break;
+
+    case VIR_CH_EVENT_VM_PAUSED: {
+        virDomainEventSuspendedDetailType eventDetail = VIR_DOMAIN_EVENT_SUSPENDED_PAUSED;
+
+        VIR_WITH_OBJECT_LOCK_GUARD(vm) {
+            if (vm->job && vm->job->asyncJob == VIR_ASYNC_JOB_MIGRATION_OUT)
+                eventDetail = VIR_DOMAIN_EVENT_SUSPENDED_MIGRATED;
+        }
+
+        virCHEventEmitLifecycle(vm, VIR_DOMAIN_EVENT_SUSPENDED, eventDetail);
+        break;
+    }
+
     case VIR_CH_EVENT_VMM_SHUTDOWN:
-    case VIR_CH_EVENT_VM_SHUTDOWN:
+    case VIR_CH_EVENT_VM_SHUTDOWN: {
+        virCHEventEmitShutdown(vm, ev);
+
         if (virCHEventStopProcess(vm, VIR_DOMAIN_SHUTOFF_SHUTDOWN)) {
             VIR_WARN("Failed to mark the %s(%s) as SHUTDOWN!",
                      ev == VIR_CH_EVENT_VMM_SHUTDOWN ? "VMM" : "VM",
@@ -120,10 +193,22 @@ virCHProcessEvent(virCHMonitor *mon,
             // live-migrations.
         }
         break;
+    }
+
     /* Events causing new vCPU threads: */
+    case VIR_CH_EVENT_VM_RESUMED /* also after live migration */: {
+        virDomainEventResumedDetailType eventDetail =  VIR_DOMAIN_EVENT_RESUMED_UNPAUSED;
+
+        VIR_WITH_OBJECT_LOCK_GUARD(vm) {
+            if (vm->job && vm->job->asyncJob == VIR_ASYNC_JOB_MIGRATION_IN)
+                eventDetail = VIR_DOMAIN_EVENT_RESUMED_MIGRATED;
+        }
+
+        virCHEventEmitLifecycle(vm, VIR_DOMAIN_EVENT_RESUMED, eventDetail);
+        G_GNUC_FALLTHROUGH;
+    }
     case VIR_CH_EVENT_VM_BOOTED:
     case VIR_CH_EVENT_VM_REBOOTED:
-    case VIR_CH_EVENT_VM_RESUMED /* also after live migration */:
     case VIR_CH_EVENT_VM_RESTORED:
         virObjectLock(vm);
 
