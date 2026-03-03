@@ -3160,8 +3160,12 @@ chDomainMigratePrepare3(virConnectPtr dconn,
                                    VIR_DOMAIN_OBJ_LIST_ADD_CHECK_LIVE,
                                    NULL)))
     {
+        // This error path can be triggered if a new migration is initiated
+        // immediately after a previous migration of the same VM failed and
+        // `chDomainMigrateFinish3LocalFailure()` has not yet completed.
         virReportError(VIR_ERR_INTERNAL_ERROR, "%s",
                        _("Could not add Domain Obj to List"));
+        DBG("Cleanup of previous (cancelled or failed) migration of %s likely not finished yet", dname);
         rc = -1;
         goto err_cleanup_port_alloc;
     }
@@ -3296,7 +3300,7 @@ chDomainMigratePrepare3(virConnectPtr dconn,
     }
 
  err_cleanup_def:
-    VIR_FREE(def);
+    g_clear_pointer(&def, virDomainDefFree);
 
  err_cleanup_args:
     if (priv) {
