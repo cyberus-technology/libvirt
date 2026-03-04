@@ -64,6 +64,28 @@ build:packages:
     - nix build -L .#libvirt
     - nix build -L .#libvirt-debugoptimized
 
+build:meson:
+  stage: build
+  rules:
+    - when: always
+  extends:
+    - .nix_build_template
+  # No dependency to lint stage.
+  dependencies: []
+  needs: []
+  script:
+    - build:packages:
+  stage: build
+  rules:
+    - when: always
+  extends:
+    - .nix_build_template
+  # No dependency to lint stage.
+  dependencies: []
+  needs: []
+  script:
+    - nix develop . --command bash -c "meson setup build && meson compile -C build"
+
 build:nixos_tests:
   stage: build
   rules:
