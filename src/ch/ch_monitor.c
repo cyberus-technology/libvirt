@@ -139,6 +139,11 @@ virCHMonitorBuildCPUJson(virJSONValue *content, virDomainDef *vmdef)
             if (virJSONValueObjectAppend(cpus, "topology", &topology) < 0)
                 return -1;
         }
+        if (vmdef->features[VIR_DOMAIN_FEATURE_HYPERV] == VIR_DOMAIN_HYPERV_MODE_CUSTOM) {
+            DBG("Enable HyperV CPU enlightenments");
+            if (virJSONValueObjectAppendBoolean(cpus, "kvm_hyperv", true) < 0)
+                return -1;
+        }
         if (vmdef->cpu && vmdef->cpu->mode == VIR_CPU_MODE_CUSTOM && vmdef->cpu->model) {
             DBG("Use custom CPU model: %s", vmdef->cpu->model);
             if (virJSONValueObjectAppendString(cpus, "profile", vmdef->cpu->model) < 0)
