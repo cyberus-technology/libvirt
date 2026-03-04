@@ -2989,6 +2989,7 @@ chDoMigrateDstReceive(void *opaque)
     chMigrationDstArgs *args = opaque;
     virCHDomainObjPrivate *priv = args->priv;
     g_autofree char* rcv_uri = NULL;
+    virDomainObj* vm = NULL;
 
     DBG("Migration thread executing");
     if (!priv) {
@@ -3007,7 +3008,7 @@ chDoMigrateDstReceive(void *opaque)
         return;
     }
 
-    virDomainObj* vm = priv->monitor->vm;
+    vm = priv->monitor->vm;
 
     rcv_uri = g_strdup_printf("tcp:0.0.0.0:%d", args->port);
 
