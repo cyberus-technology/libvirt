@@ -9,10 +9,14 @@
     libvirt-tests.url = "github:cyberus-technology/libvirt-tests?ref=main";
     libvirt-tests.inputs.cloud-hypervisor.follows = "cloud-hypervisor";
     # Breaking the chain of cyclic dependencies:
+    libvirt-tests.inputs.edk2-src.follows = "edk2-src";
     libvirt-tests.inputs.libvirt.inputs.libvirt-tests.follows = "libvirt-tests";
     libvirt-tests.inputs.nixpkgs.follows = "nixpkgs";
     # We follow the latest stable release of nixpkgs
     nixpkgs.url = "github:nixos/nixpkgs/nixos-25.11";
+    # We use our custom firmware
+    edk2-src.url = "git+https://github.com/cyberus-technology/edk2?ref=gardenlinux&submodules=1";
+    edk2-src.flake = false;
   };
 
   outputs =
@@ -21,6 +25,7 @@
       nixpkgs,
       libvirt-tests,
       keycodemapdb,
+      edk2-src,
       ...
     }:
     let
