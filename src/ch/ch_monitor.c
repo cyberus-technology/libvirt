@@ -657,7 +657,8 @@ virCHMonitorBuildRngJson(virJSONValue *content, virDomainDef *vmdef)
 int
 virCHMonitorBuildNetJson(virDomainNetDef *net,
                          int netindex,
-                         char **jsonstr)
+                         char **jsonstr,
+                         bool hyperv_enabled)
 {
     char macaddr[VIR_MAC_STRING_BUFLEN];
     g_autoptr(virJSONValue) net_json = virJSONValueNewObject();
@@ -734,6 +735,18 @@ virCHMonitorBuildNetJson(virDomainNetDef *net,
 
     if (net->mtu) {
         if (virJSONValueObjectAppendNumberInt(net_json, "mtu", net->mtu) < 0)
+            return -1;
+    }
+
+    // We detect that we boot a Windows image if HyperV is configured for the
+    // domain. When Windows is booted, we require virtio-net offloading
+    // mechanisms to be turned off, as otherwise Windows does not boot.
+    if (hyperv_enabled) {
+        if (virJSONValueObjectAppendBoolean(net_json, "offload_tso", false) < 0)
+            return -1;
+        if (virJSONValueObjectAppendBoolean(net_json, "offload_ufo", false) < 0)
+            return -1;
+        if (virJSONValueObjectAppendBoolean(net_json, "offload_csum", false) < 0)
             return -1;
     }
 
