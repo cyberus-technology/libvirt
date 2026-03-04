@@ -10,11 +10,11 @@
         "rust-overlay": "rust-overlay"
       },
       "locked": {
-        "lastModified": 1772181175,
-        "narHash": "sha256-GEN0ssGikNF1/Soc04zQR2ZOPZYOKAtxNzcH8ZGDIxQ=",
+        "lastModified": 1772628775,
+        "narHash": "sha256-q1wqVBqdz/pGxhc4CcYVXoarT3I8VkG9bVHzbzgP3J8=",
         "owner": "cyberus-technology",
         "repo": "cloud-hypervisor",
-        "rev": "0fc36ba361af058c49db6e465f09e07560e79bcf",
+        "rev": "a600d4d62a755a0953486b0a612d5ce2209fc2b5",
         "type": "github"
       },
       "original": {
@@ -73,11 +73,11 @@
     "edk2-src": {
       "flake": false,
       "locked": {
-        "lastModified": 1768399783,
-        "narHash": "sha256-AyKYmRGgRMgFJTxEYh3jcmCcbeXHvAhnTymXbx3khPM=",
+        "lastModified": 1772632652,
+        "narHash": "sha256-cuU4f9U4zAj03cDhirjru4XSVM5WjpW59wEiiR3Qa/Q=",
         "ref": "gardenlinux",
-        "rev": "0417bca8caed638502f7575be937359878eac683",
-        "revCount": 34309,
+        "rev": "1d892a18e3c6b0e4ead9ab26c9a4f648bbf31476",
+        "revCount": 35525,
         "submodules": true,
         "type": "git",
         "url": "https://github.com/cyberus-technology/edk2"
@@ -180,7 +180,9 @@
           "cloud-hypervisor"
         ],
         "dried-nix-flakes": "dried-nix-flakes_2",
-        "edk2-src": "edk2-src",
+        "edk2-src": [
+          "edk2-src"
+        ],
         "fcntl-tool": "fcntl-tool",
         "libvirt": "libvirt",
         "nixpkgs": [
@@ -188,11 +190,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1772444159,
-        "narHash": "sha256-WWOHnJKL8I57Vb2r3ZtQTip/Jwq15bhOYQW4jXnMexM=",
+        "lastModified": 1772627425,
+        "narHash": "sha256-DZefqW8Wv176XPPEBunVdNPwNEH4CYPI6A6DNpDAahU=",
         "owner": "cyberus-technology",
         "repo": "libvirt-tests",
-        "rev": "7c680ffc5dc33a8256123e5815e61b677f692dd0",
+        "rev": "7f538eb8a4d282733c8f43f003a05e872fbc7cf8",
         "type": "github"
       },
       "original": {
@@ -221,6 +223,7 @@
     "root": {
       "inputs": {
         "cloud-hypervisor": "cloud-hypervisor",
+        "edk2-src": "edk2-src",
         "keycodemapdb": "keycodemapdb",
         "libvirt-tests": "libvirt-tests",
         "nixpkgs": "nixpkgs"
