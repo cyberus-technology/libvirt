@@ -541,6 +541,11 @@ virCHMonitorBuildDiskJson(virJSONValue *disks, virDomainDiskDef *diskdef)
             }
         }
 
+        if (diskdef->src->format == VIR_STORAGE_FILE_RAW) {
+            if (virJSONValueObjectAppendString(disk, "image_type", "Raw") < 0)
+                return -1;
+        }
+
         if (virJSONValueArrayAppend(disks, &disk) < 0)
             return -1;
 
