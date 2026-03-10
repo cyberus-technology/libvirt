@@ -80,6 +80,8 @@ virCHProcessEvent(virCHMonitor *mon,
     g_autofree char *full_event = NULL;
     virDomainObj *vm = mon->vm;
     int ret = 0;
+    bool process_setup_success = false;
+    size_t retries;
 
     if (virJSONValueObjectHasKey(eventJSON, "source") == 0) {
         VIR_WARN("%s: Invalid JSON from monitor, no source key", vm->def->name);
@@ -124,8 +126,32 @@ virCHProcessEvent(virCHMonitor *mon,
     case VIR_CH_EVENT_VM_RESUMED /* also after live migration */:
     case VIR_CH_EVENT_VM_RESTORED:
         virObjectLock(vm);
-        virCHProcessSetup(vm);
+        /*
+         * There is a race condition in the virCHProcessSetup that in rare
+         * timing conditions we detect threads in Cloud Hypervisor that are not
+         * present anymore when we try to do the further setup.
+         * When that happens, we early abort in the virCHProcessSetup and do
+         * not setup e.g. the vCPU affinity correctly.
+         * We work around that issue via a retry mechanism.
+         */
+        for (retries = 0; retries < 3; retries++) {
+            if (virCHProcessSetup(vm) < 0) {
+                DBG("virCHProcessSetup failed. Retrying");
+                usleep(100 * 1000);
+            } else {
+                process_setup_success = true;
+                break;
+            }
+        }
         virObjectUnlock(vm);
+
+        if (!process_setup_success) {
+            VIR_WARN(
+                "The virCHProcessSetup was not successful! While the "
+                "domain might run properly, certain process and thread setup might "
+                "have been skipped, e.g. the vCPU thread affinity."
+            );
+        }
         break;
     case VIR_CH_EVENT_LAST:
     default:
