@@ -58,7 +58,10 @@ virCHEventStopProcess(virDomainObj *vm,
     virCHDriver *driver = CH_DOMAIN_PRIVATE(vm)->driver;
     VIR_LOCK_GUARD lock = virObjectLockGuard(vm);
 
-    if (virDomainObjBeginJob(vm, VIR_JOB_DESTROY) < 0)
+    // FIXME: we use VIR_JOB_MODIFY instead of VIR_JOB_DESTROY here because
+    // otherwise, a shutdown event racing with an active migration can
+    // interrupt the migration and cause major issues with our state machine.
+    if (virDomainObjBeginJob(vm, VIR_JOB_MODIFY) < 0)
         return -1;
     virCHProcessStop(driver, vm, reason);
     virDomainObjEndJob(vm);
