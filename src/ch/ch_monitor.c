@@ -1488,7 +1488,7 @@ virCHMonitorPutNoResponse(virCHMonitor *mon, const char *endpoint,
 {
     int responseCode = virCHMonitorRequest(mon, endpoint, payload, "PUT", false, true).code;
 
-    return !(responseCode == 200 || responseCode == 204);
+    return (responseCode == 200 || responseCode == 204) ? 0 : -1;
 }
 
 virJSONValue*
