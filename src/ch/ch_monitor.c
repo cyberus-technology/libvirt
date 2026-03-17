@@ -1691,7 +1691,7 @@ int virCHMonitorRemoveDevice(virCHMonitor *mon,
 
     http_response = virCHMonitorRequest(mon, URL_VM_REMOVE_DEVICE, payload, "PUT", false, true);
 
-    return !(http_response.code == 200 || http_response.code == 204);
+    return (http_response.code == 200 || http_response.code == 204) ? 0 : -1;
 }
 
 int virCHMonitorMigrationSend(virCHMonitor *mon,
