@@ -1517,7 +1517,7 @@ virCHMonitorGet(virCHMonitor *mon, const char *endpoint, virJSONValue **response
         *response = NULL;
     }
 
-    return !(http_response.code == 200 || http_response.code == 204);
+    return (http_response.code == 200 || http_response.code == 204) ? 0 : -1;
 }
 
 static void
