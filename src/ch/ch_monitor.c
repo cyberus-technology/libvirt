@@ -2299,5 +2299,5 @@ int
 virCHMonitorMigrationCancel(virCHMonitor *mon) {
     int responseCode = virCHMonitorRequest(mon, URL_VM_MIGRATION_CANCEL, NULL, "PUT", false, true).code;
 
-    return !(responseCode == 200 || responseCode == 204);
+    return (responseCode == 200 || responseCode == 204) ? 0 : -1;
 }
