@@ -139,6 +139,7 @@ virCHDomainJobGetTimeElapsed(virDomainJobObj *job,
 
 int
 chDomainMigrationJobDataToParams(chMigrationProgress *progress,
+                                 virDomainJobOperation operation,
                                  int *type,
                                  virTypedParameterPtr *params,
                                  int *nparams);

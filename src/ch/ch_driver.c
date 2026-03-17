@@ -476,7 +476,9 @@ chDomainGetJobStats(virDomainPtr dom,
     if (completed && !vm->job->current) {
         VIR_WITH_MUTEX_LOCK_GUARD(&priv->migrationStatsMutex) {
             if (priv->migrationStats.state != VIR_CH_MIGRATION_PROGRESS_STATE_INVALID) {
-                ret = chDomainMigrationJobDataToParams(&priv->migrationStats, type, params, nparams);
+                ret = chDomainMigrationJobDataToParams(&priv->migrationStats,
+                                                       VIR_DOMAIN_JOB_OPERATION_MIGRATION_OUT,
+                                                       type, params, nparams);
             } else {
                 chSetNoJobStats(type, params, nparams);
                 ret = 0;
@@ -498,7 +500,9 @@ chDomainGetJobStats(virDomainPtr dom,
 
     if (vm->job->asyncJob == VIR_ASYNC_JOB_MIGRATION_OUT) {
         VIR_WITH_MUTEX_LOCK_GUARD(&priv->migrationStatsMutex) {
-            ret = chDomainMigrationJobDataToParams(&priv->migrationStats, type, params, nparams);
+            ret = chDomainMigrationJobDataToParams(&priv->migrationStats,
+                                                   VIR_DOMAIN_JOB_OPERATION_MIGRATION_OUT,
+                                                   type, params, nparams);
         }
         goto cleanup;
     }
@@ -3548,6 +3552,29 @@ chDomainMigratePrepare3Params(virConnectPtr dconn,
     return chDomainMigratePrepare3(dconn, cookiein, cookieinlen, cookieout, cookieoutlen, uri_in, uri_out, flags, dname, 0, dom_xml);
 }
 
+static void
+chDomainEventEmitJobCompleted(virDomainObj *vm,
+                              virDomainJobOperation operation)
+{
+    virCHDomainObjPrivate *priv = CH_DOMAIN_PRIVATE(vm);
+    virObjectEvent *event;
+    virTypedParameterPtr params = NULL;
+    int nparams = 0;
+    int type = VIR_DOMAIN_JOB_NONE;
+
+    VIR_WITH_MUTEX_LOCK_GUARD(&priv->migrationStatsMutex) {
+        if (chDomainMigrationJobDataToParams(&priv->migrationStats,
+                                             operation,
+                                             &type, &params, &nparams) < 0) {
+            DBG("Could not get stats for completed job: domain %s",
+                     vm->def->name);
+        }
+    }
+
+    event = virDomainEventJobCompletedNewFromObj(vm, params, nparams);
+    virObjectEventStateQueue(priv->driver->domainEventState, event);
+}
+
 static int
 chDomainMigrateConfirm3(virDomainPtr domain,
                         const char *cookiein,
@@ -3557,10 +3584,7 @@ chDomainMigrateConfirm3(virDomainPtr domain,
 {
     virCHDriver *driver = domain->conn->privateData;
     virObjectEvent *event = NULL;
-    // virObjectEvent *event = NULL;
     g_autoptr(virCHDriverConfig) cfg = virCHDriverGetConfig(domain->conn->privateData);
-    // virCHDomainObjPrivate *priv = NULL;
-    // size_t i;
     virDomainObj *vm;
 
     VIR_INFO("chDomainMigrateConfirm3 %p %s %d %lu %d",
@@ -3570,8 +3594,6 @@ chDomainMigrateConfirm3(virDomainPtr domain,
         return -1;
 
     DBG("confirm migration domain: name=%s,title=%s", vm->def->name, vm->def->title);
-
-    // priv = vm->privateData;
 
     if (virDomainMigrateConfirm3EnsureACL(domain->conn, vm->def) < 0) {
         virDomainObjEndAPI(&vm);
@@ -3594,8 +3616,12 @@ chDomainMigrateConfirm3(virDomainPtr domain,
                                               VIR_DOMAIN_EVENT_STOPPED_MIGRATED);
 
     virDomainObjEndJob(vm);
-    virDomainObjEndAPI(&vm);
     virObjectEventStateQueue(driver->domainEventState, event);
+
+    if (!cancelled)
+        chDomainEventEmitJobCompleted(vm, VIR_DOMAIN_JOB_OPERATION_MIGRATION_OUT);
+
+    virDomainObjEndAPI(&vm);
     return 0;
 }
 
@@ -3889,7 +3915,6 @@ chDomainMigratePerform3Impl(virDomainObj *vm,
     if (dconnuri) {
         DBG("P2P: Call finish on remote context");
         ddomain = dconn->driver->domainMigrateFinish3(dconn, vm->def->name, NULL, 0, NULL, NULL, NULL, uri, flags, 0);
-        virObjectUnref(ddomain);
 
         DBG("P2P: Call confirm on our context");
 
@@ -3915,6 +3940,17 @@ chDomainMigratePerform3Impl(virDomainObj *vm,
         }
 
         virDomainObjEndAsyncJob(vm);
+
+        if (ddomain) {
+            virObjectEvent *event = virDomainEventLifecycleNewFromObj(vm,
+                                                                      VIR_DOMAIN_EVENT_STOPPED,
+                                                                      VIR_DOMAIN_EVENT_STOPPED_MIGRATED);
+
+            virObjectEventStateQueue(driver->domainEventState, event);
+            chDomainEventEmitJobCompleted(vm, VIR_DOMAIN_JOB_OPERATION_MIGRATION_OUT);
+        }
+
+        virObjectUnref(ddomain);
         DBG("P2P: Migration finished");
         return 0;
     }

@@ -524,6 +524,7 @@ virCHDomainValidateActualNetDef(virDomainNetDef *net)
 
 int
 chDomainMigrationJobDataToParams(chMigrationProgress *progress,
+                                 virDomainJobOperation operation,
                                  int *type,
                                  virTypedParameterPtr *params,
                                  int *nparams)
@@ -533,6 +534,12 @@ chDomainMigrationJobDataToParams(chMigrationProgress *progress,
     int npar = 0;
     int maxpar = 0;
     unsigned long long now = 0;
+
+    if (virTypedParamsAddInt(&par, &npar, &maxpar,
+                             VIR_DOMAIN_JOB_OPERATION,
+                             operation) < 0) {
+        goto error;
+    }
 
     ignore_value(virTimeMillisNow(&now));
     if (virTypedParamsAddULLong(&par, &npar, &maxpar,
