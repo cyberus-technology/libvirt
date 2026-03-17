@@ -55,33 +55,6 @@ int
 chMonitorSocketConnect(virCHMonitor *mon);
 
 /**
- * virCHProcessInitCpuAffinity:
- * @vm: domain object
- *
- * Initializes the baseline CPU affinity of the Cloud Hypervisor
- * process.
- *
- * Must be called after the hypervisor process is started (PID is
- * available) but before per-thread tuning is applied (virCHProcessSetup()).
- *
- * Determines the initial CPU mask in the following order:
- *   - Strict NUMA memory policy: derive CPUs from the selected NUMA nodes
- *   - <cputune><emulatorpin>: use the configured emulator CPU set
- *   - Fallback: inherit the full allowed host CPU set
- *
- * Applies the resulting mask to the main process using
- * sched_setaffinity(). Threads created afterwards inherit this mask.
- *
- * This establishes a coarse CPU containment envelope before
- * fine-grained per-thread and cgroup tuning is performed by
- * virCHProcessSetup().
- *
- * Returns 0 on success, -1 on error.
- */
-int
-virCHProcessInitCpuAffinity(virDomainObj *vm);
-
-/**
  * virCHProcessSetup:
  * @vm: domain object
  *
