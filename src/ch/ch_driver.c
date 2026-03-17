@@ -3997,10 +3997,6 @@ chDomainMigrateFinish3(virConnectPtr dconn,
             DBG("Could not update console info. Consider that non-fatal.");
         }
 
-        if (virCHProcessInitCpuAffinity(vm) < 0) {
-            goto error;
-        }
-
         if (virDomainObjSave(vm, driver->xmlopt, cfg->stateDir) < 0) {
             DBG("Failed to save status on vm %s", vm->def->name);
         }
