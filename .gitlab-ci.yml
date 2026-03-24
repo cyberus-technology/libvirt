@@ -160,6 +160,73 @@ test:numa-host-tests:
   variables:
     TEST_ATTR: numa_hosts
 
+# the cpu profile test requires the appropriate hardware
+test:cpu_profiles:
+  stage: test
+  resource_group: ferona-hardware
+  rules:
+    # Resource groups do not work across forks. However, we need the resource
+    # group to apply globally for the GitLab CI runner. As a workaround, we
+    # only run this job in the main repository (on pull requests). Once all
+    # forks were rebased, this change becomes effective.
+    - if: '$CI_PROJECT_PATH == "cyberus/cloud/libvirt"'
+      when: always
+    - when: never
+  extends:
+    - .nix_build_template
+  variables:
+    PYTHONUNBUFFERED: "1"
+    TERM: "xterm"
+    DBG_LOG_DIR: "./logs"
+  parallel:
+    matrix:
+      - TESTSUITE: run_cpu_profile_test.sh
+        TARGETHOST:
+          - ferona-sapphire-rapids
+          - ferona-granite-rapids
+  artifacts:
+    expire_in: 1 week
+    when: always
+    paths:
+      - logs/
+  before_script:
+    - git config --global --add url.${CI_SERVER_PROTOCOL}://gitlab-ci-token:${CI_JOB_TOKEN}@${CI_SERVER_HOST}/.insteadOf "git@${CI_SERVER_HOST}:"
+    - git config --global --add url.${CI_SERVER_PROTOCOL}://gitlab-ci-token:${CI_JOB_TOKEN}@${CI_SERVER_HOST}/.insteadOf "ssh://git@${CI_SERVER_HOST}/"
+    - unset NIX_PATH
+    # setup ssh key
+    - mkdir -p ~/.ssh
+    - chmod 700 ~/.ssh
+    - umask 077
+    - cp "$SSH_KNOWN_HOSTS" ~/.ssh/known_hosts
+    - chmod 600 ~/.ssh/known_hosts
+    - cp "$SSH_PRIVATE_KEY" ~/.ssh/id_ed25519
+    - chmod 600 ~/.ssh/id_ed25519
+    - cp "$SSH_PUBLIC_KEY" ~/.ssh/id_ed25519.pub
+    - chmod 600 ~/.ssh/id_ed25519.pub
+    # generate ssh client configuration file - you dont need all parameters in each ssh commnd line
+    - echo 'Host *' > ~/.ssh/config
+    - echo "  UserKnownHostsFile ${HOME}/.ssh/known_hosts" >> ~/.ssh/config
+    - echo "  User benchmark" >> ${HOME}/.ssh/config
+    - echo "  IdentityFile ${HOME}/.ssh/id_ed25519" >> ~/.ssh/config
+    - echo "  SendEnv CI_SERVER_PROTOCOL" >> ~/.ssh/config
+    - echo "  SendEnv CI_JOB_TOKEN" >> ~/.ssh/config
+    - echo "  SendEnv CI_SERVER_HOST" >> ~/.ssh/config
+    - echo "  SendEnv CI_COMMIT_REF_NAME" >> ~/.ssh/config
+    - echo "  SendEnv CI_PROJECT_NAME" >> ~/.ssh/config
+    - echo "  SendEnv CI_PROJECT_PATH" >> ~/.ssh/config
+    - echo "  SendEnv CI_PIPELINE_ID" >> ~/.ssh/config
+    - echo "  SendEnv TESTSUITE" >> ~/.ssh/config
+
+  script:
+    - rm -rf logs && mkdir logs
+    - nix-shell -p openssh --run 'ssh -F ~/.ssh/config ${TARGETHOST} "rm -rf tmp-${CI_PIPELINE_ID} && mkdir tmp-${CI_PIPELINE_ID} && git -C tmp-${CI_PIPELINE_ID} clone ${CI_SERVER_PROTOCOL}://gitlab-ci-token:${CI_JOB_TOKEN}@${CI_SERVER_HOST}/${CI_PROJECT_PATH}.git"'
+    - nix-shell -p openssh --run 'ssh -F ~/.ssh/config ${TARGETHOST} "git -C tmp-${CI_PIPELINE_ID}/${CI_PROJECT_NAME} switch ${CI_COMMIT_REF_NAME}"'
+    - nix-shell -p openssh --run 'ssh -F ~/.ssh/config ${TARGETHOST} "./tmp-${CI_PIPELINE_ID}/${CI_PROJECT_NAME}/local_tests/${TESTSUITE} tmp-${CI_PIPELINE_ID}/${CI_PROJECT_NAME}"' 2>&1 | tee logs/${TARGETHOST}.log
+
+  after_script:
+    - nix-shell -p openssh --run 'ssh -F ~/.ssh/config ${TARGETHOST} "./tmp-${CI_PIPELINE_ID}/${CI_PROJECT_NAME}/local_tests/kill_child_pids.sh"' || true
+    - nix-shell -p openssh --run 'ssh -F ~/.ssh/config ${TARGETHOST} "rm -rf tmp-${CI_PIPELINE_ID}"' || true
+
 test:live-migration-bare-metal:
   stage: test
   resource_group: ferona-hardware
