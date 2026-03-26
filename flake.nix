@@ -4,10 +4,14 @@
   inputs = {
     cloud-hypervisor.url = "github:cyberus-technology/cloud-hypervisor?ref=gardenlinux";
     cloud-hypervisor.inputs.nixpkgs.follows = "nixpkgs";
+    # Previous release of cloud-hypervisor for migration testing with different versions.
+    cloud-hypervisor-prev.url = "github:cyberus-technology/cloud-hypervisor?ref=gardenlinux-release-26-03-31";
+    cloud-hypervisor-prev.inputs.nixpkgs.follows = "nixpkgs";
     keycodemapdb.url = "git+https://gitlab.com/keycodemap/keycodemapdb.git";
     keycodemapdb.flake = false;
     libvirt-tests.url = "github:cyberus-technology/libvirt-tests?ref=main";
     libvirt-tests.inputs.cloud-hypervisor.follows = "cloud-hypervisor";
+    libvirt-tests.inputs.cloud-hypervisor-prev.follows = "cloud-hypervisor-prev";
     # Breaking the chain of cyclic dependencies:
     libvirt-tests.inputs.edk2-src.follows = "edk2-src";
     libvirt-tests.inputs.libvirt.inputs.libvirt-tests.follows = "libvirt-tests";

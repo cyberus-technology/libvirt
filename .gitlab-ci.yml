@@ -141,6 +141,12 @@ test:live-migration-tests:
   variables:
     TEST_ATTR: live_migration
 
+test:version_migration-tests:
+  extends:
+    - .test_nixos_tests
+  variables:
+    TEST_ATTR: version_migration
+
 test:hugepage-tests:
   extends:
     - .test_nixos_tests

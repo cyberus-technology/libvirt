@@ -10,11 +10,11 @@
         "rust-overlay": "rust-overlay"
       },
       "locked": {
-        "lastModified": 1774967998,
-        "narHash": "sha256-ynLX5mJeFvAsWln9+gXmvLGRm+LT5MGUHsfD7ThmLRM=",
+        "lastModified": 1775640851,
+        "narHash": "sha256-JtW3C4vktt+fT+yMtQoCnkR3jWPNRbemwc+0wXigqb4=",
         "owner": "cyberus-technology",
         "repo": "cloud-hypervisor",
-        "rev": "52b7a9b0b8cb731c6731d23ae7aa8de2a03b5e4c",
+        "rev": "16bb5551945328a861e18cc2bf3ef76cc58b5336",
         "type": "github"
       },
       "original": {
@@ -29,22 +29,21 @@
         "crane": "crane_2",
         "dried-nix-flakes": "dried-nix-flakes_2",
         "nixpkgs": [
-          "libvirt-tests",
           "nixpkgs"
         ],
         "rust-overlay": "rust-overlay_2"
       },
       "locked": {
-        "lastModified": 1774527115,
-        "narHash": "sha256-piHL2tT5220IFv+5JCvSo4qLODx/0Zvq70J8TCRguo8=",
+        "lastModified": 1774955977,
+        "narHash": "sha256-O41HNDYh/HkmS4OutJi0euw+0HnaXXnSo5d1NBxLTeU=",
         "owner": "cyberus-technology",
         "repo": "cloud-hypervisor",
-        "rev": "e562d21501e8550252ca09bb052e7dc0e0bc508d",
+        "rev": "48607f37f78f479b65780eba5801c943210fc38f",
         "type": "github"
       },
       "original": {
         "owner": "cyberus-technology",
-        "ref": "gardenlinux-release-26-03-26",
+        "ref": "gardenlinux-release-26-03-31",
         "repo": "cloud-hypervisor",
         "type": "github"
       }
@@ -255,7 +254,9 @@
         "cloud-hypervisor": [
           "cloud-hypervisor"
         ],
-        "cloud-hypervisor-prev": "cloud-hypervisor-prev",
+        "cloud-hypervisor-prev": [
+          "cloud-hypervisor-prev"
+        ],
         "dried-nix-flakes": "dried-nix-flakes_3",
         "edk2-src": [
           "edk2-src"
@@ -267,11 +268,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1775040696,
-        "narHash": "sha256-9CsCzfieBlS005r9EgSF9OjPEIBuPOSbZ3erI6QZlX0=",
+        "lastModified": 1775643093,
+        "narHash": "sha256-mfTW7VyNyRGSz7Do29rkeOWrO1XfdJxqfn3HGHzra98=",
         "owner": "cyberus-technology",
         "repo": "libvirt-tests",
-        "rev": "3ddcb98eeb3931e17c1719e5a09fb3ac0764d85c",
+        "rev": "6b477b0586a963e5ae497ea41bf36543969ad9df",
         "type": "github"
       },
       "original": {
@@ -283,11 +284,11 @@
     },
     "nixpkgs": {
       "locked": {
-        "lastModified": 1772822230,
-        "narHash": "sha256-yf3iYLGbGVlIthlQIk5/4/EQDZNNEmuqKZkQssMljuw=",
+        "lastModified": 1775525138,
+        "narHash": "sha256-BQb70+B378ECLO8iQT3P/b1hCC5/CJVHZdeulY8futc=",
         "owner": "nixos",
         "repo": "nixpkgs",
-        "rev": "71caefce12ba78d84fe618cf61644dce01cf3a96",
+        "rev": "d96b37bbeb9840f1c0ebfe90585ef5067b69bbb3",
         "type": "github"
       },
       "original": {
@@ -300,6 +301,7 @@
     "root": {
       "inputs": {
         "cloud-hypervisor": "cloud-hypervisor",
+        "cloud-hypervisor-prev": "cloud-hypervisor-prev",
         "edk2-src": "edk2-src",
         "keycodemapdb": "keycodemapdb",
         "libvirt-tests": "libvirt-tests",
@@ -330,7 +332,6 @@
     "rust-overlay_2": {
       "inputs": {
         "nixpkgs": [
-          "libvirt-tests",
           "cloud-hypervisor-prev",
           "nixpkgs"
         ]
