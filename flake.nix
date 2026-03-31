@@ -37,6 +37,7 @@
       libvirt-tests,
       keycodemapdb,
       edk2-src,
+      cloud-hypervisor,
       ...
     }:
     let
@@ -93,53 +94,65 @@
       # Nix flake attribute structure (tests.<system>.<test-name>). For each
       # test, we override the source of libvirt with the source from this
       # repository.
-      packages = forAllSystems (
-        pkgs:
-        let
-          # This builds libvirt with our own sources and the normal upstream libvirt configuration.
-          libvirt = pkgs.libvirt.overrideAttrs (old: {
-            name = "libvirt-chv";
-            src = cleanSourceWithSubmodules;
-            version =
-              # We fetch the version from `meson.build`.
-              let
-                fallback = builtins.trace "WARN: cannot obtain version from libvirt fork" "0.0.0-unknown";
-                mesonBuild = builtins.readFile "${cleanSourceWithSubmodules}/meson.build";
-                # Searches for the line `version: '11.3.0'` and captures the version.
-                matches = builtins.match ".*[[:space:]]*version:[[:space:]]'([0-9]+.[0-9]+.[0-9]+)'.*" mesonBuild;
-                version = builtins.elemAt matches 0;
-              in
-              if matches != null then version else fallback;
-            doInstallCheck = false;
-            doCheck = false;
-            patches = [
-              ./patches/libvirt/0001-meson-patch-in-an-install-prefix-for-building-on-nix.patch
-              ./patches/libvirt/0002-substitute-zfs-and-zpool-commands.patch
-            ];
-            mesonFlags = (old.mesonFlags or [ ]) ++ [
-              # Helps to keep track of the commit hash in the libvirt log. Nix strips
-              # all `.git`, so we need to be explicit here.
-              #
-              # This is a non-standard functionality of our own libvirt fork.
-              "-Dcommit_hash=${if self ? rev then self.rev else self.dirtyRev}"
-            ];
-          });
-          # This builds libvirt with our own sources and:
-          # - support for debugging (optimized debug build with symbols)
-          # - support for address sanitizers
-          libvirt-debugoptimized = libvirt.overrideAttrs (_old: {
-            mesonBuildType = "debugoptimized";
-            # IMPORTANT: donStrip is required because otherwise, nix will strip all
-            # debug info from the binaries in its fixupPhase. Having the debug info
-            # is crucial for getting source code info from the sanitizers, as well as
-            # when using GDB.
-            dontStrip = true;
-          });
-        in
-        {
-          inherit libvirt libvirt-debugoptimized;
-          default = libvirt;
-        }
+      packages = nixpkgs.lib.recursiveUpdate cloud-hypervisor.packages (
+        forAllSystems (
+          pkgs:
+          let
+            # This builds libvirt with our own sources and the normal upstream libvirt configuration.
+            libvirt = pkgs.libvirt.overrideAttrs (old: {
+              name = "libvirt-chv";
+              src = cleanSourceWithSubmodules;
+              version =
+                # We fetch the version from `meson.build`.
+                let
+                  fallback = builtins.trace "WARN: cannot obtain version from libvirt fork" "0.0.0-unknown";
+                  mesonBuild = builtins.readFile "${cleanSourceWithSubmodules}/meson.build";
+                  # Searches for the line `version: '11.3.0'` and captures the version.
+                  matches = builtins.match ".*[[:space:]]*version:[[:space:]]'([0-9]+.[0-9]+.[0-9]+)'.*" mesonBuild;
+                  version = builtins.elemAt matches 0;
+                in
+                if matches != null then version else fallback;
+              doInstallCheck = false;
+              doCheck = false;
+              patches = [
+                ./patches/libvirt/0001-meson-patch-in-an-install-prefix-for-building-on-nix.patch
+                ./patches/libvirt/0002-substitute-zfs-and-zpool-commands.patch
+              ];
+              mesonFlags = (old.mesonFlags or [ ]) ++ [
+                # Helps to keep track of the commit hash in the libvirt log. Nix strips
+                # all `.git`, so we need to be explicit here.
+                #
+                # This is a non-standard functionality of our own libvirt fork.
+                "-Dcommit_hash=${if self ? rev then self.rev else self.dirtyRev}"
+              ];
+            });
+            # This builds libvirt with our own sources and:
+            # - support for debugging (optimized debug build with symbols)
+            # - support for address sanitizers
+            libvirt-debugoptimized = libvirt.overrideAttrs (_old: {
+              mesonBuildType = "debugoptimized";
+              # IMPORTANT: donStrip is required because otherwise, nix will strip all
+              # debug info from the binaries in its fixupPhase. Having the debug info
+              # is crucial for getting source code info from the sanitizers, as well as
+              # when using GDB.
+              dontStrip = true;
+            });
+
+            chv-ovmf = pkgs.OVMF-cloud-hypervisor.overrideAttrs (_old: {
+              version = "cbs";
+              src = edk2-src;
+            });
+
+          in
+          {
+            inherit libvirt libvirt-debugoptimized;
+            default = libvirt;
+            chv-ovmf = pkgs.runCommand "OVMF-CLOUHDHV.fd" { } ''
+              cp ${chv-ovmf.fd}/FV/CLOUDHV.fd $out
+            '';
+            prepare-images = import ./local_tests/prepare-images.nix { inherit pkgs; };
+          }
+        )
       );
       # We export all tests from `libvirt-tests.tests` but override the libvirt
       # input with libvirt from this repository.
