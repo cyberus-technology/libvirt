@@ -1,0 +1,7 @@
+version: 2
+ethernets:
+  mynet:
+    match:
+      macaddress: "be:e3:00:00:00:01"
+    set-name: eth0
+    dhcp4: true

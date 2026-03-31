@@ -7,6 +7,7 @@ stages:
   - lint
   - build
   - test
+  - post
 
 variables:
   GIT_SUBMODULE_STRATEGY: recursive
@@ -158,3 +159,126 @@ test:numa-host-tests:
     - .test_nixos_tests
   variables:
     TEST_ATTR: numa_hosts
+
+test:live-migration-bare-metal:
+  stage: test
+  resource_group: ferona-hardware
+  rules:
+    # Resource groups do not work across forks. However, we need the resource
+    # group to apply globally for the GitLab CI runner. As a workaround, we
+    # only run this job in the main repository (on pull requests). Once all
+    # forks were rebased, this change becomes effective.
+    - if: '$CI_PROJECT_PATH == "cyberus/cloud/libvirt"'
+      when: always
+    - when: never
+  extends:
+    - .nix_build_template
+  variables:
+    PYTHONUNBUFFERED: "1"
+    TERM: "xterm"
+    DBG_LOG_DIR: "./logs"
+  artifacts:
+    expire_in: 1 week
+    when: always
+    paths:
+      - logs/
+  before_script:
+    - git config --global --add url.${CI_SERVER_PROTOCOL}://gitlab-ci-token:${CI_JOB_TOKEN}@${CI_SERVER_HOST}/.insteadOf "git@${CI_SERVER_HOST}:"
+    - git config --global --add url.${CI_SERVER_PROTOCOL}://gitlab-ci-token:${CI_JOB_TOKEN}@${CI_SERVER_HOST}/.insteadOf "ssh://git@${CI_SERVER_HOST}/"
+    - unset NIX_PATH
+    # setup ssh key
+    - mkdir -p ~/.ssh
+    - chmod 700 ~/.ssh
+    - umask 077
+    - cp "$SSH_KNOWN_HOSTS" ~/.ssh/known_hosts
+    - chmod 600 ~/.ssh/known_hosts
+    - cp "$SSH_PRIVATE_KEY" ~/.ssh/id_ed25519
+    - chmod 600 ~/.ssh/id_ed25519
+    - cp "$SSH_PUBLIC_KEY" ~/.ssh/id_ed25519.pub
+    - chmod 600 ~/.ssh/id_ed25519.pub
+    # generate ssh client configuration file - you dont need all parameters in each ssh commnd line
+    - echo 'Host *' > ~/.ssh/config
+    - echo "  UserKnownHostsFile ${HOME}/.ssh/known_hosts" >> ~/.ssh/config
+    - echo "  User benchmark" >> ${HOME}/.ssh/config
+    - echo "  IdentityFile ${HOME}/.ssh/id_ed25519" >> ~/.ssh/config
+    - echo "  SendEnv CI_SERVER_PROTOCOL" >> ~/.ssh/config
+    - echo "  SendEnv CI_JOB_TOKEN" >> ~/.ssh/config
+    - echo "  SendEnv CI_SERVER_HOST" >> ~/.ssh/config
+    - echo "  SendEnv CI_COMMIT_REF_NAME" >> ~/.ssh/config
+    - echo "  SendEnv CI_PROJECT_NAME" >> ~/.ssh/config
+    - echo "  SendEnv CI_PROJECT_PATH" >> ~/.ssh/config
+    - echo "  SendEnv CI_PIPELINE_ID" >> ~/.ssh/config
+  script:
+    - rm -rf logs && mkdir logs
+    # checkout repo on each host
+    - nix-shell -p openssh --run 'ssh -F ~/.ssh/config ferona-turin "rm -rf tmp-${CI_PIPELINE_ID} && mkdir tmp-${CI_PIPELINE_ID} && git -C tmp-${CI_PIPELINE_ID} clone ${CI_SERVER_PROTOCOL}://gitlab-ci-token:${CI_JOB_TOKEN}@${CI_SERVER_HOST}/${CI_PROJECT_PATH}.git"'
+    - nix-shell -p openssh --run 'ssh -F ~/.ssh/config ferona-turin "git -C tmp-${CI_PIPELINE_ID}/${CI_PROJECT_NAME} switch ${CI_COMMIT_REF_NAME}"'
+    - nix-shell -p openssh --run 'ssh -F ~/.ssh/config ferona-granite-rapids "rm -rf tmp-${CI_PIPELINE_ID} && mkdir tmp-${CI_PIPELINE_ID} && git -C tmp-${CI_PIPELINE_ID} clone ${CI_SERVER_PROTOCOL}://gitlab-ci-token:${CI_JOB_TOKEN}@${CI_SERVER_HOST}/${CI_PROJECT_PATH}.git"'
+    - nix-shell -p openssh --run 'ssh -F ~/.ssh/config ferona-granite-rapids "git -C tmp-${CI_PIPELINE_ID}/${CI_PROJECT_NAME} switch ${CI_COMMIT_REF_NAME}"'
+    - nix-shell -p openssh --run 'ssh -F ~/.ssh/config ferona-sapphire-rapids "rm -rf tmp-${CI_PIPELINE_ID} && mkdir tmp-${CI_PIPELINE_ID} && git -C tmp-${CI_PIPELINE_ID} clone ${CI_SERVER_PROTOCOL}://gitlab-ci-token:${CI_JOB_TOKEN}@${CI_SERVER_HOST}/${CI_PROJECT_PATH}.git"'
+    - nix-shell -p openssh --run 'ssh -F ~/.ssh/config ferona-sapphire-rapids "git -C tmp-${CI_PIPELINE_ID}/${CI_PROJECT_NAME} switch ${CI_COMMIT_REF_NAME}"'
+    # prepare image on nfs server host
+    - nix-shell -p openssh --run 'ssh -F ~/.ssh/config ferona-turin "./tmp-${CI_PIPELINE_ID}/${CI_PROJECT_NAME}/local_tests/run_chv_profile_prepare_images.sh ${CI_PIPELINE_ID}"' 2>&1 | tee -a logs/ferona-turin.log
+    # build CHV on each host
+    - nix-shell -p openssh --run 'ssh -F ~/.ssh/config ferona-granite-rapids "./tmp-${CI_PIPELINE_ID}/${CI_PROJECT_NAME}/local_tests/run_chv_profile_prepare_chv.sh"'
+    - nix-shell -p openssh --run 'ssh -F ~/.ssh/config ferona-sapphire-rapids "./tmp-${CI_PIPELINE_ID}/${CI_PROJECT_NAME}/local_tests/run_chv_profile_prepare_chv.sh"'
+    # build vm and run live migration
+    - nix-shell -p openssh --run './local_tests/run_chv_profile_test.sh ${CI_PIPELINE_ID} ${CI_PROJECT_NAME}'
+  after_script:
+    - echo "Cleanup all VMs on each host"
+    - nix-shell -p openssh --run './local_tests/run_chv_profile_cleanup.sh ${CI_PIPELINE_ID} ${CI_PROJECT_NAME}'
+    - echo "Cleanup all working directories on each host"
+    - nix-shell -p openssh --run 'ssh -F ~/.ssh/config ferona-turin "rm -rf tmp-${CI_PIPELINE_ID}"' || true
+    - nix-shell -p openssh --run 'ssh -F ~/.ssh/config ferona-granite-rapids "rm -rf tmp-${CI_PIPELINE_ID}"' || true
+    - nix-shell -p openssh --run 'ssh -F ~/.ssh/config ferona-sapphire-rapids "rm -rf tmp-${CI_PIPELINE_ID}"' || true
+    - echo "Clean shared nfs directory"
+    - nix-shell -p openssh --run 'ssh -F ~/.ssh/config ferona-turin "rm -rf /exports/gitlab/${CI_PIPELINE_ID}"' || true
+
+# this post job should always run
+# the test stage job may run into an error and a pipeline timeout
+# then this job removes all leftovers from the previos stage
+post:live-migration-bare-metal-cleanup:
+  stage: post
+  resource_group: ferona-hardware
+  rules:
+    # Resource groups do not work across forks. However, we need the resource
+    # group to apply globally for the GitLab CI runner. As a workaround, we
+    # only run this job in the main repository (on pull requests). Once all
+    # forks were rebased, this change becomes effective.
+    - if: '$CI_PROJECT_PATH == "cyberus/cloud/libvirt"'
+      when: always
+    - when: never
+  extends:
+    - .nix_build_template
+  before_script:
+    - git config --global --add url.${CI_SERVER_PROTOCOL}://gitlab-ci-token:${CI_JOB_TOKEN}@${CI_SERVER_HOST}/.insteadOf "git@${CI_SERVER_HOST}:"
+    - git config --global --add url.${CI_SERVER_PROTOCOL}://gitlab-ci-token:${CI_JOB_TOKEN}@${CI_SERVER_HOST}/.insteadOf "ssh://git@${CI_SERVER_HOST}/"
+    - unset NIX_PATH
+    # setup ssh key
+    - mkdir -p ~/.ssh
+    - chmod 700 ~/.ssh
+    - umask 077
+    - cp "$SSH_KNOWN_HOSTS" ~/.ssh/known_hosts
+    - chmod 600 ~/.ssh/known_hosts
+    - cp "$SSH_PRIVATE_KEY" ~/.ssh/id_ed25519
+    - chmod 600 ~/.ssh/id_ed25519
+    - cp "$SSH_PUBLIC_KEY" ~/.ssh/id_ed25519.pub
+    - chmod 600 ~/.ssh/id_ed25519.pub
+    # generate ssh client configuration file - you dont need all parameters in each ssh commnd line
+    - echo 'Host *' > ~/.ssh/config
+    - echo "  UserKnownHostsFile ${HOME}/.ssh/known_hosts" >> ~/.ssh/config
+    - echo "  User benchmark" >> ${HOME}/.ssh/config
+    - echo "  IdentityFile ${HOME}/.ssh/id_ed25519" >> ~/.ssh/config
+    - echo "  SendEnv CI_PROJECT_NAME" >> ~/.ssh/config
+    - echo "  SendEnv CI_PROJECT_PATH" >> ~/.ssh/config
+    - echo "  SendEnv CI_PIPELINE_ID" >> ~/.ssh/config
+
+  script:
+    - echo "Cleanup all VMs on each host"
+    - nix-shell -p openssh --run './local_tests/run_chv_profile_cleanup.sh ${CI_PIPELINE_ID} ${CI_PROJECT_NAME}' || true
+    - echo "Cleanup all working directories on each host"
+    - nix-shell -p openssh --run 'ssh -F ~/.ssh/config ferona-turin "rm -rf tmp-${CI_PIPELINE_ID}"' || true
+    - nix-shell -p openssh --run 'ssh -F ~/.ssh/config ferona-granite-rapids "rm -rf tmp-${CI_PIPELINE_ID}"' || true
+    - nix-shell -p openssh --run 'ssh -F ~/.ssh/config ferona-sapphire-rapids "rm -rf tmp-${CI_PIPELINE_ID}"' || true
+    - echo "Clean shared nfs directory"
+    - nix-shell -p openssh --run 'ssh -F ~/.ssh/config ferona-turin "rm -rf /exports/gitlab/${CI_PIPELINE_ID}"' || true
