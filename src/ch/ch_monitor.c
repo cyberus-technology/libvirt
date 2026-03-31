@@ -1254,7 +1254,7 @@ virCHMonitorNew(virDomainObj *vm, virCHDriverConfig *cfg, int logfile)
         virCommandAddArg(cmd, "--no-shutdown");
         virCommandAddArg(cmd, "-v");
         virCommandAddArg(cmd, "--seccomp");
-        virCommandAddArg(cmd, "true");
+        virCommandAddArg(cmd, "log");
         virCommandAddArg(cmd, "--event-monitor");
         virCommandAddArgFormat(cmd, "path=%s", mon->eventmonitorpath);
         virCommandSetPidFile(cmd, priv->pidfile);
