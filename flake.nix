@@ -7,6 +7,12 @@
     # Previous release of cloud-hypervisor for migration testing with different versions.
     cloud-hypervisor-prev.url = "github:cyberus-technology/cloud-hypervisor?ref=gardenlinux-release-26-03-31";
     cloud-hypervisor-prev.inputs.nixpkgs.follows = "nixpkgs";
+    # Previous release of libvirt for migration testing with different versions.
+    # Using the shorthand notation of "github:user/repo..." may lead to build errors
+    # like "source-with-submodules> cp: cannot create regular file '[...]': Permission denied".
+    libvirt-prev.url = "git+https://github.com/cyberus-technology/libvirt?ref=refs/tags/gardenlinux-release-26-03-31&submodules=1";
+    libvirt-prev.inputs.nixpkgs.follows = "nixpkgs";
+
     keycodemapdb.url = "git+https://gitlab.com/keycodemap/keycodemapdb.git";
     keycodemapdb.flake = false;
     libvirt-tests.url = "github:cyberus-technology/libvirt-tests?ref=main";
@@ -15,6 +21,7 @@
     # Breaking the chain of cyclic dependencies:
     libvirt-tests.inputs.edk2-src.follows = "edk2-src";
     libvirt-tests.inputs.libvirt.inputs.libvirt-tests.follows = "libvirt-tests";
+    libvirt-tests.inputs.libvirt-prev.inputs.libvirt-tests.follows = "libvirt-tests";
     libvirt-tests.inputs.nixpkgs.follows = "nixpkgs";
     # We follow the latest stable release of nixpkgs
     nixpkgs.url = "github:nixos/nixpkgs/nixos-25.11";
@@ -145,13 +152,21 @@
           # New attribute set with updated `libvirt-src` input for each test.
           tests = lib.concatMapAttrs (name: value: {
             ${name} =
-              value.override {
-                libvirt = self.packages.${system}.libvirt-debugoptimized;
-              }
+              value.override (old: {
+                pkgs = old.pkgs.extend (
+                  _final: _prev: {
+                    libvirt = self.packages.${system}.libvirt-debugoptimized;
+                  }
+                );
+              })
               // {
-                passthru.no_port_forwarding = value.passthru.no_port_forwarding.override {
-                  libvirt = self.packages.${system}.libvirt-debugoptimized;
-                };
+                passthru.no_port_forwarding = value.passthru.no_port_forwarding.override (old: {
+                  pkgs = old.pkgs.extend (
+                    _final: _prev: {
+                      libvirt = self.packages.${system}.libvirt-debugoptimized;
+                    }
+                  );
+                });
               };
           }) libvirt-tests.tests.${system};
         in
