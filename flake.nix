@@ -160,11 +160,13 @@
           all_drivers = pkgs.symlinkJoin {
             name = "all-test-drivers";
             paths = with tests; [
+              # Sorted alphabetically.
               default.driver
-              live_migration.driver
               hugepage.driver
+              live_migration.driver
               long_migration_with_load.driver
               numa_hosts.driver
+              version_migration.driver
             ];
           };
         }
