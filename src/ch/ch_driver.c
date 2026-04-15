@@ -789,8 +789,8 @@ static int
 chDomainShutdownFlags(virDomainPtr dom,
                       unsigned int flags)
 {
+    virCHDomainObjPrivate *priv;
     virDomainObj *vm;
-    virDomainState state;
     int ret = -1;
     g_autoptr(virCHDriverConfig) cfg = NULL;
     virCHDriver *driver = dom->conn->privateData;
@@ -808,21 +808,25 @@ chDomainShutdownFlags(virDomainPtr dom,
     if (virDomainShutdownFlagsEnsureACL(dom->conn, vm->def, flags) < 0)
         goto cleanup;
 
+    priv = vm->privateData;
+
     if (virDomainObjBeginJob(vm, VIR_JOB_MODIFY) < 0)
         goto cleanup;
 
     if (virDomainObjCheckActive(vm) < 0)
         goto endjob;
 
-    state = virDomainObjGetState(vm, NULL);
-    if (state != VIR_DOMAIN_RUNNING && state != VIR_DOMAIN_PAUSED) {
+    if (virDomainObjGetState(vm, NULL) != VIR_DOMAIN_RUNNING) {
         virReportError(VIR_ERR_OPERATION_INVALID, "%s",
-                       _("only can shutdown running/paused domain"));
+                       _("domain is not running"));
         goto endjob;
     }
 
-    if (virCHProcessKill(driver, vm, VIR_DOMAIN_SHUTOFF_SHUTDOWN) < 0)
+    if (virCHMonitorPowerButton(priv->monitor) < 0) {
+        virReportError(VIR_ERR_INTERNAL_ERROR, "%s",
+                       _("failed to send power button event"));
         goto endjob;
+    }
 
     ret = 0;
 

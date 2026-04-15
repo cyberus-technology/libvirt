@@ -31,6 +31,7 @@
 #define URL_VM_CREATE "vm.create"
 #define URL_VM_DELETE "vm.delete"
 #define URL_VM_BOOT "vm.boot"
+#define URL_VM_POWER_BUTTON "vm.power-button"
 #define URL_VM_SHUTDOWN "vm.shutdown"
 #define URL_VM_REBOOT "vm.reboot"
 #define URL_VM_Suspend "vm.pause"
@@ -194,6 +195,7 @@ G_DEFINE_AUTOPTR_CLEANUP_FUNC(virCHMonitor, virCHMonitorClose);
 
 int virCHMonitorCreateVM(virCHDriver *driver, virCHMonitor *mon);
 int virCHMonitorBootVM(virCHMonitor *mon);
+int virCHMonitorPowerButton(virCHMonitor *mon);
 int virCHMonitorShutdownVM(virCHMonitor *mon);
 int virCHMonitorShutdownVMM(virCHMonitor *mon);
 int virCHMonitorRebootVM(virCHMonitor *mon);

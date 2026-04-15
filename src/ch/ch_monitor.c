@@ -1614,6 +1614,12 @@ virCHMonitorGetThreadInfo(virCHMonitor *mon,
 }
 
 int
+virCHMonitorPowerButton(virCHMonitor *mon)
+{
+    return virCHMonitorPutNoResponse(mon, URL_VM_POWER_BUTTON, NULL);
+}
+
+int
 virCHMonitorShutdownVMM(virCHMonitor *mon)
 {
     return virCHMonitorPutNoResponse(mon, URL_VMM_SHUTDOWN, NULL);
