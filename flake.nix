@@ -151,6 +151,7 @@
               cp ${chv-ovmf.fd}/FV/CLOUDHV.fd $out
             '';
             prepare-images = import ./local_tests/prepare-images.nix { inherit pkgs; };
+            prepare-windows-image = import ./local_tests/prepare-windows-image.nix { inherit pkgs; };
           }
         )
       );
