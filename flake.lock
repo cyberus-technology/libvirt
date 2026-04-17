@@ -10,11 +10,11 @@
         "rust-overlay": "rust-overlay"
       },
       "locked": {
-        "lastModified": 1776175591,
-        "narHash": "sha256-s3qpPtgzmdg6oW+1gvImR+Qdv6mBvphFscPMMH2LKjU=",
+        "lastModified": 1776410875,
+        "narHash": "sha256-xehdklm2pQB3D+uRTmRvmOc1JPHnDApT6uZjynOcSUc=",
         "owner": "cyberus-technology",
         "repo": "cloud-hypervisor",
-        "rev": "06092ab3f37caf5b8418baf431b5879368761f9c",
+        "rev": "07231c7d0da6aaa35abeef907be98c4c6dd390fc",
         "type": "github"
       },
       "original": {
@@ -741,7 +741,10 @@
         "libvirt-tests": [
           "libvirt-tests"
         ],
-        "nixpkgs": "nixpkgs"
+        "nixpkgs": [
+          "libvirt-tests",
+          "nixpkgs"
+        ]
       },
       "locked": {
         "lastModified": 1774940944,
@@ -813,11 +816,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1776252549,
-        "narHash": "sha256-pEhD8mAimYQsB+S18uj1sxPTcbPIwaOqkERVmhugvzE=",
+        "lastModified": 1776342858,
+        "narHash": "sha256-diUKq7MIRctqCkm0uulLCRc0spYUazNkEAYwYEmuUzg=",
         "owner": "cyberus-technology",
         "repo": "libvirt-tests",
-        "rev": "0d649326227a6ca9680657193d30ef0a2657c81b",
+        "rev": "6ea229afb7806f4e25112287737dc8d934246a85",
         "type": "github"
       },
       "original": {
@@ -885,11 +888,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1775811910,
-        "narHash": "sha256-4/mO+FED70UzzmB7EeDlq0puLRq8Irj7+goh/Vvdzaw=",
+        "lastModified": 1776253711,
+        "narHash": "sha256-KWQePt79y0Vv5/RCAmJg5LAZh4Q9d+JTsWTqouE0KTs=",
         "ref": "gardenlinux",
-        "rev": "99a4e307672e6115113d635e55f8b73b0ab06728",
-        "revCount": 54152,
+        "rev": "aad6ff2708e5a9a762cdad789cb1753ffa060a44",
+        "revCount": 54156,
         "submodules": true,
         "type": "git",
         "url": "https://github.com/cyberus-technology/libvirt"
@@ -945,22 +948,6 @@
     },
     "nixpkgs": {
       "locked": {
-        "lastModified": 1772822230,
-        "narHash": "sha256-yf3iYLGbGVlIthlQIk5/4/EQDZNNEmuqKZkQssMljuw=",
-        "owner": "nixos",
-        "repo": "nixpkgs",
-        "rev": "71caefce12ba78d84fe618cf61644dce01cf3a96",
-        "type": "github"
-      },
-      "original": {
-        "owner": "nixos",
-        "ref": "nixos-25.11",
-        "repo": "nixpkgs",
-        "type": "github"
-      }
-    },
-    "nixpkgs_2": {
-      "locked": {
         "lastModified": 1776067740,
         "narHash": "sha256-B35lpsqnSZwn1Lmz06BpwF7atPgFmUgw1l8KAV3zpVQ=",
         "owner": "nixos",
@@ -983,7 +970,7 @@
         "keycodemapdb": "keycodemapdb",
         "libvirt-prev": "libvirt-prev",
         "libvirt-tests": "libvirt-tests_2",
-        "nixpkgs": "nixpkgs_2"
+        "nixpkgs": "nixpkgs"
       }
     },
     "rust-overlay": {
