@@ -148,7 +148,7 @@
             inherit libvirt libvirt-debugoptimized;
             inherit (libvirt-tests.packages.x86_64-linux) cloud-hypervisor cloud-hypervisor-prev;
             default = libvirt;
-            chv-ovmf = pkgs.runCommand "OVMF-CLOUHDHV.fd" { } ''
+            chv-ovmf = pkgs.runCommand "OVMF-CLOUDHV.fd" { } ''
               cp ${chv-ovmf.fd}/FV/CLOUDHV.fd $out
             '';
             prepare-images = import ./local_tests/prepare-images.nix { inherit pkgs; };
