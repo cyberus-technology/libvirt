@@ -9,6 +9,15 @@ These tests provide a convenient environment for:
 - Testing patches to virtualization backends (e.g., Cloud Hypervisor) by running
   the libvirt test suite in a reproducible NixOS VM environment.
 
+## Flake Ownership
+
+The root repository `flake.nix` is the single flake entry point for this merged
+repository.
+
+The Nix code in `nixos-tests/outputs.nix` is imported by the root flake and is
+not intended to be evaluated as a standalone flake. Use the root flake for all
+builds, checks, development shells, and test runs described in this document.
+
 ## Running Tests
 
 _These tests utilize the NixOS integration test framework
