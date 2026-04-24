@@ -1,10 +1,10 @@
 <mxfile host="app.diagrams.net" agent="Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36" version="29.2.7">
-  <diagram id="libvirt-tests-architecture" name="Page-1">
+  <diagram id="nixos-tests-architecture" name="Page-1">
     <mxGraphModel dx="1091" dy="722" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1320" pageHeight="760" math="0" shadow="0">
       <root>
         <mxCell id="0" />
         <mxCell id="1" parent="0" />
-        <mxCell id="host" parent="1" style="rounded=1;whiteSpace=wrap;html=1;arcSize=6;strokeColor=#1f2937;strokeWidth=3;fillColor=#f8fafc;fontColor=#111827;fontFamily=DejaVu Sans;fontSize=22;fontStyle=1;align=left;verticalAlign=top;spacingTop=26;spacingLeft=38;" value="Libvirt-Tests Architecture Overview&lt;br&gt;Host running a test suite" vertex="1">
+        <mxCell id="host" parent="1" style="rounded=1;whiteSpace=wrap;html=1;arcSize=6;strokeColor=#1f2937;strokeWidth=3;fillColor=#f8fafc;fontColor=#111827;fontFamily=DejaVu Sans;fontSize=22;fontStyle=1;align=left;verticalAlign=top;spacingTop=26;spacingLeft=38;" value="NixOS Tests Architecture Overview&lt;br&gt;Host running a test suite" vertex="1">
           <mxGeometry height="700" width="1260" x="30" y="30" as="geometry" />
         </mxCell>
         <mxCell id="script" parent="1" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;strokeColor=#ea580c;strokeWidth=3;fillColor=#fff7ed;fontColor=#111827;fontFamily=DejaVu Sans;fontSize=20;fontStyle=1;align=left;verticalAlign=middle;spacingLeft=38;" value="NixOS integration test framework / test script&#xa;Spawns two QEMU VM hosts and orchestrates the migration test flow" vertex="1">

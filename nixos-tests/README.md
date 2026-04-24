@@ -49,7 +49,7 @@ need `computeVM`.
 
 ### Available Tests
 
-The libvirt-tests are divided into multiple tests suites, each leveraging the
+The NixOS tests are divided into multiple test suites, each leveraging the
 NixOS integration test framework. The NixOS tests are grouped by different
 factors, e.g. the longer running live migration tests are separated. Following
 test attributes are available. Each attribute can be run via
