@@ -14,3 +14,6 @@ line-length=72
 # Empty bodies are fine
 [body-min-length]
 min-length=0
+
+[UC-scope]
+filter-paths=nixos-tests,flake.nix,flake.lock
