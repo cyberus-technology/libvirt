@@ -1,0 +1,852 @@
+# This file exports a function that returns a NixOS module.
+#
+# The module defines the common parts of the host VMs.
+
+{
+  nixos-image,
+  chv-ovmf,
+}:
+{ pkgs, lib, ... }:
+let
+  cirros_qcow = pkgs.fetchurl {
+    url = "https://download.cirros-cloud.net/0.6.2/cirros-0.6.2-x86_64-disk.img";
+    hash = "sha256-B+RKc+VMlNmIAoUVQDwe12IFXgG4OnZ+3zwrOH94zgA=";
+  };
+
+  cirros_raw = pkgs.runCommand "cirros_raw" { } ''
+    ${pkgs.qemu-utils}/bin/qemu-img convert -O raw ${cirros_qcow} $out
+  '';
+
+  ubuntu_img = pkgs.fetchurl {
+    url = "https://cloud-images.ubuntu.com/jammy/20260320/jammy-server-cloudimg-amd64.img";
+    hash = "sha256-6oWxb4Gz9qpToSYJEtP5kfwz4OD8HXPwuMnJYkfkL9s=";
+  };
+
+  ubuntu_raw = pkgs.runCommand "ubuntu_raw" { } ''
+    ${pkgs.qemu-utils}/bin/qemu-img convert -f qcow2 -O raw ${ubuntu_img} $out
+  '';
+
+  # Seed image for the Ubuntu cloud image used in the tests. It creates an
+  # `ubuntu` user with password `ubuntu` and the fixed guest network expected
+  # by the test topology.
+  ubuntu_cloud_init =
+    pkgs.runCommand "ubuntu_cloud_init"
+      {
+        nativeBuildInputs = with pkgs; [
+          cloud-utils
+          cloud-init
+          mkpasswd
+        ];
+      }
+      ''
+        password_hash="$(mkpasswd --method=SHA-512 ubuntu)"
+
+        substitute ${./cloud-init/user-data.yaml.in} user-data \
+          --subst-var-by password_hash "$password_hash"
+
+        cp ${./cloud-init/meta-data.yaml} meta-data
+        cp ${./cloud-init/network-config.yaml} network-config
+
+        cloud-init schema --config-file user-data
+        cloud-localds -N network-config "$out" user-data meta-data
+      '';
+
+  virsh_ch_xml =
+    {
+      image ? "/var/lib/libvirt/storage-pools/nfs-share/nixos.img",
+      # If cloud init is used, provide the path to the cloud init image here.
+      cloudInit ? null,
+      numa ? false,
+      hugepages ? false,
+      prefault ? false,
+      serial ? "pty",
+      memoryMiB ? 2048,
+      vcpuCount ? (if numa then 4 else 2),
+      diskQueues ? 1,
+      netQueues ? 1,
+      # Whether all device will be assigned a static BDF through the XML or only some
+      all_static_bdf ? false,
+      # Whether we add a function ID to specific BDFs or not
+      use_bdf_function ? false,
+      smbios ? {
+        # For mode `host` all other fields except `uuid` will be ignored.
+        # For mode `sysinfo`, the other fields should be set as they are
+        # supported to appear in the guest, otherwise they are nulled.
+        mode = null;
+        chassis.asset = null;
+        system = {
+          family = null;
+          manufacturer = null;
+          product = null;
+          serial = null;
+          sku = null;
+          uuid = null;
+          version = null;
+        };
+        oemStrings = [ ];
+      },
+      cpuModel ? "",
+    }:
+    let
+      defaultSmbios = {
+        chassis.asset = null;
+        mode = null;
+        system = {
+          family = null;
+          manufacturer = null;
+          product = null;
+          serial = null;
+          sku = null;
+          uuid = null;
+          version = null;
+        };
+        oemStrings = [ ];
+      };
+      smbios' = lib.recursiveUpdate defaultSmbios smbios;
+
+      mkSmbiosEntries =
+        attrs:
+        lib.pipe attrs [
+          (lib.filterAttrs (_: v: v != null))
+          (lib.concatMapAttrsStringSep "\n" (n: v: "        <entry name='${n}'>${toString v}</entry>"))
+        ];
+
+      systemEntries = mkSmbiosEntries smbios'.system;
+      chassisEntries = mkSmbiosEntries smbios'.chassis;
+      oemStringsEntries = lib.concatMapStringsSep "\n" (
+        v: "        <entry>${toString v}</entry>"
+      ) smbios'.oemStrings;
+      oemStringsXml = lib.optionalString (oemStringsEntries != "") ''
+              <oemStrings>
+        ${oemStringsEntries}
+              </oemStrings>
+      '';
+      hasSysinfoSmbios =
+        systemEntries != "" || chassisEntries != "" || oemStringsEntries != "" || smbios'.mode != "";
+
+      sysinfoXml = lib.optionalString hasSysinfoSmbios ''
+              <sysinfo type='smbios'>
+                <system>
+          ${systemEntries}
+                </system>
+                <chassis>
+          ${chassisEntries}
+                </chassis>
+        ${oemStringsXml}
+              </sysinfo>
+      '';
+
+      smbiosModeXml = lib.optionalString hasSysinfoSmbios "    <smbios mode='${toString smbios'.mode}'/>\n";
+      sysinfoBlockXml = lib.optionalString hasSysinfoSmbios sysinfoXml;
+    in
+    ''
+      <domain type='kvm' id='21050'>
+        <name>testvm</name>
+        <uuid>4eb6319a-4302-4407-9a56-802fc7e6a422</uuid>
+        <memory unit='KiB'>${toString (memoryMiB * 1024)}</memory>
+        <currentMemory unit='KiB'>${toString (memoryMiB * 1024)}</currentMemory>
+        ${
+          if numa then
+            ''
+              <vcpu placement='static'>4</vcpu>
+              <cputune>
+                <vcpupin vcpu='0' cpuset='0-1'/>
+                <vcpupin vcpu='1' cpuset='0-1'/>
+                <vcpupin vcpu='2' cpuset='2-3'/>
+                <vcpupin vcpu='3' cpuset='2-3'/>
+                <emulatorpin cpuset='0-1'/>
+              </cputune>
+              <cpu>
+                <topology sockets='2' dies='1' cores='1' threads='2'/>
+                <numa>
+                  <!-- Defines the guest NUMA topology -->
+                  <cell id='0' cpus='0-1' memory='1024' unit='MiB'/>
+                  <cell id='1' cpus='2-3,' memory='1024' unit='MiB'/>
+                </numa>
+              </cpu>
+              <numatune>
+                <memory mode='strict' nodeset='0'/>
+                  <!-- Maps memory from guest to host NUMA topology. nodeset refers to host NUMA node, cellid to guest NUMA -->
+                <memnode cellid='0' mode='strict' nodeset='0'/>
+                <memnode cellid='1' mode='strict' nodeset='0'/>
+              </numatune>
+              ${
+                if hugepages then
+                  ''
+                    <memoryBacking>
+                      <hugepages>
+                        <page size="2" unit="M" nodeset="0"/>
+                        <page size="2" unit="M" nodeset="1"/>
+                      </hugepages>
+                      ${
+                        if prefault then
+                          ''
+                            <allocation mode="immediate"/>
+                          ''
+                        else
+                          ""
+                      }
+                    </memoryBacking>
+                  ''
+                else
+                  ""
+              }
+            ''
+          else
+            ''
+              ${lib.optionalString (cpuModel != "") ''
+                <cpu mode='custom' match='exact' check='full'>
+                  <model fallback='forbid'>${cpuModel}</model>
+                </cpu>
+              ''}
+              <vcpu placement='static'>${toString vcpuCount}</vcpu>
+              ${
+                if hugepages then
+                  ''
+                    <memoryBacking>
+                      <hugepages>
+                        <page size="2" unit="M"/>
+                      </hugepages>
+                      ${
+                        if prefault then
+                          ''
+                            <allocation mode="immediate"/>
+                          ''
+                        else
+                          ""
+                      }
+                    </memoryBacking>
+                  ''
+                else
+                  ""
+              }
+            ''
+        }
+        <os>
+          <type arch='x86_64'>hvm</type>
+          ${smbiosModeXml}
+          <kernel>/etc/CLOUDHV.fd</kernel>
+          <boot dev='hd'/>
+        </os>
+        ${sysinfoBlockXml}
+        <clock offset='utc'/>
+        <on_poweroff>destroy</on_poweroff>
+        <on_reboot>restart</on_reboot>
+        <on_crash>destroy</on_crash>
+        <devices>
+          <emulator>cloud-hypervisor</emulator>
+          ${
+            # Add the implicitly created RNG device explicitly
+            if all_static_bdf then
+              ''
+                <rng model='virtio'>
+                  <backend model='random'>/dev/urandom</backend>
+                  <alias name='explicit-rng-device'/>
+                  <address type='pci' domain='0x0000' bus='0x00' slot='0x05' function='0x0'/>
+                </rng>
+              ''
+            else
+              ""
+          }
+          <disk type='file' device='disk'>
+            <source file='${image}'/>
+            <target dev='vda' bus='virtio'/>
+            <driver queues='${toString diskQueues}'/>
+            ${
+              # Assign a fixed BDF that would normally be acquired by the implicit RNG device
+              if all_static_bdf then
+                if use_bdf_function then
+                  ''
+                    <address type='pci' domain='0x0000' bus='0x00' slot='0x01' function='0x1'/>
+                  ''
+                else
+                  ''
+                    <address type='pci' domain='0x0000' bus='0x00' slot='0x01' function='0x0'/>
+                  ''
+              else
+                ""
+            }
+          </disk>
+          ${
+            if !(builtins.isNull cloudInit) then
+              ''
+                <disk type='file' device='disk'>
+                  <source file='${cloudInit}'/>
+                  <target dev='vdb' bus='virtio'/>
+                  <readonly/>
+                </disk>
+              ''
+            else
+              ""
+          }
+          <interface type='ethernet'>
+            <mac address='52:54:00:e5:b8:01'/>
+            <target dev='tap1'/>
+            <model type='virtio'/>
+            <driver queues='${toString netQueues}'/>
+            <address type='pci' domain='0x0000' bus='0x00' slot='0x02' function='0x0'/>
+          </interface>
+          ${
+            if serial == "pty" then
+              ''
+                <serial type='pty'>
+                  <source path='/dev/pts/2'/>
+                  <target port='0'/>
+                </serial>
+              ''
+            else if serial == "file" then
+              ''
+                <serial type='file'>
+                  <source path='/tmp/vm_serial.log'/>
+                  <target port='0'/>
+                </serial>
+              ''
+            else if serial == "tcp" then
+              ''
+                <serial type='tcp'>
+                  <source mode="bind" host="127.0.0.1" service="2222" tls="no"/>
+                  <protocol type="raw"/>
+                  <target port='0'/>
+                  <log file="/var/log/libvirt/ch/testvm.log" append="off"/>
+                </serial>
+              ''
+            else
+              ""
+          }
+        </devices>
+      </domain>
+    '';
+
+  # Please keep in sync with documentation in networks.md!
+  new_interface =
+    {
+      explicit_bdf ? false,
+    }:
+    ''
+      <interface type='ethernet'>
+        <mac address='52:54:00:e5:b8:02'/>
+        <target dev='tap2'/>
+        <model type='virtio'/>
+        <driver queues='1'/>
+        ${
+          if explicit_bdf then
+            ''
+              <address type='pci' domain='0x0000' bus='0x00' slot='0x04' function='0x0'/>
+            ''
+          else
+            ""
+        }
+      </interface>
+    '';
+
+  # Please keep in sync with documentation in networks.md!
+  new_interface_type_network = ''
+    <interface type='network'>
+      <mac address='52:54:00:e5:b8:03'/>
+      <source network='libvirt-testnetwork'/>
+      <target dev='tap3'/>
+      <model type='virtio'/>
+      <driver queues='1'/>
+    </interface>
+  '';
+
+  # Please keep in sync with documentation in networks.md!
+  new_interface_type_bridge = ''
+    <interface type='bridge'>
+      <mac address='52:54:00:e5:b8:04'/>
+      <source bridge='br4'/>
+      <target dev='tap4'/>
+      <model type='virtio'/>
+      <driver queues='1'/>
+    </interface>
+  '';
+
+  # Please keep in sync with documentation in networks.md!
+  libvirt_test_network = ''
+    <network>
+      <name>libvirt-testnetwork</name>
+      <forward mode='nat'/>
+      <bridge name='br3' stp='on' delay='0'/>
+      <ip address='192.168.3.1' netmask='255.255.255.0'>
+        <!--
+        Not strictly required for our setup, but libvirt still expects a DHCP
+        range to configure its dnsmasq instance. Without an explicit range,
+        libvirt chooses one dynamically.
+         -->
+        <dhcp>
+          <!-- Static interface in VM has 192.168.3.2. -->
+          <range start='192.168.3.42' end='192.168.3.42'/>
+        </dhcp>
+      </ip>
+    </network>
+  '';
+in
+{
+  # Silence the monolithic libvirtd, which otherwise starts before the virtchd
+  # and is then shutdown as soon as virtchd starts. Disabling prevents a lot of
+  # distracting log messages of libvirtd in the startup phase.
+  systemd.services.libvirtd.enable = false;
+  systemd.services.virtchd = {
+    environment.ASAN_OPTIONS = "detect_leaks=1:fast_unwind_on_malloc=0:halt_on_error=1:symbolize=1";
+    environment.LSAN_OPTIONS = "report_objects=1";
+    environment.UBSAN_OPTIONS = "halt_on_error=1:print_stacktrace=1";
+  };
+
+  systemd.services.virtchd = {
+    serviceConfig = {
+      Restart = "always";
+      RestartSec = 1;
+    };
+    startLimitIntervalSec = 0;
+    startLimitBurst = 0;
+  };
+
+  nixpkgs.overlays = [
+    (_final: prev: {
+      # libvirt with cloud hypervisor patches, debugoptimized build, sanitizer
+      # support, and reduced to what we need for quicker compile times.
+      # Ensure that every access to `pkgs.libvirt` falls back to our special
+      # variant.
+      # `prev.libvirt` refers to the `libvirt` set in the flake.nix, not the
+      # standard `libvirt` from nixpkgs.
+      libvirt = prev.libvirt.overrideAttrs (old: {
+        # name for the build logs
+        name = "libvirt-chv-tests";
+        # Reduce files needed to compile. We cut the build-time in half.
+        mesonFlags = old.mesonFlags ++ [
+          # Disabling tests: 1500 -> 1200
+          "-Dtests=disabled"
+          "-Dexpensive_tests=disabled"
+          # Disabling docs: 1200 -> 800
+          "-Ddocs=disabled"
+          # Disabling unneeded backends: 800 -> 685
+          "-Ddriver_ch=enabled"
+          "-Ddriver_qemu=disabled"
+          "-Ddriver_bhyve=disabled"
+          "-Ddriver_esx=disabled"
+          "-Ddriver_hyperv=disabled"
+          "-Ddriver_libxl=disabled"
+          "-Ddriver_lxc=disabled"
+          "-Ddriver_openvz=disabled"
+          "-Ddriver_secrets=disabled"
+          "-Ddriver_vbox=disabled"
+          "-Ddriver_vmware=disabled"
+          "-Ddriver_vz=disabled"
+          "-Dstorage_dir=disabled"
+          "-Dstorage_disk=disabled"
+          "-Dstorage_fs=enabled" # for netfs
+          "-Dstorage_gluster=disabled"
+          "-Dstorage_iscsi=disabled"
+          "-Dstorage_iscsi_direct=disabled"
+          "-Dstorage_lvm=disabled"
+          "-Dstorage_mpath=disabled"
+          "-Dstorage_rbd=disabled"
+          "-Dstorage_scsi=disabled"
+          "-Dstorage_vstorage=disabled"
+          "-Dstorage_zfs=disabled"
+          "-Dapparmor=disabled"
+          "-Dwireshark_dissector=disabled"
+          "-Dselinux=disabled"
+          "-Dsecdriver_apparmor=disabled"
+          "-Dsecdriver_selinux=disabled"
+          "-Db_sanitize=leak,address,undefined"
+          # Enabling the sanitizers has led to warnings about inlining macro
+          # generated cleanup methods of the glib which spam the build log.
+          # Ignoring and suppressing the warnings seems like the only option.
+          # "warning: inlining failed in call to 'glib_autoptr_cleanup_virNetlinkMsg': call is unlikely and code size would grow [-Winline]"
+          "-Dc_args=-Wno-inline"
+        ];
+      });
+    })
+  ];
+
+  # We use the freshest kernel available to reduce nested virtualization bugs.
+  boot.kernelPackages = pkgs.linuxPackages_6_18;
+  virtualisation.libvirtd = {
+    enable = true;
+    sshProxy = false;
+    package = pkgs.libvirt;
+  };
+
+  systemd.services.virtstoraged.path = [ pkgs.mount ];
+
+  systemd.services.virtchd.wantedBy = [ "multi-user.target" ];
+  systemd.services.virtchd.path = with pkgs; [
+    dmidecode
+    openssh
+  ];
+  systemd.services.virtnetworkd.path = with pkgs; [
+    dnsmasq
+    iproute2
+    nftables
+  ];
+  systemd.sockets.virtproxyd-tcp.wantedBy = [ "sockets.target" ];
+  systemd.sockets.virtstoraged.wantedBy = [ "sockets.target" ];
+  systemd.sockets.virtnetworkd.wantedBy = [ "sockets.target" ];
+
+  systemd.network = {
+    enable = true;
+    wait-online.enable = false;
+
+    # Created devices.
+    netdevs = {
+      "10-br4" = {
+        netdevConfig = {
+          Kind = "bridge";
+          Name = "br4";
+        };
+      };
+    };
+
+    networks = {
+      "10-tap1" = {
+        enable = true;
+        matchConfig.Name = "tap1";
+        networkConfig = {
+          Description = "Main network";
+          DHCPServer = "no";
+        };
+
+        # Please keep in sync with documentation in networks.md!
+        address = [
+          "192.168.1.1/24" # Main network
+        ];
+      };
+      "10-tap2" = {
+        enable = true;
+        matchConfig.Name = "tap2";
+        networkConfig = {
+          Description = "Hotplug device";
+          DHCPServer = "no";
+        };
+
+        # Please keep in sync with documentation in networks.md!
+        address = [
+          "192.168.2.1/24" # hotplugged interface
+        ];
+      };
+      # Bridge interface configuration
+      "10-br4" = {
+        enable = true;
+        matchConfig.Name = "br4";
+        networkConfig = {
+          Description = "Hot Plug Bridge";
+          DHCPServer = "no";
+        };
+
+        # Please keep in sync with documentation in networks.md!
+        address = [
+          "192.168.4.1/24" # hotplugged interface
+        ];
+      };
+    };
+  };
+
+  # Please keep in sync with documentation in networks.md!
+  networking = {
+    useDHCP = false;
+    networkmanager.enable = false;
+    useNetworkd = true;
+    firewall.enable = false;
+  };
+
+  services.getty.autologinUser = "root";
+  services.openssh = {
+    enable = true;
+    settings = {
+      PermitRootLogin = "yes";
+      PermitEmptyPasswords = "yes";
+    };
+  };
+  systemd.services.polkit.serviceConfig.LogFilterPatterns = [
+    "~Registered Authentication Agent"
+    "~Unregistered Authentication Agent"
+  ];
+
+  # The following works around the infamous
+  # `Bad owner or permissions on /nix/store/ymmaa926pv3f3wlgpw9y1aygdvqi1m7j-systemd-257.6/lib/systemd/ssh_config.d/20-systemd-ssh-proxy.conf`
+  # error. The current assumption is, that this is a nixos/nixpkgs bug handling
+  # file permissions incorrectly. But the error is only appearing on certain
+  # systems (AMD only?).
+  environment.etc."ssh/ssh_config".enable = false;
+
+  environment.variables = {
+    LIBVIRT_DEFAULT_URI = "ch:///session";
+  };
+
+  security.pam.services.sshd.allowNullPassword = true;
+
+  environment.systemPackages = with pkgs; [
+    bridge-utils
+    btop
+    cloud-hypervisor
+    dmidecode
+    expect
+    fcntl-tool
+    gdb
+    htop
+    jq
+    lsof
+    mount
+    numactl
+    numatop
+    python3
+    qemu_kvm
+    screen
+    screen
+    socat
+    sshpass
+    tcpdump
+    tshark
+    tunctl
+  ];
+
+  systemd.tmpfiles.settings =
+    let
+      chv-firmware = pkgs.fetchurl {
+        url = "https://github.com/cloud-hypervisor/rust-hypervisor-firmware/releases/download/0.5.0/hypervisor-fw";
+        hash = "sha256-Sgoel3No9rFdIZiiFr3t+aNQv15a4H4p5pU3PsFq2Vg=";
+      };
+    in
+    {
+      "10-chv" = {
+        "/etc/hypervisor-fw" = {
+          "L+" = {
+            argument = "${chv-firmware}";
+          };
+        };
+        "/etc/CLOUDHV.fd" = {
+          "C+" = {
+            argument = "${chv-ovmf.fd}/FV/CLOUDHV.fd";
+          };
+        };
+        "/etc/nixos.img" = {
+          "L+" = {
+            argument = "${nixos-image}";
+          };
+        };
+        "/etc/cirros.img" = {
+          "L+" = {
+            argument = "${cirros_raw}";
+          };
+        };
+        "/etc/ubuntu.raw" = {
+          "L+" = {
+            argument = "${ubuntu_raw}";
+          };
+        };
+        "/etc/ubuntu-seed.iso" = {
+          "L+" = {
+            argument = "${ubuntu_cloud_init}";
+          };
+        };
+        "/etc/domain-chv.xml" = {
+          "C+" = {
+            argument = "${pkgs.writeText "domain.xml" (virsh_ch_xml { })}";
+          };
+        };
+        "/etc/domain-chv-serial-tcp.xml" = {
+          "C+" = {
+            argument = "${pkgs.writeText "domain.xml" (virsh_ch_xml {
+              serial = "tcp";
+            })}";
+          };
+        };
+        "/etc/domain-chv-serial-file.xml" = {
+          "C+" = {
+            argument = "${pkgs.writeText "domain.xml" (virsh_ch_xml {
+              serial = "file";
+            })}";
+          };
+        };
+        "/etc/domain-chv-virtio-multiqueue.xml" = {
+          "C+" = {
+            argument = "${pkgs.writeText "domain-virtio-multiqueue.xml" (virsh_ch_xml {
+              diskQueues = 4;
+              netQueues = 4;
+              serial = "file";
+              vcpuCount = 4;
+            })}";
+          };
+        };
+        "/etc/domain-chv-cirros.xml" = {
+          "C+" = {
+            argument = "${pkgs.writeText "domain-cirros.xml" (virsh_ch_xml {
+              image = "/var/lib/libvirt/storage-pools/nfs-share/cirros.img";
+            })}";
+          };
+        };
+        "/etc/domain-chv-cirros-sapphire-rapids.xml" = {
+          "C+" = {
+            argument = "${pkgs.writeText "domain-cirros-sapphire-rapids.xml" (virsh_ch_xml {
+              image = "/var/lib/libvirt/storage-pools/nfs-share/cirros.img";
+              cpuModel = "sapphire-rapids";
+            })}";
+          };
+        };
+        "/etc/domain-chv-ubuntu-sapphire-rapids.xml" = {
+          "C+" = {
+            argument = "${pkgs.writeText "domain-ubuntu-sapphire-rapids.xml" (virsh_ch_xml {
+              image = "/var/lib/libvirt/storage-pools/nfs-share/ubuntu.raw";
+              cloudInit = "/var/lib/libvirt/storage-pools/nfs-share/ubuntu-seed.iso";
+              cpuModel = "sapphire-rapids";
+            })}";
+          };
+        };
+        "/etc/domain-chv-hugepages.xml" = {
+          "C+" = {
+            argument = "${pkgs.writeText "cirros.xml" (virsh_ch_xml {
+              hugepages = true;
+            })}";
+          };
+        };
+        "/etc/domain-chv-hugepages-prefault.xml" = {
+          "C+" = {
+            argument = "${pkgs.writeText "cirros.xml" (virsh_ch_xml {
+              hugepages = true;
+              prefault = true;
+            })}";
+          };
+        };
+        "/etc/domain-chv-numa.xml" = {
+          "C+" = {
+            argument = "${pkgs.writeText "domain-numa.xml" (virsh_ch_xml {
+              numa = true;
+            })}";
+          };
+        };
+        "/etc/domain-chv-numa-hugepages.xml" = {
+          "C+" = {
+            argument = "${pkgs.writeText "cirros-numa.xml" (virsh_ch_xml {
+              numa = true;
+              hugepages = true;
+            })}";
+          };
+        };
+        "/etc/domain-chv-numa-hugepages-prefault.xml" = {
+          "C+" = {
+            argument = "${pkgs.writeText "cirros-numa.xml" (virsh_ch_xml {
+              numa = true;
+              hugepages = true;
+              prefault = true;
+            })}";
+          };
+        };
+        "/etc/domain-chv-static-bdf.xml" = {
+          "C+" = {
+            argument = "${pkgs.writeText "domain-chv-static-bdf.xml" (virsh_ch_xml {
+              all_static_bdf = true;
+            })}";
+          };
+        };
+        "/etc/domain-chv-static-bdf-with-function.xml" = {
+          "C+" = {
+            argument = "${pkgs.writeText "domain-chv-static-bdf-with-function.xml" (virsh_ch_xml {
+              all_static_bdf = true;
+              use_bdf_function = true;
+            })}";
+          };
+        };
+        "/etc/domain-chv-smbios.xml" = {
+          "C+" = {
+            argument = "${pkgs.writeText "domain-chv-smbios.xml" (virsh_ch_xml {
+              smbios = {
+                chassis.asset = "My AssetTag";
+                mode = "sysinfo";
+                system = {
+                  family = "My Family";
+                  manufacturer = "My Manufacturer";
+                  product = "My ProductName";
+                  serial = "123-123-123";
+                  sku = "SKU-SKU-SKU";
+                  uuid = "4eb6319a-4302-4407-9a56-802fc7e6a422";
+                  version = "123456";
+                };
+              };
+            })}";
+          };
+        };
+        "/etc/domain-chv-smbios-host.xml" = {
+          "C+" = {
+            argument = "${pkgs.writeText "domain-chv-smbios-host.xml" (virsh_ch_xml {
+              smbios.mode = "host";
+            })}";
+          };
+        };
+        "/etc/domain-chv-smbios-oem.xml" = {
+          "C+" = {
+            argument = "${pkgs.writeText "domain-chv-smbios-oem.xml" (virsh_ch_xml {
+              smbios = {
+                mode = "sysinfo";
+                oemStrings = [
+                  "oem-7f3d9b23"
+                  "oem-2c8a1e6f"
+                  "oem-91d4c0aa"
+                ];
+              };
+            })}";
+          };
+        };
+        "/etc/domain-chv-cpu-skylake.xml" = {
+          "C+" = {
+            argument = "${pkgs.writeText "cirros-skylake.xml" (virsh_ch_xml {
+              cpuModel = "skylake";
+            })}";
+          };
+        };
+        "/etc/domain-chv-cpu-sapphire-rapids.xml" = {
+          "C+" = {
+            argument = "${pkgs.writeText "cirros-sapphire-rapids.xml" (virsh_ch_xml {
+              cpuModel = "sapphire-rapids";
+            })}";
+          };
+        };
+        "/etc/new_interface.xml" = {
+          "C+" = {
+            argument = "${pkgs.writeText "new_interface.xml" (new_interface { })}";
+          };
+        };
+        "/etc/new_interface_explicit_bdf.xml" = {
+          "C+" = {
+            argument = "${pkgs.writeText "new_interface_explicit_bdf.xml" (new_interface {
+              explicit_bdf = true;
+            })}";
+          };
+        };
+        "/etc/new_interface_type_network.xml" = {
+          "C+" = {
+            argument = "${pkgs.writeText "new_interface_type_network.xml" new_interface_type_network}";
+          };
+        };
+        "/etc/new_interface_type_bridge.xml" = {
+          "C+" = {
+            argument = "${pkgs.writeText "new_interface_type_bridge.xml" new_interface_type_bridge}";
+          };
+        };
+        "/etc/libvirt_test_network.xml" = {
+          "C+" = {
+            argument = "${pkgs.writeText "libvirt_test_network.xml" libvirt_test_network}";
+          };
+        };
+        "/var/lib/libvirt/network.conf" = {
+          "C+" = {
+            argument = "${pkgs.writeText "network.conf" ''
+              firewall_backend = "nftables"
+            ''}";
+          };
+        };
+        "/var/log/libvirt/" = {
+          D = {
+            mode = "0755";
+            user = "root";
+          };
+        };
+        "/var/log/libvirt/ch" = {
+          D = {
+            mode = "0755";
+            user = "root";
+          };
+        };
+      };
+    };
+}
