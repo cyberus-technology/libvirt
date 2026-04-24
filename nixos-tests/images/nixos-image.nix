@@ -1,0 +1,189 @@
+# Builds a small NixOS-based bootable image (iso).
+
+{
+  nixpkgs,
+  chv-ovmf,
+}:
+
+nixpkgs.lib.nixosSystem {
+  system = "x86_64-linux";
+  modules = [
+    (
+      {
+        config,
+        pkgs,
+        modulesPath,
+        lib,
+        ...
+      }:
+      let
+        cirros_qcow = pkgs.fetchurl {
+          url = "https://download.cirros-cloud.net/0.6.2/cirros-0.6.2-x86_64-disk.img";
+          hash = "sha256-B+RKc+VMlNmIAoUVQDwe12IFXgG4OnZ+3zwrOH94zgA=";
+        };
+      in
+      {
+        imports = [
+          # The minimal ch installer module has given us the smallest size for
+          # a bootable image so far. We would prefer a real disk image instead
+          # of an iso, but works nonetheless.
+          "${modulesPath}/installer/cd-dvd/installation-cd-minimal-new-kernel-no-zfs.nix"
+        ];
+
+        boot.initrd.availableKernelModules = [
+          "virtio_blk"
+          "virtio_pci"
+        ];
+        boot.initrd.kernelModules = [
+          "virtio_net"
+        ];
+        boot.initrd.systemd.enable = false;
+        boot.kernelModules = [
+          "msr"
+        ];
+        boot.kernelParams = [
+          "console=ttyS0"
+          "earlyprintk=ttyS0"
+        ];
+        boot.loader.timeout = lib.mkForce 0;
+
+        # Set the log level to `KERN_DEBUG`. This increases the log output and
+        # thus helps debugging.
+        boot.consoleLogLevel = lib.mkForce 7;
+
+        documentation = {
+          enable = false;
+          doc.enable = false;
+          info.enable = false;
+          man.enable = false;
+          nixos.enable = false;
+        };
+
+        environment.defaultPackages = [ ];
+        environment.etc = {
+          "ssh/ssh_host_ed25519_key" = {
+            mode = "0600";
+            source = pkgs.writers.writeText "ssh_host_ed25519_key" ''
+              -----BEGIN OPENSSH PRIVATE KEY-----
+              b3BlbnNzaC1rZXktdjEAAAAABG5vbmUAAAAEbm9uZQAAAAAAAAABAAAAMwAAAAtzc2gtZW
+              QyNTUxOQAAACCl2D0beTfBGUE+IyEvjfs8bOqoTpwm1PzYWwvUCbFP+AAAAKChrvISoa7y
+              EgAAAAtzc2gtZWQyNTUxOQAAACCl2D0beTfBGUE+IyEvjfs8bOqoTpwm1PzYWwvUCbFP+A
+              AAAEAcuVo5dChbKfChFIx0bb6WCxZ7l0vSC2F9kgQl0NoCJqXYPRt5N8EZQT4jIS+N+zxs
+              6qhOnCbU/NhbC9QJsU/4AAAAG3BzY2h1c3RlckBwaGlwcy1mcmFtZXdvcmsxMwEC
+              -----END OPENSSH PRIVATE KEY-----
+            '';
+          };
+          "ssh/ssh_host_ed25519_key.pub" = {
+            mode = "0644";
+            source = pkgs.writers.writeText "ssh_host_ed25519_key.pub" "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIKXYPRt5N8EZQT4jIS+N+zxs6qhOnCbU/NhbC9QJsU/4 test@testvm";
+          };
+        };
+        environment.stub-ld.enable = false;
+        environment.systemPackages = with pkgs; [
+          cloud-hypervisor
+          dmidecode
+          dnsmasq
+          iproute2
+          msr
+          screen
+          sshpass
+          stress
+          tunctl
+        ];
+
+        isoImage.makeUsbBootable = true;
+        isoImage.makeEfiBootable = true;
+        isoImage.makeBiosBootable = false;
+
+        hardware.enableAllHardware = lib.mkForce false;
+        hardware.enableRedistributableFirmware = false;
+
+        # Please keep in sync with documentation in networks.md!
+        networking.firewall.enable = false;
+        networking.hostName = "nixos";
+        networking.useDHCP = false;
+        networking.networkmanager.enable = lib.mkForce false;
+        networking.useNetworkd = true;
+
+        systemd.network = {
+          enable = true;
+          networks = {
+            eth1337 = {
+              matchConfig.MACAddress = "52:54:00:e5:b8:01";
+              address = [ "192.168.1.2/24" ];
+              linkConfig.RequiredForOnline = "no";
+            };
+            eth1338 = {
+              matchConfig.MACAddress = "52:54:00:e5:b8:02";
+              address = [ "192.168.2.2/24" ];
+              linkConfig.RequiredForOnline = "no";
+            };
+            eth1339 = {
+              matchConfig.MACAddress = "52:54:00:e5:b8:03";
+              address = [ "192.168.3.2/24" ];
+              linkConfig.RequiredForOnline = "no";
+            };
+            eth1340 = {
+              matchConfig.MACAddress = "52:54:00:e5:b8:04";
+              address = [ "192.168.4.2/24" ];
+              linkConfig.RequiredForOnline = "no";
+            };
+          };
+        };
+
+        nix.enable = false;
+
+        programs = {
+          command-not-found.enable = false;
+          fish.generateCompletions = false;
+        };
+
+        services.openssh = {
+          enable = true;
+          settings = {
+            PermitRootLogin = "yes";
+            PasswordAuthentication = true;
+          };
+          openFirewall = true;
+          hostKeys = [
+            {
+              path = "/etc/ssh/ssh_host_ed25519_key";
+              type = "ed25519";
+            }
+          ];
+        };
+
+        services.logrotate.enable = false;
+        services.resolved.enable = false;
+        services.timesyncd.enable = false;
+        services.udisks2.enable = false;
+
+        system.stateVersion = "25.05";
+        system.switch.enable = false;
+
+        systemd.services.mount-pstore.enable = false;
+        systemd.services.resolvconf.enable = false;
+        # We use a dummy key for the test VM to shortcut the boot time.
+        systemd.services.sshd-keygen.enable = false;
+        systemd.tmpfiles.settings = {
+          "10-chv" = {
+            "/etc/CLOUDHV.fd" = {
+              "C+" = {
+                argument = "${chv-ovmf.fd}/FV/CLOUDHV.fd";
+              };
+            };
+            "/etc/cirros.img" = {
+              "L+" = {
+                argument = "${cirros_qcow}";
+              };
+            };
+          };
+        };
+
+        # pw: root
+        users.mutableUsers = false;
+        users.users.root.initialHashedPassword = lib.mkForce "$y$j9T$HiT/m702z/73g4Dt5RzbW0$b3SaYI1FoyT/ORV/qFR/s9zonJBKDn4p2XKyYM2wp1.";
+      }
+    )
+  ];
+}

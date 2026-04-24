@@ -1,0 +1,13 @@
+# Configuration for https://github.com/crate-ci/typos
+
+[files]
+extend-exclude = [
+  "images/nixos-image.nix",
+  "patches/",
+]
+
+[default.extend-words]
+hitted = "hitted"
+
+[default.extend-identifiers]
+

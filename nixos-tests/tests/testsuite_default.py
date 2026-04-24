@@ -1,0 +1,1429 @@
+import textwrap
+import time
+import unittest
+
+# Following import statement allows for proper python IDE support and proper
+# nix build support. The duplicate listing of imported functions is a bit
+# unfortunate, but it seems to be the best compromise. This way the python IDE
+# support works out of the box in VSCode and IntelliJ without requiring
+# additional IDE configuration.
+try:
+    from ..test_helper.test_helper import (  # type: ignore
+        LibvirtTestsBase,
+        assert_domain_domstate,
+        assert_nested_cirros_connectivity,
+        hotplug,
+        hotplug_fail,
+        initialComputeVMSetup,
+        initialControllerVMSetup,
+        number_of_devices,
+        number_of_network_devices,
+        parse_devices_from_dom_def,
+        pci_devices_by_bdf,
+        setup_nested_cirros,
+        ssh,
+        vcpu_affinity_checks,
+        vm_unresponsive,
+        wait_for_guest_pci_device_enumeration,
+        wait_for_ssh,
+        wait_until_succeed,
+    )
+except Exception:
+    from test_helper import (
+        LibvirtTestsBase,
+        assert_domain_domstate,
+        assert_nested_cirros_connectivity,
+        hotplug,
+        hotplug_fail,
+        initialComputeVMSetup,
+        initialControllerVMSetup,
+        number_of_devices,
+        number_of_network_devices,
+        parse_devices_from_dom_def,
+        pci_devices_by_bdf,
+        setup_nested_cirros,
+        ssh,
+        vcpu_affinity_checks,
+        vm_unresponsive,
+        wait_for_guest_pci_device_enumeration,
+        wait_for_ssh,
+        wait_until_succeed,
+    )
+
+# pyright: reportPossiblyUnboundVariable=false
+
+# Following is required to allow proper linting of the python code in IDEs.
+# Because certain functions like start_all() and certain objects like computeVM
+# or other machines are added by Nix, we need to provide certain stub objects
+# in order to allow the IDE to lint the python code successfully.
+if "start_all" not in globals():
+    from ..test_helper.test_helper.nixos_test_stubs import (  # type: ignore
+        computeVM,
+        controllerVM,
+        start_all,
+    )
+
+# Paths where we can find the libvirt domain configuration XML files
+DOMAIN_DEF_PERSISTENT_PATH = "/var/lib/libvirt/ch/testvm.xml"
+DOMAIN_DEF_TRANSIENT_PATH = "/var/run/libvirt/ch/testvm.xml"
+
+
+class LibvirtTests(LibvirtTestsBase):  # type: ignore
+    def __init__(self, methodName):
+        super().__init__(methodName, controllerVM, computeVM)
+
+    @classmethod
+    def setUpClass(cls):
+        start_all()
+        initialControllerVMSetup(controllerVM)
+        initialComputeVMSetup(computeVM)
+
+    def test_network_hotplug_transient_vm_restart(self):
+        """
+        Test whether we can attach a network device without the --persistent
+        parameter, which means the device should disappear if the vm is destroyed
+        and later restarted.
+        """
+        # Using define + start creates a "persistent" domain rather than a transient
+        controllerVM.succeed("virsh define /etc/domain-chv.xml")
+        controllerVM.succeed("virsh start testvm")
+
+        wait_for_ssh(controllerVM)
+
+        num_net_devices_old = number_of_network_devices(controllerVM)
+
+        # Add a transient network device, i.e. the device should disappear
+        # when the VM is destroyed and restarted.
+        hotplug(controllerVM, "virsh attach-device testvm /etc/new_interface.xml")
+
+        controllerVM.succeed("virsh destroy testvm")
+
+        controllerVM.succeed("virsh start testvm")
+        wait_for_ssh(controllerVM)
+        self.assertEqual(
+            number_of_network_devices(controllerVM),
+            num_net_devices_old,
+            "number of network devices should match",
+        )
+
+    def test_network_hotplug_persistent_vm_restart(self):
+        """
+        Test whether we can attach a network device with the --persistent
+        parameter, which means the device should reappear if the vm is destroyed
+        and later restarted.
+        """
+        # Using define + start creates a "persistent" domain rather than a transient
+        controllerVM.succeed("virsh define /etc/domain-chv.xml")
+        controllerVM.succeed("virsh start testvm")
+
+        wait_for_ssh(controllerVM)
+
+        num_net_devices_old = number_of_network_devices(controllerVM)
+
+        # Add a persistent network device, i.e. the device should re-appear
+        # when the VM is destroyed and restarted.
+        hotplug(
+            controllerVM,
+            "virsh attach-device testvm /etc/new_interface.xml --persistent",
+        )
+
+        controllerVM.succeed("virsh destroy testvm")
+
+        controllerVM.succeed("virsh start testvm")
+        wait_for_ssh(controllerVM)
+        self.assertEqual(
+            number_of_network_devices(controllerVM),
+            num_net_devices_old + 1,
+            "number of network devices should match",
+        )
+
+    def test_network_hotplug_persistent_transient_detach_vm_restart(self):
+        """
+        Test whether we can attach a network device with the --persistent
+        parameter, and detach it without the parameter. When we then destroy and
+        restart the VM, the device should re-appear.
+        """
+        # Using define + start creates a "persistent" domain rather than a transient
+        controllerVM.succeed("virsh define /etc/domain-chv.xml")
+        controllerVM.succeed("virsh start testvm")
+
+        wait_for_ssh(controllerVM)
+
+        num_net_devices_old = number_of_network_devices(controllerVM)
+
+        # Add a persistent network device, i.e. the device should re-appear
+        # when the VM is destroyed and restarted.
+        hotplug(
+            controllerVM,
+            "virsh attach-device testvm /etc/new_interface.xml --persistent",
+        )
+
+        num_net_devices_new = number_of_network_devices(controllerVM)
+        self.assertEqual(
+            num_net_devices_new,
+            num_net_devices_old + 1,
+            "number of network devices should match",
+        )
+
+        # Transiently detach the device. It should re-appear when the VM is restarted.
+        hotplug(controllerVM, "virsh detach-device testvm /etc/new_interface.xml")
+        self.assertEqual(
+            number_of_network_devices(controllerVM),
+            num_net_devices_old,
+            "number of network devices should match",
+        )
+
+        controllerVM.succeed("virsh destroy testvm")
+        controllerVM.succeed("virsh start testvm")
+        wait_for_ssh(controllerVM)
+        self.assertEqual(
+            number_of_network_devices(controllerVM),
+            num_net_devices_new,
+            "number of network devices should match",
+        )
+
+    def test_network_hotplug_attach_detach_transient(self):
+        """
+        Test whether we can attach a network device without the --persistent
+        parameter, and detach it. After detach, the device should disappear from
+        the VM.
+        """
+        # Using define + start creates a "persistent" domain rather than a transient
+        controllerVM.succeed("virsh define /etc/domain-chv.xml")
+        controllerVM.succeed("virsh start testvm")
+
+        wait_for_ssh(controllerVM)
+
+        num_devices_old = number_of_network_devices(controllerVM)
+
+        hotplug(controllerVM, "virsh attach-device testvm /etc/new_interface.xml")
+        hotplug(controllerVM, "virsh detach-device testvm /etc/new_interface.xml")
+        self.assertEqual(
+            number_of_network_devices(controllerVM),
+            num_devices_old,
+            "number of network devices should match",
+        )
+
+    def test_network_hotplug_attach_detach_persistent(self):
+        """
+        Test whether we can attach a network device with the --persistent
+        parameter, and then detach it. After detach, the device should disappear from
+        the VM.
+        """
+        # Using define + start creates a "persistent" domain rather than a transient
+        controllerVM.succeed("virsh define /etc/domain-chv.xml")
+        controllerVM.succeed("virsh start testvm")
+
+        wait_for_ssh(controllerVM)
+
+        num_devices_old = number_of_network_devices(controllerVM)
+
+        hotplug(
+            controllerVM,
+            "virsh attach-device --persistent testvm /etc/new_interface.xml",
+        )
+        hotplug(
+            controllerVM,
+            "virsh detach-device --persistent testvm /etc/new_interface.xml",
+        )
+        self.assertEqual(
+            number_of_network_devices(controllerVM),
+            num_devices_old,
+            "number of network devices should match",
+        )
+
+    def test_hotplug(self):
+        """
+        Tests device hot plugging with multiple devices of different types:
+        - attaching a disk (persistent)
+        - attaching a network with type 'ethernet' (persistent)
+        - attaching a network with type 'network' (transient)
+        - attaching a network with type 'bridge' (transient)
+
+        Also connects into the VM via each attached network interface.
+        :return:
+        """
+
+        # Using define + start creates a "persistent" domain rather than a transient
+        controllerVM.succeed("virsh define /etc/domain-chv.xml")
+        controllerVM.succeed("virsh start testvm")
+
+        wait_for_ssh(controllerVM)
+
+        controllerVM.succeed("qemu-img create -f raw /tmp/disk.img 100M")
+
+        hotplug(
+            controllerVM,
+            "virsh attach-disk --domain testvm --target vdb --persistent --source /tmp/disk.img",
+        )
+        hotplug(
+            controllerVM,
+            "virsh attach-device --persistent testvm /etc/new_interface.xml",
+        )
+        hotplug(
+            controllerVM,
+            "virsh attach-device testvm /etc/new_interface_type_network.xml",
+        )
+        hotplug(
+            controllerVM,
+            "virsh attach-device testvm /etc/new_interface_type_bridge.xml",
+        )
+
+        # Test attached network interface (type ethernet)
+        wait_for_ssh(controllerVM, ip="192.168.2.2")
+        # Test attached network interface (type network - managed by libvirt)
+        wait_for_ssh(controllerVM, ip="192.168.3.2")
+        # Test attached network interface (type bridge)
+        wait_for_ssh(controllerVM, ip="192.168.4.2")
+
+        hotplug(controllerVM, "virsh detach-disk --domain testvm --target vdb")
+        hotplug(controllerVM, "virsh detach-device testvm /etc/new_interface.xml")
+        hotplug(
+            controllerVM,
+            "virsh detach-device testvm /etc/new_interface_type_network.xml",
+        )
+        hotplug(
+            controllerVM,
+            "virsh detach-device testvm /etc/new_interface_type_bridge.xml",
+        )
+
+    def test_libvirt_restart(self):
+        """
+        We test the restart of the libvirt daemon. A restart requires that
+        we correctly re-attach to persistent domain, which can currently be
+        running or shutdown.
+        Previously, shutdown domains were detected as running which led to
+        problems when trying to interact with them. Thus, we check the restart
+        with both running and shutdown domains.
+        """
+        # Using define + start creates a "persistent" domain rather than a transient
+        controllerVM.succeed("virsh define /etc/domain-chv.xml")
+        controllerVM.succeed("virsh start testvm")
+
+        wait_for_ssh(controllerVM)
+
+        controllerVM.succeed("virsh shutdown testvm")
+        controllerVM.succeed("systemctl restart virtchd")
+
+        controllerVM.succeed("virsh list --all | grep 'shut off'")
+
+        controllerVM.succeed("virsh start testvm")
+        controllerVM.succeed("systemctl restart virtchd")
+        controllerVM.succeed("virsh list | grep 'running'")
+
+    def test_numa_topology(self):
+        """
+        We test that a NUMA topology and NUMA tunings are correctly passed to
+        Cloud Hypervisor and the VM.
+        """
+        controllerVM.succeed("virsh define /etc/domain-chv-numa.xml")
+        controllerVM.succeed("virsh start testvm")
+
+        wait_for_ssh(controllerVM)
+
+        # Check that there are 2 NUMA nodes
+        ssh(controllerVM, "ls /sys/devices/system/node/node0")
+
+        ssh(controllerVM, "ls /sys/devices/system/node/node1")
+
+        # Check that there are 2 CPU sockets and 2 threads per core
+        out = ssh(controllerVM, "lscpu | grep Socket | awk '{print $2}'")
+        self.assertEqual(int(out), 2, "could not find two sockets")
+
+        out = ssh(controllerVM, "lscpu | grep Thread\\( | awk '{print $4}'")
+        self.assertEqual(int(out), 2, "could not find two threads per core")
+
+    def test_cirros_image(self):
+        """
+        The cirros image is often used as the most basic initial image to test
+        via openstack or libvirt. We want to make sure it boots flawlessly.
+        """
+        controllerVM.succeed("virsh define /etc/domain-chv-cirros.xml")
+        controllerVM.succeed("virsh start testvm")
+
+        # Attach a network where libvirt performs DHCP as the cirros image has
+        # no static IP in it.
+        # We can't use our hotplug() helper here, as it's network check would
+        # fail at this point.
+        controllerVM.succeed(
+            "virsh attach-device testvm /etc/new_interface_type_network.xml"
+        )
+        # The VM boot takes very long (due to DHCP on the default interface
+        # which doesn't uses DHCP.
+        wait_for_ssh(
+            controllerVM,
+            user="cirros",
+            password="gocubsgo",
+            ip="192.168.3.42",
+            # The VM boot is very slow as it tries to perform DHCP on all
+            # interfaces.
+            retries=350,
+        )
+
+    def test_save_restore_during_boot(self):
+        """
+        Test save and restore while the VM is in early boot.
+        """
+        save_file = "/tmp/testvm.save"
+
+        controllerVM.succeed("virsh define /etc/domain-chv-serial-file.xml")
+        controllerVM.succeed("virsh start testvm")
+
+        time.sleep(1)
+
+        # Trigger save while the guest is still in early boot.
+        controllerVM.succeed(f"virsh save testvm {save_file}")
+        controllerVM.succeed(f"virsh restore {save_file}")
+        assert_domain_domstate(controllerVM, "running")
+        wait_for_ssh(controllerVM)
+
+    def test_serial_file_output(self):
+        """
+        Test that the serial to file configuration works.
+        """
+
+        controllerVM.succeed("virsh define /etc/domain-chv-serial-file.xml")
+        controllerVM.succeed("virsh start testvm")
+
+        wait_for_ssh(controllerVM)
+
+        status, out = controllerVM.execute("cat /tmp/vm_serial.log | wc -l")
+        self.assertGreater(int(out), 50, "no serial log output")
+
+        status, out = controllerVM.execute("grep 'Welcome to NixOS' /tmp/vm_serial.log")
+
+    def test_pause_resume_during_boot(self):
+        """
+        Execute suspend/resume while the VM is still booting with
+        multi-queue virtio block and network devices.
+        """
+
+        controllerVM.succeed("virsh define /etc/domain-chv-virtio-multiqueue.xml")
+        controllerVM.succeed("virsh start testvm")
+
+        # Keep the guest in its early boot phase where the failure was
+        # observed, but still give the VMM time to initialize the domain.
+        time.sleep(3)
+
+        controllerVM.succeed("virsh suspend testvm", timeout=15)
+        assert_domain_domstate(controllerVM, "paused")
+
+        controllerVM.succeed("virsh resume testvm", timeout=15)
+        assert_domain_domstate(controllerVM, "running")
+        wait_for_ssh(controllerVM, retries=200)
+
+    def test_managedsave(self):
+        """
+        Test that the managedsave call results in a state file. Further, we
+        ensure the transient xml definition of the domain is deleted correctly
+        after the managedsave call, because this was an issue before.
+        It is also tested if the restore call is able to restore the domain successfully.
+        """
+
+        controllerVM.succeed("virsh define /etc/domain-chv.xml")
+        controllerVM.succeed("virsh start testvm")
+
+        wait_for_ssh(controllerVM)
+
+        # Place some temporary file that would not survive a reboot in order to
+        # check that we are indeed restored from the saved state.
+        ssh(controllerVM, "touch /tmp/foo")
+
+        controllerVM.succeed("virsh managedsave testvm")
+
+        controllerVM.succeed("ls /var/lib/libvirt/ch/save/testvm.save/state.json")
+        controllerVM.succeed("ls /var/lib/libvirt/ch/save/testvm.save/config.json")
+        controllerVM.succeed("ls /var/lib/libvirt/ch/save/testvm.save/memory-ranges")
+        controllerVM.succeed("ls /var/lib/libvirt/ch/save/testvm.save/libvirt-save.xml")
+
+        controllerVM.fail("find /run/libvirt/ch -name *.xml | grep .")
+
+        controllerVM.succeed("virsh restore /var/lib/libvirt/ch/save/testvm.save/")
+        controllerVM.succeed("virsh managedsave-remove testvm")
+
+        wait_for_ssh(controllerVM)
+
+        ssh(controllerVM, "ls /tmp/foo")
+
+    def test_shutdown(self):
+        """
+        Test that transient XMLs are cleaned up correctly when using different
+        methods to shutdown the VM:
+            * VM shuts down from the inside via "shutdown" command
+            * virsh shutdown
+            * virsh destroy
+        """
+
+        controllerVM.succeed("virsh define /etc/domain-chv.xml")
+        controllerVM.succeed("virsh start testvm")
+
+        wait_for_ssh(controllerVM)
+
+        # Do some extra magic to not end in a hanging SSH session if the
+        # shutdown happens too fast.
+        ssh(controllerVM, "\"nohup sh -c 'sleep 5 && shutdown now' >/dev/null 2>&1 &\"")
+
+        def is_shutoff():
+            return (
+                controllerVM.execute('virsh domstate testvm | grep "shut off"')[0] == 0
+            )
+
+        wait_until_succeed(is_shutoff)
+
+        controllerVM.fail("find /run/libvirt/ch -name *.xml | grep .")
+
+        controllerVM.succeed("virsh start testvm")
+        wait_for_ssh(controllerVM)
+
+        controllerVM.succeed("virsh shutdown testvm")
+        wait_until_succeed(is_shutoff)
+        controllerVM.fail("find /run/libvirt/ch -name *.xml | grep .")
+
+        controllerVM.succeed("virsh start testvm")
+        wait_for_ssh(controllerVM)
+
+        controllerVM.succeed("virsh destroy testvm")
+        wait_until_succeed(is_shutoff)
+        controllerVM.fail("find /run/libvirt/ch -name *.xml | grep .")
+
+    def test_libvirt_event_stop_failed(self):
+        """
+        Test that a Stopped Failed event is emitted in case the Cloud
+        Hypervisor process crashes.
+        """
+        controllerVM.succeed("virsh define /etc/domain-chv.xml")
+        controllerVM.succeed("virsh start testvm")
+
+        wait_for_ssh(controllerVM)
+
+        controllerVM.succeed(
+            'screen -dmS events bash -c "virsh event --all --loop testvm 2>&1 | tee /tmp/events.log"'
+        )
+
+        # Allow 'virsh event' some time to listen for events
+        time.sleep(1)
+
+        # Simulate crash of the VMM process
+        controllerVM.succeed("kill -9 $(pidof cloud-hypervisor)")
+
+        def stop_fail_detected():
+            status, _ = controllerVM.execute("grep -q 'Stopped Failed' /tmp/events.log")
+            return status == 0
+
+        wait_until_succeed(stop_fail_detected)
+
+        # In case we would not detect the crash, Libvirt would still show the
+        # domain as running.
+        controllerVM.succeed('virsh list --all | grep "shut off"')
+
+        # Check that this case of shutting down a domain also leads to the
+        # cleanup of the transient XML correctly.
+        controllerVM.fail("find /run/libvirt/ch -name *.xml | grep .")
+
+        # Make sure screen is closed again
+        controllerVM.succeed("pkill screen")
+
+    def test_serial_tcp(self):
+        """
+        Test that the TCP serial mode of Cloud Hypervisor works when defined
+        via Libvirt. Further, the test checks that simultaneous logging to file
+        works.
+        """
+        controllerVM.succeed("virsh define /etc/domain-chv-serial-tcp.xml")
+        controllerVM.succeed("virsh start testvm")
+
+        wait_for_ssh(controllerVM)
+
+        # Check that port 2222 is used by cloud hypervisor
+        controllerVM.succeed(
+            "ss --numeric --processes --listening --tcp src :2222 | grep cloud-hyperviso"
+        )
+
+        # Check that we log to file in addition to the TCP socket
+        def prompt():
+            status, _ = controllerVM.execute(
+                "grep -q 'Welcome to NixOS' /var/log/libvirt/ch/testvm.log"
+            )
+            return status == 0
+
+        wait_until_succeed(prompt)
+
+        controllerVM.succeed(
+            textwrap.dedent("""
+            cat > /tmp/socat.expect << EOF
+            spawn socat - TCP:localhost:2222
+            send "\\n\\n"
+            expect "$"
+            send "pwd\\n"
+            expect {
+            -exact "/home/nixos" { }
+            timeout { puts "timeout hitted!"; exit 1}
+            }
+            send \\x03
+            expect eof
+            EOF
+        """).strip()
+        )
+
+        # The expect script tests interactivity of the serial connection by
+        # executing 'pwd' and checking a proper response output
+        controllerVM.succeed("expect /tmp/socat.expect")
+
+    def test_virsh_console_works_with_pty(self):
+        """
+        The test checks that a 'virsh console' command results in an
+        interactive console session were we are able to interact with the VM.
+        This is done with a PTY configured as a serial backend.
+        """
+
+        controllerVM.succeed("virsh define /etc/domain-chv.xml")
+        controllerVM.succeed("virsh start testvm")
+
+        controllerVM.succeed(
+            textwrap.dedent("""
+            cat > /tmp/console.expect << EOF
+            spawn virsh console testvm
+            send "\\n\\n"
+            sleep 1
+            expect "$"
+            send "pwd\\n"
+            expect {
+                -exact "/home/nixos" { }
+                timeout { puts "timeout hitted!"; exit 1}
+            }
+            send \\x1d
+            expect eof
+            EOF
+        """).strip()
+        )
+
+        wait_for_ssh(controllerVM)
+
+        controllerVM.succeed("expect /tmp/console.expect")
+
+    def test_disk_resize_raw(self):
+        """
+        Test disk resizing for RAW images during VM runtime.
+
+        Here we test that we can grow and shrink a RAW image. Further, we test
+        that both size modes (KiB and Byte) are working correctly.
+        """
+        # Using define + start creates a "persistent" domain rather than a transient
+        controllerVM.succeed("virsh define /etc/domain-chv.xml")
+        controllerVM.succeed("virsh start testvm")
+
+        disk_size_bytes_10M = 1024 * 1024 * 10
+        disk_size_bytes_100M = 1024 * 1024 * 100
+        disk_size_bytes_200M = 1024 * 1024 * 200
+
+        wait_for_ssh(controllerVM)
+
+        controllerVM.succeed("qemu-img create -f raw /tmp/disk.img 100M")
+        hotplug(
+            controllerVM,
+            "virsh attach-disk --domain testvm --target vdb --persistent --source /tmp/disk.img",
+        )
+        disk_size_guest = ssh(
+            controllerVM, "lsblk --raw -b /dev/vdb | awk '{print $4}' | tail -n1"
+        )
+        disk_size_host = controllerVM.succeed("ls /tmp/disk.img -l | awk '{print $5}'")
+
+        self.assertEqual(
+            int(disk_size_guest), disk_size_bytes_100M, "guest disk size should match"
+        )
+        self.assertEqual(
+            int(disk_size_host), disk_size_bytes_100M, "host disk size should match"
+        )
+
+        # Use full file path instead of virtual device name here because both should work with --path
+        controllerVM.succeed(
+            f"virsh blockresize --domain testvm --path /tmp/disk.img --size {disk_size_bytes_10M // 1024}"
+        )
+
+        disk_size_guest = ssh(
+            controllerVM, "lsblk --raw -b /dev/vdb | awk '{print $4}' | tail -n1"
+        )
+        disk_size_host = controllerVM.succeed("ls /tmp/disk.img -l | awk '{print $5}'")
+
+        self.assertEqual(
+            int(disk_size_guest), disk_size_bytes_10M, "guest disk size should match"
+        )
+        self.assertEqual(
+            int(disk_size_host), disk_size_bytes_10M, "host disk size should match"
+        )
+
+        # Use virtual device name as --path
+        controllerVM.succeed(
+            f"virsh blockresize --domain testvm --path vdb --size {disk_size_bytes_200M // 1024}"
+        )
+
+        disk_size_guest = ssh(
+            controllerVM, "lsblk --raw -b /dev/vdb | awk '{print $4}' | tail -n1"
+        )
+        disk_size_host = controllerVM.succeed("ls /tmp/disk.img -l | awk '{print $5}'")
+
+        self.assertEqual(
+            int(disk_size_guest), disk_size_bytes_200M, "guest disk size should match"
+        )
+        self.assertEqual(
+            int(disk_size_host), disk_size_bytes_200M, "host disk size should match"
+        )
+
+        # Use bytes instead of KiB
+        controllerVM.succeed(
+            f"virsh blockresize --domain testvm --path vdb --size {disk_size_bytes_100M}b"
+        )
+
+        disk_size_guest = ssh(
+            controllerVM, "lsblk --raw -b /dev/vdb | awk '{print $4}' | tail -n1"
+        )
+        disk_size_host = controllerVM.succeed("ls /tmp/disk.img -l | awk '{print $5}'")
+
+        self.assertEqual(
+            int(disk_size_guest), disk_size_bytes_100M, "guest disk size should match"
+        )
+        self.assertEqual(
+            int(disk_size_host), disk_size_bytes_100M, "host disk size should match"
+        )
+
+        # Changing to capacity must fail and not change the disk size because it
+        # is not supported for file-based disk images.
+        controllerVM.fail("virsh blockresize --domain testvm --path vdb --capacity")
+
+        disk_size_guest = ssh(
+            controllerVM, "lsblk --raw -b /dev/vdb | awk '{print $4}' | tail -n1"
+        )
+        disk_size_host = controllerVM.succeed("ls /tmp/disk.img -l | awk '{print $5}'")
+
+        self.assertEqual(
+            int(disk_size_guest), disk_size_bytes_100M, "guest disk size should match"
+        )
+        self.assertEqual(
+            int(disk_size_host), disk_size_bytes_100M, "host disk size should match"
+        )
+
+    def test_disk_is_locked(self):
+        """
+        Test that Cloud Hypervisor indeed locks images using advisory OFD locks.
+        """
+        # Using define + start creates a "persistent" domain rather than a transient
+        controllerVM.succeed("virsh define /etc/domain-chv.xml")
+        controllerVM.succeed("virsh start testvm")
+
+        wait_for_ssh(controllerVM)
+
+        controllerVM.succeed("qemu-img create -f raw /tmp/disk.img 100M")
+
+        controllerVM.succeed("fcntl-tool test-lock /tmp/disk.img | grep Unlocked")
+
+        hotplug(
+            controllerVM,
+            "virsh attach-disk --domain testvm --target vdb --source /tmp/disk.img --mode readonly",
+        )
+
+        # Check for shared read lock
+        controllerVM.succeed("fcntl-tool test-lock /tmp/disk.img | grep SharedRead")
+        hotplug(controllerVM, "virsh detach-disk --domain testvm --target vdb")
+
+        hotplug(
+            controllerVM,
+            "virsh attach-disk --domain testvm --target vdb --source /tmp/disk.img",
+        )
+        # Check for exclusive write lock
+        controllerVM.succeed("fcntl-tool test-lock /tmp/disk.img | grep ExclusiveWrite")
+
+        hotplug(controllerVM, "virsh detach-disk --domain testvm --target vdb")
+
+    def test_disk_resize_qcow2(self):
+        """
+        Test disk resizing for qcow2 images during VM runtime.
+
+        We expect that resizing the image fails because CHV does
+        not have support for qcow2 resizing yet.
+        """
+        # Using define + start creates a "persistent" domain rather than a transient
+        controllerVM.succeed("virsh define /etc/domain-chv.xml")
+        controllerVM.succeed("virsh start testvm")
+
+        disk_size_bytes_10M = 1024 * 1024 * 10
+        disk_size_bytes_100M = 1024 * 1024 * 100
+
+        wait_for_ssh(controllerVM)
+
+        controllerVM.succeed("qemu-img create -f qcow2 /tmp/disk.img 100M")
+        hotplug(
+            controllerVM,
+            "virsh attach-disk --domain testvm --target vdb --persistent --source /tmp/disk.img",
+        )
+        disk_size_guest = ssh(
+            controllerVM, "lsblk --raw -b /dev/vdb | awk '{print $4}' | tail -n1"
+        )
+
+        self.assertEqual(
+            int(disk_size_guest), disk_size_bytes_100M, "guest disk size should match"
+        )
+
+        controllerVM.fail(
+            f"virsh blockresize --domain testvm --path vdb --size {disk_size_bytes_10M // 1024}"
+        )
+
+    def test_bdfs_implicitly_assigned_same_after_recreate(self):
+        """
+        Test that BDFs stay consistent after a recreate when hotplugging
+        a transient and then a persistent device.
+
+        The persistent config needs to adopt the assigned BDF correctly
+        to recreate the same device at the same address after recreate.
+        """
+        # Using define + start creates a "persistent" domain rather than a transient
+        controllerVM.succeed("virsh define /etc/domain-chv.xml")
+        controllerVM.succeed("virsh start testvm")
+
+        wait_for_ssh(controllerVM)
+
+        # Add a persistent network device, i.e. the device should re-appear
+        # when the VM is destroyed and recreated.
+        controllerVM.succeed(
+            "qemu-img create -f raw /var/lib/libvirt/storage-pools/nfs-share/vdb.img 5M"
+        )
+        # Attach to implicit BDF 0:04.0, transient
+        hotplug(
+            controllerVM,
+            "virsh attach-disk --domain testvm --target vdb --source /var/lib/libvirt/storage-pools/nfs-share/vdb.img",
+        )
+        # Attach to implicit BDF 0:05.0, persistent
+        hotplug(
+            controllerVM,
+            "virsh attach-device testvm /etc/new_interface.xml --persistent",
+        )
+        # The net device was attached persistently, so we expect the device to be there after a recreate, but not the
+        # disk. We indeed expect it to be not there anymore and leave a hole in the assigned BDFs
+        devices_before = pci_devices_by_bdf(controllerVM)
+        del devices_before["00:04.0"]
+
+        # Transiently detach the devices. Net should re-appear when the VM is recreated.
+
+        hotplug(controllerVM, "virsh detach-device testvm /etc/new_interface.xml")
+        hotplug(controllerVM, "virsh detach-disk --domain testvm --target vdb")
+
+        controllerVM.succeed("virsh destroy testvm")
+
+        controllerVM.succeed("virsh start testvm")
+        wait_for_ssh(controllerVM)
+
+        devices_after = pci_devices_by_bdf(controllerVM)
+        self.assertEqual(
+            devices_after,
+            devices_before,
+            "devices should match after detach and restart",
+        )
+
+    def test_bdf_domain_defs_in_sync_after_transient_unplug(self):
+        """
+        Test that BDFs that are handed out persistently are not freed by
+        transient unplugs.
+
+        The persistent domain definition (XML) needs to adopt the assigned BDF
+        correctly and when unplugging a device, the transient domain definition
+        has to respect BDFs that are already reserved in the persistent domain
+        definition. In other words, we test that BDFs are correctly synced
+        between persistent and transient domain definition whenever both are
+        affected and that weird hot/-unplugging doesn't make both domain
+        definitions go out of sync.
+
+        Developer note: This test assumes that BDFs are handed out with the
+        first free numerical smallest BDF first and that freed BDFs can be
+        reused. Currently this is enforced by test
+        `test_bdf_implicit_assignment`. Without these constraints, this test
+        will not be able to detect a conflict. E.g. without BDFs being reused
+        and handing out BDFs in a round robin approach, could lead to some kind
+        of wrapping, that hands out the correct BDF by accident and doesn't
+        provoke the conflict we are checking for.
+        """
+        # Using define + start creates a "persistent" domain rather than a transient
+        controllerVM.succeed("virsh define /etc/domain-chv.xml")
+        controllerVM.succeed("virsh start testvm")
+        wait_for_ssh(controllerVM)
+
+        # Add a persistent disk. Note: If we would add a network device with <target dev = "vnet*">, then this test
+        # would fail. This is because libvirt uses "vnet*" as one of its prefixes for auto-generated names and
+        # clears any occurrence of such names from the config.
+        devices_persistent = parse_devices_from_dom_def(
+            controllerVM, DOMAIN_DEF_PERSISTENT_PATH
+        )
+        controllerVM.succeed(
+            "qemu-img create -f raw /var/lib/libvirt/storage-pools/nfs-share/vdb.img 5M"
+        )
+        hotplug(
+            controllerVM,
+            "virsh attach-disk --domain testvm --target vdb --source /var/lib/libvirt/storage-pools/nfs-share/vdb.img --persistent",
+        )
+        # Check that vdb is added to the same PCI slot in both definitions
+        devices_persistent_vdb_added = parse_devices_from_dom_def(
+            controllerVM, DOMAIN_DEF_PERSISTENT_PATH
+        )
+        devices_transient = parse_devices_from_dom_def(
+            controllerVM, DOMAIN_DEF_TRANSIENT_PATH
+        )
+        new_bdf_vdb = list(
+            (set(devices_persistent_vdb_added.keys())).difference(
+                set(devices_persistent.keys())
+            )
+        )[0]
+        self.assertEqual(
+            devices_persistent_vdb_added.get(new_bdf_vdb),
+            devices_transient.get(new_bdf_vdb),
+            f"device at BDF {new_bdf_vdb} should match in transient and persistent config",
+        )
+        # Remove transient. The device is removed from the transient domain definition but not from the persistent
+        # one. The transient domain definition has to mark the BDF as still in use nevertheless.
+        hotplug(controllerVM, "virsh detach-disk --domain testvm --target vdb")
+        devices_transient = parse_devices_from_dom_def(
+            controllerVM, DOMAIN_DEF_TRANSIENT_PATH
+        )
+        self.assertIsNone(
+            devices_transient.get(new_bdf_vdb),
+            f"no device should exist at BDF {new_bdf_vdb}",
+        )
+        # Attach another device persistently. If we did not respect in the transient domain definition that the disk
+        # we detached before is still present in persistent domain definition, then we now try to assign
+        # `new_bdf_vdb` twice in the persistent domain definition. In other words: Persistent and transient domain
+        # definition's BDF management are out of sync if this command fails.
+        # Developer note: This assumption only holds as long as we hand out the first free BDF that is numerical the
+        # smallest and as long as the algorithm clear BDF for reuse. See the developer node in the documentation
+        # string of this test.
+        hotplug(
+            controllerVM,
+            "virsh attach-device testvm /etc/new_interface.xml --persistent",
+        )
+        # Find the new devices and their BDFs by comparing to older state
+        devices_persistent = parse_devices_from_dom_def(
+            controllerVM, DOMAIN_DEF_PERSISTENT_PATH
+        )
+        bdf_new_devices = list(
+            (set(devices_persistent.keys())).difference(
+                set(devices_persistent_vdb_added.keys())
+            )
+        )
+        # Ensure the same device can be found with the same BDF in the transient definition
+        devices_transient = parse_devices_from_dom_def(
+            controllerVM, DOMAIN_DEF_TRANSIENT_PATH
+        )
+        for bdf in bdf_new_devices:
+            self.assertEqual(
+                devices_transient.get(bdf),
+                devices_persistent.get(bdf),
+                "devices should match in transient and persistent config",
+            )
+
+    def test_bdf_domain_defs_in_sync_after_transient_hotplug(self):
+        """
+        Test that BDFs that are handed out persistently are not freed by
+        transient unplugs.
+
+        The persistent config needs to adopt the assigned BDF correctly
+        and when unplugging a device, the transient config has to
+        respect BDFs that are already reserved in the persistent config.
+        In other words, we test that BDFs are correctly synced between
+        persistent and transient config whenever both are affected and
+        that weird hot/-unplugging doesn't make both configs go out of
+        sync.
+        """
+        # Using define + start creates a "persistent" domain rather than a transient
+        controllerVM.succeed("virsh define /etc/domain-chv.xml")
+        controllerVM.succeed("virsh start testvm")
+        wait_for_ssh(controllerVM)
+
+        # Add a transient disk.
+        controllerVM.succeed(
+            "qemu-img create -f raw /var/lib/libvirt/storage-pools/nfs-share/vdb.img 5M"
+        )
+        devices_transient_before = parse_devices_from_dom_def(
+            controllerVM, DOMAIN_DEF_TRANSIENT_PATH
+        )
+        hotplug(
+            controllerVM,
+            "virsh attach-disk --domain testvm --target vdb --source /var/lib/libvirt/storage-pools/nfs-share/vdb.img",
+        )
+        # Following the expected semantics, we now have a disk device in the transient definition that is missing in
+        # the persistent one. We need to find its BDF in the transient definition and check that there is no match
+        # in the persistent one.
+        devices_persistent = parse_devices_from_dom_def(
+            controllerVM, DOMAIN_DEF_PERSISTENT_PATH
+        )
+        devices_transient_now = parse_devices_from_dom_def(
+            controllerVM, DOMAIN_DEF_TRANSIENT_PATH
+        )
+        new_bdf_transient = list(
+            (set(devices_transient_now.keys())).difference(
+                set(devices_transient_before.keys())
+            )
+        )[0]
+        self.assertIsNone(
+            devices_persistent.get(new_bdf_transient),
+            f"no device should exist at BDF {new_bdf_transient}",
+        )
+
+        # Attach another device persistently. If we did not respect in the persistent definition that the disk we
+        # attached before is still present in transient definition, then we now try to assign the BDF of the disk
+        # attached transiently before to the new network interface. In other words: Persistent and transient
+        # config's BDF management are out of sync. We can see the result by looking into the domain definition...
+        hotplug(
+            controllerVM,
+            "virsh attach-interface --target l33t_n37 --persistent --type network --source libvirt-testnetwork --mac DE:AD:BE:EF:13:37 --model virtio testvm",
+        )
+        controllerVM.succeed(
+            "qemu-img create -f raw /var/lib/libvirt/storage-pools/nfs-share/vdc.img 5M"
+        )
+        hotplug(
+            controllerVM,
+            "virsh attach-disk --domain testvm --persistent --target vdc --source /var/lib/libvirt/storage-pools/nfs-share/vdc.img",
+        )
+
+        # So now look into the config
+        devices_persistent_end = parse_devices_from_dom_def(
+            controllerVM, DOMAIN_DEF_PERSISTENT_PATH
+        )
+        devices_transient_end = parse_devices_from_dom_def(
+            controllerVM, DOMAIN_DEF_TRANSIENT_PATH
+        )
+        # Find the BDFs of devices we just added
+        bdf_new_devices = list(
+            (set(devices_transient_end.keys())).difference(
+                set(devices_transient_now.keys())
+            )
+        )
+        # And make sure that the exact same devices share the same BDF in transient and persistent definitions
+        for bdf in bdf_new_devices:
+            self.assertEqual(
+                devices_transient_end.get(bdf),
+                devices_persistent_end.get(bdf),
+                "devices should match in transient and persistent config",
+            )
+
+    def test_libvirt_default_net_prefix_triggers_desynchronizing(self):
+        """
+        Test that using a libvirt reserved name for a net device leads to asynchronism between domain definitions.
+
+        We sync BDFs by finding the net device under its `ifname` property. `ifname` is cleared if the device definition
+        uses a prefix that is reserved by libvirt. This test ensure that clearing works and warns us about semantic
+        changes in libvirt's parsing infrastructure if it fails.
+        """
+        # Using define + start creates a "persistent" domain rather than a transient
+        controllerVM.succeed("virsh define /etc/domain-chv.xml")
+        controllerVM.succeed("virsh start testvm")
+        wait_for_ssh(controllerVM)
+        # We need to know all devices after starting the VM to conclude which one is new later
+        devices_before_attach = parse_devices_from_dom_def(
+            controllerVM, DOMAIN_DEF_TRANSIENT_PATH
+        )
+        # Add network interface that uses a libvirt reserved prefix as argument for `target`. We expect it to be
+        # cleared which leads to address synchronization failing.
+        hotplug(
+            controllerVM,
+            "virsh attach-interface --target vnet2 --persistent --type network --source libvirt-testnetwork --mac DE:AD:BE:EF:13:37 --model virtio testvm",
+        )
+        devices_persistent = parse_devices_from_dom_def(
+            controllerVM, DOMAIN_DEF_PERSISTENT_PATH
+        )
+        devices_transient = parse_devices_from_dom_def(
+            controllerVM, DOMAIN_DEF_TRANSIENT_PATH
+        )
+        bdf_in_transient = list(
+            (set(devices_transient.keys())).difference(
+                set(devices_before_attach.keys())
+            )
+        )[0]
+        # By chance the net device receives the same BDF in both domain definitions, so look for an exact match. If
+        # we find one, this means definitions are in sync (because even the `target` attribute is right)
+        if devices_persistent[bdf_in_transient] is not None:
+            self.assertNotEqual(
+                devices_transient.get(bdf_in_transient),
+                devices_persistent.get(bdf_in_transient),
+            )
+
+    def test_bdf_invalid_device_id(self):
+        """
+        Test that a BDF with invalid device ID generates an error in libvirt.
+
+        We test the case that a device id higher than 31 is used by a device.
+        """
+        # Create a VM
+        controllerVM.succeed("virsh define /etc/domain-chv.xml")
+        controllerVM.succeed("virsh start testvm")
+        wait_for_ssh(controllerVM)
+
+        # We need to check that no devices are added, so let's save how
+        # many devices are present in the VM after creating it.
+        num_before_expected_failure = number_of_devices(controllerVM)
+        # Add a persistent disk.
+        controllerVM.succeed(
+            "qemu-img create -f raw /var/lib/libvirt/storage-pools/nfs-share/vdb.img 5M"
+        )
+        # Now we create a disk that we hotplug to a BDF with a device
+        # ID 32. This should fail.
+        hotplug_fail(
+            controllerVM,
+            "virsh attach-disk --domain testvm --target vdb --source /var/lib/libvirt/storage-pools/nfs-share/vdb.img --persistent --address pci:0.0.20.0",
+        )
+        wait_for_guest_pci_device_enumeration(controllerVM, num_before_expected_failure)
+
+    def test_bdf_valid_device_id_with_function_id(self):
+        """
+        Test that a BDFs containing a function ID leads to errors.
+
+        CHV currently doesn't support multi function devices. So we need
+        to checks that libvirt does not allow to attach such devices. We
+        check that instantiating a domain with function ID doesn't work.
+        Then we test that we cannot hotplug a device with a function ID
+        in its BDF definition.
+        """
+        # We don't support multi function devices currently. The config
+        # below defines a device with function ID, so instantiating it
+        # should fail.
+        controllerVM.fail("virsh define /etc/domain-chv-static-bdf-with-function.xml")
+
+        # Now create a VM from a definition that does not contain any
+        # function IDs in it device definition.
+        controllerVM.succeed("virsh define /etc/domain-chv.xml")
+        controllerVM.succeed("virsh start testvm")
+        wait_for_ssh(controllerVM)
+
+        # We need to check that no devices are added, so let's save how
+        # many devices are present in the VM after creating it.
+        num_before_expected_failure = number_of_devices(controllerVM)
+        # Now we create a disk that we hotplug to a BDF with a function
+        # ID. This should fail.
+        controllerVM.succeed(
+            "qemu-img create -f raw /var/lib/libvirt/storage-pools/nfs-share/vdb.img 5M"
+        )
+        hotplug_fail(
+            controllerVM,
+            "virsh attach-disk --domain testvm --target vdb --source /var/lib/libvirt/storage-pools/nfs-share/vdb.img --persistent --address pci:0.0.1f.5",
+        )
+        # Even though we only land here if the command above failed, we
+        # should still ensure that no new devices magically appeared.
+        wait_for_guest_pci_device_enumeration(controllerVM, num_before_expected_failure)
+
+    def test_list_cpu_models(self):
+        """
+        This tests checks that the cpu-models API call is implemented and
+        returns at least a skylake and a sapphire-rapids model.
+        Further, we check that the domain capabilities API call returns the
+        expected CPU profile as usable.
+        Both is required to be able to use the specific CPU profile.
+        While the 'virsh cpu-models' call only lists the CPU profiles the VMM
+        supports, the 'virsh domcapabilities' call takes into account the hosts
+        architecture. Thus, the latter reports what CPU profile actually can be
+        used in the current environment.
+        """
+        expected_cpu_models = [
+            "skylake",
+            "sapphire-rapids",
+        ]
+
+        cpu_models_out = controllerVM.succeed("virsh cpu-models x86_64")
+        domcapabilities_out = controllerVM.succeed("virsh domcapabilities")
+
+        for model in expected_cpu_models:
+            self.assertIn(model, cpu_models_out, "should report supported CPU model")
+            self.assertIn(
+                f"<model usable='yes' vendor='Intel' canonical='{model}'>{model}</model>",
+                domcapabilities_out,
+                "should report supported CPU model",
+            )
+
+    def test_list_smbios_biosinfo(self):
+        """
+        This test checks the SMBIOS BIOS Information fields `vendor` and
+        `version`. These are provided by Cloud Hypervisor and should be
+        present without any SMBIOS overrides.
+        """
+        expected_field_values = {
+            "bios-vendor": "cloud-hypervisor",
+            "bios-version": "0",
+        }
+
+        controllerVM.succeed("virsh define /etc/domain-chv.xml")
+        controllerVM.succeed("virsh start testvm")
+        wait_for_ssh(controllerVM)
+
+        for dmi_string, expected in expected_field_values.items():
+            actual = ssh(
+                controllerVM,
+                f"dmidecode --string {dmi_string} | tr -d '\\n'",
+            )
+            self.assertEqual(expected, actual, "smbios biosinfo should match")
+
+    def test_list_smbios_sysinfo(self):
+        """
+        This test checks the SMBIOS System Information fields
+        `manufacturer`, `product name`, `version`, `serial number`, `uuid`,
+        `sku number`, `family`, and the `chassis asset` field.
+        These are overwritten using the specified libvirt XML configuration,
+        so the default values `Cloud Hypervisor` and `cloud-hypervisor`
+        should not appear.
+        """
+        expected_field_values = {
+            "system-manufacturer": "My Manufacturer",
+            "system-product-name": "My ProductName",
+            "system-version": "123456",
+            "system-serial-number": "123-123-123",
+            "system-uuid": "4eb6319a-4302-4407-9a56-802fc7e6a422",
+            "system-sku-number": "SKU-SKU-SKU",
+            "system-family": "My Family",
+            "chassis-asset-tag": "My AssetTag",
+        }
+
+        controllerVM.succeed("virsh define /etc/domain-chv-smbios.xml")
+        controllerVM.succeed("virsh start testvm")
+        wait_for_ssh(controllerVM)
+
+        for dmi_string, expected in expected_field_values.items():
+            actual = ssh(
+                controllerVM,
+                f"dmidecode --string {dmi_string} | tr -d '\\n'",
+            )
+            self.assertEqual(expected, actual, "smbios sysinfo should match")
+
+        actual = ssh(
+            controllerVM,
+            "cat /sys/devices/virtual/dmi/id/chassis_asset_tag | tr -d '\\n'",
+        )
+        self.assertEqual(
+            expected_field_values["chassis-asset-tag"],
+            actual,
+            "smbios chassis should match",
+        )
+
+    def test_list_smbios_host(self):
+        """
+        This test checks the SMBIOS System Information fields
+        `manufacturer`, `product name`, `version`, `serial number`,
+        `sku number`, `family` field.
+        These are propagated from the host, in this case from the QEMU VM.
+        One exception is the field `uuid` which is not propagated by libvirt
+        when the smbios mode is set to `host`.
+        We read the values from the host and validate them against the
+        CH guest.
+        """
+        expected_field_values = {}
+        for dmi_string in [
+            "system-manufacturer",
+            "system-product-name",
+            "system-version",
+            "system-serial-number",
+            "system-sku-number",
+            "system-family",
+        ]:
+            expected_field_values[dmi_string] = controllerVM.succeed(
+                f"dmidecode -s {dmi_string} | tr -d '\\n'",
+            )
+
+        controllerVM.succeed("virsh define /etc/domain-chv-smbios-host.xml")
+        controllerVM.succeed("virsh start testvm")
+        wait_for_ssh(controllerVM)
+
+        for dmi_string, expected in expected_field_values.items():
+            actual = ssh(
+                controllerVM,
+                f"dmidecode --string {dmi_string} | tr -d '\\n'",
+            )
+            self.assertEqual(expected, actual, "smbios string should match")
+
+    def test_list_smbios_oem_strings(self):
+        """
+        This test checks the SMBIOS OEM Strings (Type 11) entries.
+        These are overwritten using the specified libvirt XML configuration.
+        """
+        expected_oem_strings = [
+            "oem-7f3d9b23",
+            "oem-2c8a1e6f",
+            "oem-91d4c0aa",
+        ]
+
+        controllerVM.succeed("virsh define /etc/domain-chv-smbios-oem.xml")
+        controllerVM.succeed("virsh start testvm")
+        wait_for_ssh(controllerVM)
+
+        oem_strings_out = ssh(controllerVM, "dmidecode -t 11 --quiet")
+        for expected in expected_oem_strings:
+            self.assertIn(expected, oem_strings_out, "should have smbios OEM string")
+
+    def test_suspend_resume(self):
+        """
+        Tests suspend and resume.
+        """
+
+        controllerVM.succeed("virsh define /etc/domain-chv-numa.xml")
+        controllerVM.succeed("virsh start testvm")
+        wait_for_ssh(controllerVM)
+
+        controllerVM.succeed("virsh suspend testvm")
+        assert_domain_domstate(controllerVM, "paused")
+
+        controllerVM.succeed("virsh resume testvm")
+        assert_domain_domstate(controllerVM, "running")
+        wait_for_ssh(controllerVM)
+
+    def test_reboot_guestinduced(self):
+        """
+        Performs a guest-induced VM reboot and checks the CPU pinning (affinity)
+        is set properly at all stages.
+        """
+
+        controllerVM.succeed("virsh define /etc/domain-chv-numa.xml")
+        controllerVM.succeed("virsh start testvm")
+        wait_for_ssh(controllerVM)
+
+        vcpu_affinity_checks(self, controllerVM, context="before guest-induced reboot")
+
+        try:
+            ssh(controllerVM, "reboot now")
+        except RuntimeError:
+            # Reboots may happen so fast that the SSH session never properly
+            # returns.
+            pass
+
+        # Check VM is actually rebooting
+        wait_until_succeed(lambda: vm_unresponsive(controllerVM), retries=20)
+
+        # Wait for reboot to finish
+        wait_for_ssh(controllerVM)
+        vcpu_affinity_checks(self, controllerVM, context="after guest-induced reboot")
+
+    def test_reboot_externallytriggered(self):
+        """
+        Performs an externally triggered VM reboot and checks the CPU pinning
+        (affinity) is set properly at all stages.
+        """
+
+        controllerVM.succeed("virsh define /etc/domain-chv-numa.xml")
+        controllerVM.succeed("virsh start testvm")
+        wait_for_ssh(controllerVM)
+
+        vcpu_affinity_checks(
+            self, controllerVM, context="before externally-triggered guest reboot"
+        )
+
+        controllerVM.succeed("virsh reboot testvm")
+
+        # Check VM is actually rebooting
+        wait_until_succeed(lambda: vm_unresponsive(controllerVM), retries=20)
+
+        # Wait for reboot to finish
+        wait_for_ssh(controllerVM)
+        vcpu_affinity_checks(
+            self, controllerVM, context="after externally-triggered guest reboot"
+        )
+
+    def test_raw_image_is_properly_attached(self):
+        """
+        Attaches a disk once with "file_type=raw" and once without. If the file
+        type is not set, writing to sector 0 should fail.
+        """
+
+        controllerVM.succeed("virsh define /etc/domain-chv.xml")
+        controllerVM.succeed("virsh start testvm")
+        wait_for_ssh(controllerVM)
+
+        image = "/tmp/disk.raw"
+        controllerVM.succeed(f"qemu-img create -f raw {image} 100M")
+
+        # Hotplug device without device type, dd should fail
+        hotplug(
+            controllerVM,
+            f"virsh attach-disk testvm {image} vdb --targetbus virtio --sourcetype file",
+        )
+        try:
+            ssh(
+                controllerVM,
+                "dd if=/dev/random of=/dev/vdb bs=512 count=1 oflag=direct",
+            )
+            self.fail("dd did not fail, but should have!")
+        except RuntimeError:
+            pass
+
+        hotplug(controllerVM, "virsh detach-disk testvm vdb")
+
+        # Hotplug device with device type, this time dd should succeed
+        hotplug(
+            controllerVM,
+            f"virsh attach-disk testvm {image} vdb --targetbus virtio --sourcetype file --subdriver raw",
+        )
+        ssh(controllerVM, "dd if=/dev/random of=/dev/vdb bs=512 count=1 oflag=direct")
+
+        # By default, Cloud Hypervisor sets sparse=on for raw images which we set to false in our libvirt
+        # driver to prevent overcommitting of storage backends.
+        controllerVM.succeed(
+            "ch-remote --api-socket /run/libvirt/ch/testvm-socket info \
+                              | jq -e '.config.disks[1].sparse == false' > /dev/null"
+        )
+
+        hotplug(controllerVM, "virsh detach-disk testvm vdb")
+
+        controllerVM.succeed(f"rm {image}")
+
+    def test_nested_chv_guest(self):
+        """
+        Test that we are able to boot a nested CHV VM using a Cirros image.
+        """
+
+        controllerVM.succeed("virsh define /etc/domain-chv.xml")
+        controllerVM.succeed("virsh start testvm")
+
+        wait_for_ssh(controllerVM)
+        setup_nested_cirros(controllerVM)
+        assert_nested_cirros_connectivity(controllerVM)
+
+
+def suite():
+    # Test cases sorted in alphabetical order.
+    testcases = [
+        LibvirtTests.test_bdf_domain_defs_in_sync_after_transient_hotplug,
+        LibvirtTests.test_bdf_domain_defs_in_sync_after_transient_unplug,
+        LibvirtTests.test_bdf_invalid_device_id,
+        LibvirtTests.test_bdf_valid_device_id_with_function_id,
+        LibvirtTests.test_bdfs_implicitly_assigned_same_after_recreate,
+        LibvirtTests.test_cirros_image,
+        LibvirtTests.test_disk_is_locked,
+        LibvirtTests.test_disk_resize_qcow2,
+        LibvirtTests.test_disk_resize_raw,
+        LibvirtTests.test_hotplug,
+        LibvirtTests.test_libvirt_default_net_prefix_triggers_desynchronizing,
+        LibvirtTests.test_libvirt_event_stop_failed,
+        LibvirtTests.test_libvirt_restart,
+        LibvirtTests.test_list_cpu_models,
+        LibvirtTests.test_list_smbios_biosinfo,
+        LibvirtTests.test_list_smbios_host,
+        LibvirtTests.test_list_smbios_oem_strings,
+        LibvirtTests.test_list_smbios_sysinfo,
+        LibvirtTests.test_managedsave,
+        LibvirtTests.test_nested_chv_guest,
+        LibvirtTests.test_network_hotplug_attach_detach_persistent,
+        LibvirtTests.test_network_hotplug_attach_detach_transient,
+        LibvirtTests.test_network_hotplug_persistent_transient_detach_vm_restart,
+        LibvirtTests.test_network_hotplug_persistent_vm_restart,
+        LibvirtTests.test_network_hotplug_transient_vm_restart,
+        LibvirtTests.test_numa_topology,
+        LibvirtTests.test_pause_resume_during_boot,
+        LibvirtTests.test_raw_image_is_properly_attached,
+        LibvirtTests.test_reboot_externallytriggered,
+        LibvirtTests.test_reboot_guestinduced,
+        LibvirtTests.test_save_restore_during_boot,
+        LibvirtTests.test_serial_file_output,
+        LibvirtTests.test_serial_tcp,
+        LibvirtTests.test_shutdown,
+        LibvirtTests.test_suspend_resume,
+        LibvirtTests.test_virsh_console_works_with_pty,
+    ]
+
+    suite = unittest.TestSuite()
+    for testcaseMethod in testcases:
+        suite.addTest(LibvirtTests(testcaseMethod.__name__))
+    return suite
+
+
+runner = unittest.TextTestRunner()
+if not runner.run(suite()).wasSuccessful():
+    raise Exception("Test Run unsuccessful")
