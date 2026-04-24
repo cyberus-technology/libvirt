@@ -462,6 +462,26 @@
     "fcntl-tool": {
       "inputs": {
         "nixpkgs": [
+          "nixpkgs"
+        ]
+      },
+      "locked": {
+        "lastModified": 1775080936,
+        "narHash": "sha256-Fq/d//tIRG7XPirsUX1fmHucorkx7fS3Uhk1RNTJxjI=",
+        "owner": "phip1611",
+        "repo": "fcntl-tool",
+        "rev": "55d6200678996060e58d152598d2583a2ef889a7",
+        "type": "github"
+      },
+      "original": {
+        "owner": "phip1611",
+        "repo": "fcntl-tool",
+        "type": "github"
+      }
+    },
+    "fcntl-tool_2": {
+      "inputs": {
+        "nixpkgs": [
           "libvirt-prev",
           "libvirt-tests",
           "nixpkgs"
@@ -481,7 +501,7 @@
         "type": "github"
       }
     },
-    "fcntl-tool_2": {
+    "fcntl-tool_3": {
       "inputs": {
         "nixpkgs": [
           "libvirt-tests",
@@ -502,7 +522,7 @@
         "type": "github"
       }
     },
-    "fcntl-tool_3": {
+    "fcntl-tool_4": {
       "inputs": {
         "nixpkgs": [
           "libvirt-tests",
@@ -774,7 +794,7 @@
           "libvirt-prev",
           "edk2-src"
         ],
-        "fcntl-tool": "fcntl-tool",
+        "fcntl-tool": "fcntl-tool_2",
         "libvirt": "libvirt",
         "nixpkgs": [
           "libvirt-prev",
@@ -808,7 +828,7 @@
         "edk2-src": [
           "edk2-src"
         ],
-        "fcntl-tool": "fcntl-tool_2",
+        "fcntl-tool": "fcntl-tool_3",
         "libvirt": "libvirt_2",
         "libvirt-prev": "libvirt-prev_3",
         "nixpkgs": [
@@ -845,7 +865,7 @@
           "libvirt-prev",
           "edk2-src"
         ],
-        "fcntl-tool": "fcntl-tool_3",
+        "fcntl-tool": "fcntl-tool_4",
         "libvirt": "libvirt_3",
         "nixpkgs": [
           "libvirt-tests",
@@ -967,6 +987,7 @@
         "cloud-hypervisor": "cloud-hypervisor",
         "cloud-hypervisor-prev": "cloud-hypervisor-prev",
         "edk2-src": "edk2-src",
+        "fcntl-tool": "fcntl-tool",
         "keycodemapdb": "keycodemapdb",
         "libvirt-prev": "libvirt-prev",
         "libvirt-tests": "libvirt-tests_2",

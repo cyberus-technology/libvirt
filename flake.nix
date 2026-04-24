@@ -2,6 +2,8 @@
   description = "libvirt with Cloud Hypervisor patches by Cyberus Technology";
 
   inputs = {
+    # A local path can be used for developing or testing local changes.
+    # cloud-hypervisor.url = "git+file:<path/to/cloud-hypervisor>";
     cloud-hypervisor.url = "github:cyberus-technology/cloud-hypervisor?ref=gardenlinux";
     cloud-hypervisor.inputs.nixpkgs.follows = "nixpkgs";
     # Previous release of cloud-hypervisor for migration testing with different versions.
@@ -28,16 +30,20 @@
     # We use our custom firmware
     edk2-src.url = "git+https://github.com/cyberus-technology/edk2?ref=gardenlinux&submodules=1";
     edk2-src.flake = false;
+    fcntl-tool.url = "github:phip1611/fcntl-tool";
+    fcntl-tool.inputs.nixpkgs.follows = "nixpkgs";
   };
 
   outputs =
     {
       self,
       nixpkgs,
-      libvirt-tests,
       keycodemapdb,
       edk2-src,
       cloud-hypervisor,
+      cloud-hypervisor-prev,
+      fcntl-tool,
+      libvirt-prev,
       ...
     }:
     let
@@ -82,124 +88,92 @@
       systems = [ "x86_64-linux" ];
       forAllSystems =
         function: nixpkgs.lib.genAttrs systems (system: function nixpkgs.legacyPackages.${system});
+
+      nixos-tests-outputs = import ./nixos-tests/outputs.nix {
+        inherit
+          self
+          nixpkgs
+          cloud-hypervisor
+          cloud-hypervisor-prev
+          edk2-src
+          fcntl-tool
+          libvirt-prev
+          ;
+        src = ./nixos-tests;
+        libvirt = self;
+      };
     in
-    {
-      devShells = forAllSystems (pkgs: {
-        default = pkgs.mkShell {
-          inputsFrom = [ pkgs.libvirt ];
-        };
-      });
-      formatter = forAllSystems (pkgs: pkgs.nixfmt-tree);
-      # We export all tests from `libvirt-tests.tests` following the typical
-      # Nix flake attribute structure (tests.<system>.<test-name>). For each
-      # test, we override the source of libvirt with the source from this
-      # repository.
-      packages = nixpkgs.lib.recursiveUpdate cloud-hypervisor.packages (
-        forAllSystems (
-          pkgs:
-          let
-            # This builds libvirt with our own sources and the normal upstream libvirt configuration.
-            libvirt = pkgs.libvirt.overrideAttrs (old: {
-              name = "libvirt-chv";
-              src = cleanSourceWithSubmodules;
-              version =
-                # We fetch the version from `meson.build`.
-                let
-                  fallback = builtins.trace "WARN: cannot obtain version from libvirt fork" "0.0.0-unknown";
-                  mesonBuild = builtins.readFile "${cleanSourceWithSubmodules}/meson.build";
-                  # Searches for the line `version: '11.3.0'` and captures the version.
-                  matches = builtins.match ".*[[:space:]]*version:[[:space:]]'([0-9]+.[0-9]+.[0-9]+)'.*" mesonBuild;
-                  version = builtins.elemAt matches 0;
-                in
-                if matches != null then version else fallback;
-              doInstallCheck = false;
-              doCheck = false;
-              patches = [
-                ./patches/libvirt/0001-meson-patch-in-an-install-prefix-for-building-on-nix.patch
-                ./patches/libvirt/0002-substitute-zfs-and-zpool-commands.patch
-              ];
-              mesonFlags = (old.mesonFlags or [ ]) ++ [
-                # Helps to keep track of the commit hash in the libvirt log. Nix strips
-                # all `.git`, so we need to be explicit here.
-                #
-                # This is a non-standard functionality of our own libvirt fork.
-                "-Dcommit_hash=${if self ? rev then self.rev else self.dirtyRev}"
-              ];
-            });
-            # This builds libvirt with our own sources and:
-            # - support for debugging (optimized debug build with symbols)
-            # - support for address sanitizers
-            libvirt-debugoptimized = libvirt.overrideAttrs (_old: {
-              mesonBuildType = "debugoptimized";
-              # IMPORTANT: donStrip is required because otherwise, nix will strip all
-              # debug info from the binaries in its fixupPhase. Having the debug info
-              # is crucial for getting source code info from the sanitizers, as well as
-              # when using GDB.
-              dontStrip = true;
-            });
-
-            chv-ovmf = pkgs.OVMF-cloud-hypervisor.overrideAttrs (_old: {
-              version = "cbs";
-              src = edk2-src;
-            });
-
-          in
-          {
-            inherit libvirt libvirt-debugoptimized;
-            inherit (libvirt-tests.packages.x86_64-linux) cloud-hypervisor cloud-hypervisor-prev;
-            default = libvirt;
-            chv-ovmf = pkgs.runCommand "OVMF-CLOUDHV.fd" { } ''
-              cp ${chv-ovmf.fd}/FV/CLOUDHV.fd $out
-            '';
-            prepare-images = import ./local_tests/prepare-images.nix { inherit pkgs; };
-            prepare-windows-image = import ./local_tests/prepare-windows-image.nix { inherit pkgs; };
-          }
-        )
-      );
-      # We export all tests from `libvirt-tests.tests` but override the libvirt
-      # input with libvirt from this repository.
-      tests = forAllSystems (
-        pkgs:
-        let
-          lib = pkgs.lib;
-          system = pkgs.stdenv.hostPlatform.system;
-
-          # New attribute set with updated `libvirt-src` input for each test.
-          tests = lib.concatMapAttrs (name: value: {
-            ${name} =
-              value.override (old: {
-                pkgs = old.pkgs.extend (
-                  _final: _prev: {
-                    libvirt = self.packages.${system}.libvirt-debugoptimized;
-                  }
-                );
-              })
-              // {
-                passthru.no_port_forwarding = value.passthru.no_port_forwarding.override (old: {
-                  pkgs = old.pkgs.extend (
-                    _final: _prev: {
-                      libvirt = self.packages.${system}.libvirt-debugoptimized;
-                    }
-                  );
-                });
-              };
-          }) libvirt-tests.tests.${system};
-        in
-        tests
-        // {
-          all_drivers = pkgs.symlinkJoin {
-            name = "all-test-drivers";
-            paths = with tests; [
-              # Sorted alphabetically.
-              default.driver
-              hugepage.driver
-              live_migration.driver
-              long_migration_with_load.driver
-              numa_hosts.driver
-              version_migration.driver
-            ];
+    nixpkgs.lib.recursiveUpdate nixos-tests-outputs {
+      devShells = nixpkgs.lib.recursiveUpdate nixos-tests-outputs.devShells (
+        forAllSystems (pkgs: {
+          default = pkgs.mkShell {
+            inputsFrom = [ pkgs.libvirt ];
           };
-        }
+        })
+      );
+      packages = nixpkgs.lib.recursiveUpdate nixos-tests-outputs.packages (
+        nixpkgs.lib.recursiveUpdate cloud-hypervisor.packages (
+          forAllSystems (
+            pkgs:
+            let
+              # This builds libvirt with our own sources and the normal upstream libvirt configuration.
+              libvirt = pkgs.libvirt.overrideAttrs (old: {
+                name = "libvirt-chv";
+                src = cleanSourceWithSubmodules;
+                version =
+                  # We fetch the version from `meson.build`.
+                  let
+                    fallback = builtins.trace "WARN: cannot obtain version from libvirt fork" "0.0.0-unknown";
+                    mesonBuild = builtins.readFile "${cleanSourceWithSubmodules}/meson.build";
+                    # Searches for the line `version: '11.3.0'` and captures the version.
+                    matches = builtins.match ".*[[:space:]]*version:[[:space:]]'([0-9]+.[0-9]+.[0-9]+)'.*" mesonBuild;
+                    version = builtins.elemAt matches 0;
+                  in
+                  if matches != null then version else fallback;
+                doInstallCheck = false;
+                doCheck = false;
+                patches = [
+                  ./patches/libvirt/0001-meson-patch-in-an-install-prefix-for-building-on-nix.patch
+                  ./patches/libvirt/0002-substitute-zfs-and-zpool-commands.patch
+                ];
+                mesonFlags = (old.mesonFlags or [ ]) ++ [
+                  # Helps to keep track of the commit hash in the libvirt log. Nix strips
+                  # all `.git`, so we need to be explicit here.
+                  #
+                  # This is a non-standard functionality of our own libvirt fork.
+                  "-Dcommit_hash=${if self ? rev then self.rev else self.dirtyRev}"
+                ];
+              });
+              # This builds libvirt with our own sources and:
+              # - support for debugging (optimized debug build with symbols)
+              # - support for address sanitizers
+              libvirt-debugoptimized = libvirt.overrideAttrs (_old: {
+                mesonBuildType = "debugoptimized";
+                # IMPORTANT: donStrip is required because otherwise, nix will strip all
+                # debug info from the binaries in its fixupPhase. Having the debug info
+                # is crucial for getting source code info from the sanitizers, as well as
+                # when using GDB.
+                dontStrip = true;
+              });
+
+              chv-ovmf = pkgs.OVMF-cloud-hypervisor.overrideAttrs (_old: {
+                version = "cbs";
+                src = edk2-src;
+              });
+
+            in
+            {
+              inherit libvirt libvirt-debugoptimized;
+              inherit cloud-hypervisor cloud-hypervisor-prev;
+              default = libvirt;
+              chv-ovmf = pkgs.runCommand "OVMF-CLOUHDHV.fd" { } ''
+                cp ${chv-ovmf.fd}/FV/CLOUDHV.fd $out
+              '';
+              prepare-images = import ./local_tests/prepare-images.nix { inherit pkgs; };
+              prepare-windows-image = import ./local_tests/prepare-windows-image.nix { inherit pkgs; };
+            }
+          )
+        )
       );
     };
 }
