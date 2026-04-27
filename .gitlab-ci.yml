@@ -72,6 +72,7 @@ variables:
     - echo "  SendEnv CI_PROJECT_NAME" >> ~/.ssh/config
     - echo "  SendEnv CI_PROJECT_PATH" >> ~/.ssh/config
     - echo "  SendEnv CI_PIPELINE_ID" >> ~/.ssh/config
+    - echo "  SendEnv CI_MERGE_REQUEST_SOURCE_PROJECT_PATH" >> ~/.ssh/config
     - echo "  SendEnv TESTSUITE" >> ~/.ssh/config
   # if you want to use your own after_script create a new after_script block in a real job section
   # a after_script block in a job always overrides this definition - the yaml array is not cumulative
@@ -232,8 +233,7 @@ test:cpu_profiles:
           - ferona-granite-rapids
   script:
     - rm -rf logs && mkdir logs
-    - nix-shell -p openssh --run 'ssh -F ~/.ssh/config ${TARGETHOST} "rm -rf tmp-${CI_PIPELINE_ID} && mkdir tmp-${CI_PIPELINE_ID} && git -C tmp-${CI_PIPELINE_ID} clone ${CI_SERVER_PROTOCOL}://gitlab-ci-token:${CI_JOB_TOKEN}@${CI_SERVER_HOST}/${CI_PROJECT_PATH}.git"'
-    - nix-shell -p openssh --run 'ssh -F ~/.ssh/config ${TARGETHOST} "git -C tmp-${CI_PIPELINE_ID}/${CI_PROJECT_NAME} switch ${CI_COMMIT_REF_NAME}"'
+    - nix-shell -p openssh --run './local_tests/checkout_repo_remote.sh ${TARGETHOST}'
     - nix-shell -p openssh --run 'ssh -F ~/.ssh/config ${TARGETHOST} "./tmp-${CI_PIPELINE_ID}/${CI_PROJECT_NAME}/local_tests/${TESTSUITE} tmp-${CI_PIPELINE_ID}/${CI_PROJECT_NAME}"' 2>&1 | tee logs/${TARGETHOST}.log
   after_script:
     - nix-shell -p openssh --run 'ssh -F ~/.ssh/config ${TARGETHOST} "./tmp-${CI_PIPELINE_ID}/${CI_PROJECT_NAME}/local_tests/kill_child_pids.sh"' || true
@@ -247,12 +247,9 @@ test:live-migration-bare-metal:
   script:
     - rm -rf logs && mkdir logs
     # checkout repo on each host
-    - nix-shell -p openssh --run 'ssh -F ~/.ssh/config ferona-turin "rm -rf tmp-${CI_PIPELINE_ID} && mkdir tmp-${CI_PIPELINE_ID} && git -C tmp-${CI_PIPELINE_ID} clone ${CI_SERVER_PROTOCOL}://gitlab-ci-token:${CI_JOB_TOKEN}@${CI_SERVER_HOST}/${CI_PROJECT_PATH}.git"'
-    - nix-shell -p openssh --run 'ssh -F ~/.ssh/config ferona-turin "git -C tmp-${CI_PIPELINE_ID}/${CI_PROJECT_NAME} checkout ${CI_COMMIT_REF_NAME}"'
-    - nix-shell -p openssh --run 'ssh -F ~/.ssh/config ferona-granite-rapids "rm -rf tmp-${CI_PIPELINE_ID} && mkdir tmp-${CI_PIPELINE_ID} && git -C tmp-${CI_PIPELINE_ID} clone ${CI_SERVER_PROTOCOL}://gitlab-ci-token:${CI_JOB_TOKEN}@${CI_SERVER_HOST}/${CI_PROJECT_PATH}.git"'
-    - nix-shell -p openssh --run 'ssh -F ~/.ssh/config ferona-granite-rapids "git -C tmp-${CI_PIPELINE_ID}/${CI_PROJECT_NAME} checkout ${CI_COMMIT_REF_NAME}"'
-    - nix-shell -p openssh --run 'ssh -F ~/.ssh/config ferona-sapphire-rapids "rm -rf tmp-${CI_PIPELINE_ID} && mkdir tmp-${CI_PIPELINE_ID} && git -C tmp-${CI_PIPELINE_ID} clone ${CI_SERVER_PROTOCOL}://gitlab-ci-token:${CI_JOB_TOKEN}@${CI_SERVER_HOST}/${CI_PROJECT_PATH}.git"'
-    - nix-shell -p openssh --run 'ssh -F ~/.ssh/config ferona-sapphire-rapids "git -C tmp-${CI_PIPELINE_ID}/${CI_PROJECT_NAME} checkout ${CI_COMMIT_REF_NAME}"'
+    - nix-shell -p openssh --run './local_tests/checkout_repo_remote.sh ferona-turin'
+    - nix-shell -p openssh --run './local_tests/checkout_repo_remote.sh ferona-granite-rapids'
+    - nix-shell -p openssh --run './local_tests/checkout_repo_remote.sh ferona-sapphire-rapids'
     # prepare image on nfs server host
     - nix-shell -p openssh --run 'ssh -F ~/.ssh/config ferona-turin "./tmp-${CI_PIPELINE_ID}/${CI_PROJECT_NAME}/local_tests/run_chv_profile_prepare_images.sh ${CI_PIPELINE_ID}"' 2>&1 | tee -a logs/ferona-turin.log
     # build CHV on each host
@@ -269,12 +266,9 @@ test:live-migration-windows-bare-metal:
   script:
     - rm -rf logs && mkdir logs
     # checkout repo on each host
-    - nix-shell -p openssh --run 'ssh -F ~/.ssh/config ferona-turin "rm -rf tmp-${CI_PIPELINE_ID} && mkdir tmp-${CI_PIPELINE_ID} && git -C tmp-${CI_PIPELINE_ID} clone ${CI_SERVER_PROTOCOL}://gitlab-ci-token:${CI_JOB_TOKEN}@${CI_SERVER_HOST}/${CI_PROJECT_PATH}.git"'
-    - nix-shell -p openssh --run 'ssh -F ~/.ssh/config ferona-turin "git -C tmp-${CI_PIPELINE_ID}/${CI_PROJECT_NAME} checkout ${CI_COMMIT_REF_NAME}"'
-    - nix-shell -p openssh --run 'ssh -F ~/.ssh/config ferona-granite-rapids "rm -rf tmp-${CI_PIPELINE_ID} && mkdir tmp-${CI_PIPELINE_ID} && git -C tmp-${CI_PIPELINE_ID} clone ${CI_SERVER_PROTOCOL}://gitlab-ci-token:${CI_JOB_TOKEN}@${CI_SERVER_HOST}/${CI_PROJECT_PATH}.git"'
-    - nix-shell -p openssh --run 'ssh -F ~/.ssh/config ferona-granite-rapids "git -C tmp-${CI_PIPELINE_ID}/${CI_PROJECT_NAME} checkout ${CI_COMMIT_REF_NAME}"'
-    - nix-shell -p openssh --run 'ssh -F ~/.ssh/config ferona-sapphire-rapids "rm -rf tmp-${CI_PIPELINE_ID} && mkdir tmp-${CI_PIPELINE_ID} && git -C tmp-${CI_PIPELINE_ID} clone ${CI_SERVER_PROTOCOL}://gitlab-ci-token:${CI_JOB_TOKEN}@${CI_SERVER_HOST}/${CI_PROJECT_PATH}.git"'
-    - nix-shell -p openssh --run 'ssh -F ~/.ssh/config ferona-sapphire-rapids "git -C tmp-${CI_PIPELINE_ID}/${CI_PROJECT_NAME} checkout ${CI_COMMIT_REF_NAME}"'
+    - nix-shell -p openssh --run './local_tests/checkout_repo_remote.sh ferona-turin'
+    - nix-shell -p openssh --run './local_tests/checkout_repo_remote.sh ferona-granite-rapids'
+    - nix-shell -p openssh --run './local_tests/checkout_repo_remote.sh ferona-sapphire-rapids'
     # prepare image on nfs server host
     - nix-shell -p openssh --run 'ssh -F ~/.ssh/config ferona-turin "./tmp-${CI_PIPELINE_ID}/${CI_PROJECT_NAME}/local_tests/run_chv_profile_prepare_windows_image.sh ${CI_PIPELINE_ID}"' 2>&1 | tee -a logs/ferona-turin.log
     # build CHV on each host
@@ -291,12 +285,9 @@ test:live-migration-windows-different-versions-bare-metal:
   script:
     - rm -rf logs && mkdir logs
     # checkout repo on each host
-    - nix-shell -p openssh --run 'ssh -F ~/.ssh/config ferona-turin "rm -rf tmp-${CI_PIPELINE_ID} && mkdir tmp-${CI_PIPELINE_ID} && git -C tmp-${CI_PIPELINE_ID} clone ${CI_SERVER_PROTOCOL}://gitlab-ci-token:${CI_JOB_TOKEN}@${CI_SERVER_HOST}/${CI_PROJECT_PATH}.git"'
-    - nix-shell -p openssh --run 'ssh -F ~/.ssh/config ferona-turin "git -C tmp-${CI_PIPELINE_ID}/${CI_PROJECT_NAME} checkout ${CI_COMMIT_REF_NAME}"'
-    - nix-shell -p openssh --run 'ssh -F ~/.ssh/config ferona-granite-rapids "rm -rf tmp-${CI_PIPELINE_ID} && mkdir tmp-${CI_PIPELINE_ID} && git -C tmp-${CI_PIPELINE_ID} clone ${CI_SERVER_PROTOCOL}://gitlab-ci-token:${CI_JOB_TOKEN}@${CI_SERVER_HOST}/${CI_PROJECT_PATH}.git"'
-    - nix-shell -p openssh --run 'ssh -F ~/.ssh/config ferona-granite-rapids "git -C tmp-${CI_PIPELINE_ID}/${CI_PROJECT_NAME} checkout ${CI_COMMIT_REF_NAME}"'
-    - nix-shell -p openssh --run 'ssh -F ~/.ssh/config ferona-sapphire-rapids "rm -rf tmp-${CI_PIPELINE_ID} && mkdir tmp-${CI_PIPELINE_ID} && git -C tmp-${CI_PIPELINE_ID} clone ${CI_SERVER_PROTOCOL}://gitlab-ci-token:${CI_JOB_TOKEN}@${CI_SERVER_HOST}/${CI_PROJECT_PATH}.git"'
-    - nix-shell -p openssh --run 'ssh -F ~/.ssh/config ferona-sapphire-rapids "git -C tmp-${CI_PIPELINE_ID}/${CI_PROJECT_NAME} checkout ${CI_COMMIT_REF_NAME}"'
+    - nix-shell -p openssh --run './local_tests/checkout_repo_remote.sh ferona-turin'
+    - nix-shell -p openssh --run './local_tests/checkout_repo_remote.sh ferona-granite-rapids'
+    - nix-shell -p openssh --run './local_tests/checkout_repo_remote.sh ferona-sapphire-rapids'
     # prepare image on nfs server host
     - nix-shell -p openssh --run 'ssh -F ~/.ssh/config ferona-turin "./tmp-${CI_PIPELINE_ID}/${CI_PROJECT_NAME}/local_tests/run_chv_profile_prepare_windows_image.sh ${CI_PIPELINE_ID}"' 2>&1 | tee -a logs/ferona-turin.log
     # build CHV on each host
