@@ -104,11 +104,23 @@ in the `DBG_LOG_DIR`.
 
 ## Using a Custom Libvirt or Cloud Hypervisor
 
-To test against a specific version or local build, you should update your
-`flake.nix` to refer to the new input, for example:
+The tests already use the libvirt sources from this repository checkout. In
+other words, running `nix run .#tests.x86_64-linux.<attribute>.driver` builds
+libvirt from your local checkout rather than from an external libvirt input.
 
-`libvirt.url = "git+file:/home/pschuster/dev/libvirt?submodules=1";`
+Because this repository is evaluated as a flake source, only Git-tracked files
+are included. Local modifications to tracked files are picked up automatically,
+but newly created untracked files are ignored until they are added to Git.
 
+To test with a custom Cloud Hypervisor build or checkout, update the
+`cloud-hypervisor` input in the root `flake.nix`, for example:
+
+```nix
+cloud-hypervisor.url = "git+file:/home/pschuster/dev/cloud-hypervisor";
+```
+
+If you are working on migration tests that also use the previous release, apply
+the same change to `cloud-hypervisor-prev` or `libvirt-prev` as needed.
 
 ### SSH into the VMs
 
