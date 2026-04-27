@@ -212,7 +212,7 @@ let
 
   # Convenience attribute containing all nixos test driver attributes mainly
   # used for evaluation checks
-  all = pkgs.symlinkJoin {
+  all_drivers = pkgs.symlinkJoin {
     name = "all-test-driver";
     paths = pkgs.lib.pipe tests [
       builtins.attrValues
@@ -220,4 +220,4 @@ let
     ];
   };
 in
-(builtins.mapAttrs addNoPortForwardingAttr tests) // { inherit all; }
+(builtins.mapAttrs addNoPortForwardingAttr tests) // { inherit all_drivers; }
