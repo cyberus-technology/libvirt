@@ -63,7 +63,7 @@ echo "Start test-vm on: ${HOST1}"
 ssh -F ~/.ssh/config ${HOST1} \
   "nohup ./tmp-${CI_PIPELINE_ID}/${CI_PROJECT_NAME}/result/bin/cloud-hypervisor \
   --net tap=tap10,mac=02:50:F2:00:01:81,offload_tso=off,offload_ufo=off,offload_csum=off \
-  --kernel ${NFS_ROOT}/CLOUDHV.fd \
+  --firmware ${NFS_ROOT}/CLOUDHV.fd \
   --disk path=${NFS_ROOT}/windows-root.raw,image_type=raw,sparse=off \
   --memory size=8G --cpus boot=2,kvm_hyperv=on,profile=sapphire-rapids \
   --serial tty \
