@@ -59,7 +59,7 @@ echo "Start test-vm on: ${HOST1}"
 ssh -F ~/.ssh/config ${HOST1} \
   "nohup ./tmp-${CI_PIPELINE_ID}/${CI_PROJECT_NAME}/result/bin/cloud-hypervisor \
   --net tap=tap10,mac=be:e3:00:00:00:01 \
-  --kernel ${NFS_ROOT}/CLOUDHV.fd \
+  --firmware ${NFS_ROOT}/CLOUDHV.fd \
   --disk path=${NFS_ROOT}/jammy-server-cloudimg-amd64.raw,image_type=raw,sparse=off \
     path=${NFS_ROOT}/cloud-init.raw,image_type=raw,sparse=off \
   --memory size=2G --cpus boot=2,profile=sapphire-rapids \
