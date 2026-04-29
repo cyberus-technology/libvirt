@@ -15,5 +15,10 @@ line-length=72
 [body-min-length]
 min-length=0
 
+# Following is a list of directories and files that are Cyberus exclusive,
+# meaning these files do not exist upstream and they are not meant for
+# upstreaming, e.g. our Nix related changes.
+# The list is used as a filter to prevent mixing Cyberus exclusive changes with
+# potentially upstreamable changes in commits.
 [UC-scope]
-filter-paths=nixos-tests,flake.nix,flake.lock
+filter-paths=nixos-tests,local_tests,patches,ci/gitlint,ci/README.auto.approve.md,ci/auto_approve.sh,flake.nix,flake.lock,.gitlab-ci.yml,.envrc,.gitlint_auto_approve,.gitlint
