@@ -56,6 +56,7 @@ class CommitFilter(CommitRule):
 
         filter_paths = ", ".join(self.options["filter-paths"].value)
         msg = (
-            f"Commit mixes filtered paths ({filter_paths}) with paths outside the filter"
+                f"Commit mixes filtered paths ({filter_paths}) with paths outside the filter. "
+                f"Inside filter: {in_filter}. Outside filter: {out_of_filter}"
         )
         return [RuleViolation(self.id, msg, line_nr=1)]
