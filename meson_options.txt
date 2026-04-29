@@ -133,3 +133,5 @@ option('pm_utils', type: 'feature', value: 'auto', description: 'use pm-utils fo
 option('ssh_proxy', type: 'feature', value: 'auto', description: 'Build ssh-proxy for ssh over vsock')
 option('sysctl_config', type: 'feature', value: 'auto', description: 'Whether to install sysctl configs')
 option('tls_priority', type: 'string', value: 'auto', description: 'set the default TLS session priority string')
+
+option('commit_hash', type: 'string', value: '', description: 'Override git commit hash (used when building from Nix derivation)')
