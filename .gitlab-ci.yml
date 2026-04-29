@@ -8,6 +8,7 @@ stages:
   - build
   - test
   - post
+  - bump
 
 variables:
   GIT_SUBMODULE_STRATEGY: recursive
@@ -305,3 +306,34 @@ post:live-migration-bare-metal-cleanup:
     - echo "Clean shared nfs directory"
     - nix-shell -p openssh --run 'ssh -F ~/.ssh/config ferona-turin "rm -rf /exports/gitlab/${CI_PIPELINE_ID}"' || true
   after_script: []
+
+# please look into: ci/README.auto.approve.md
+bump:auto-approve-check:
+  stage: bump
+  extends:
+    - .nix_build_template
+  variables:
+    GIT_DEPTH: "0"  # Ensures full Git history is fetched
+  rules:
+    - if: ($CI_PIPELINE_SOURCE == "merge_request_event" && $CI_PROJECT_PATH == "cyberus/cloud/libvirt")
+      changes:
+        - flake.lock
+  script:
+    # Determine the target branch of the merge request
+    - TARGET_BRANCH=${CI_MERGE_REQUEST_TARGET_BRANCH_NAME:-$CI_DEFAULT_BRANCH}
+    - echo "TARGET_BRANCH=$TARGET_BRANCH"
+    # Lint commit messages in the range from target branch to current HEAD
+    - nix run nixpkgs#gitlint -- --commits origin/$TARGET_BRANCH.. -C .gitlint_auto_approve
+
+# please look into: ci/README.auto.approve.md
+bump:auto-approve-merge:
+  stage: bump
+  needs: [ "bump:auto-approve-check" ]
+  extends:
+    - .nix_build_template
+  rules:
+    - if: ($CI_PIPELINE_SOURCE == "merge_request_event" && $CI_PROJECT_PATH == "cyberus/cloud/libvirt")
+      changes:
+        - flake.lock
+  script:
+    - nix-shell -p curl --run './ci/auto_approve.sh'
