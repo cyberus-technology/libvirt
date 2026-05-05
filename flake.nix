@@ -53,8 +53,15 @@
           # Exclude .git and other VCS artifacts
           lib.cleanSourceFilter path type
           && (
-            # Exclude our own additional files
-            !(lib.hasSuffix ".nix" baseName || baseName == "flake.lock" || baseName == ".gitlab-ci.yml")
+            # Exclude our own additional files that are irrelevant for the
+            # libvirt package.
+            !(
+              lib.hasSuffix ".nix" baseName
+              || baseName == "flake.lock"
+              || baseName == ".gitlab-ci.yml"
+              || baseName == "nixos-tests"
+              || baseName == "local_tests"
+            )
           );
       };
 
