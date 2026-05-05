@@ -210,6 +210,12 @@ test:numa-host-tests:
   variables:
     TEST_ATTR: numa_hosts
 
+test:default-windows-tests:
+  extends:
+    - .test_nixos_tests
+  variables:
+    TEST_ATTR: windows
+
 # the cpu profile test requires the appropriate hardware
 test:cpu_profiles:
   stage: test
