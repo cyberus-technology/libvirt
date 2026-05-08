@@ -8,6 +8,10 @@ HOST2="ferona-sapphire-rapids"  # 172.16.0.82
 
 shutdown_vm() {
   local HOST=$1
+  echo "Debug running CHV processes on host: ${HOST}"
+  # list running processes
+  ssh -F ~/.ssh/config ${HOST} "ps axu | grep cloud-hypervisor | grep ${CI_PIPELINE_ID}"
+
   ssh -F ~/.ssh/config ${HOST} \
   ./tmp-${CI_PIPELINE_ID}/${CI_PROJECT_NAME}/result/bin/ch-remote \
   --api-socket /tmp/chv.${CI_PIPELINE_ID}.sock shutdown || true
