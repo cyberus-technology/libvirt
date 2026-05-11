@@ -133,7 +133,10 @@ def initialControllerVMSetup(
 
     controllerVM.succeed("mkdir -p /var/lib/libvirt/storage-pools/nfs-share")
 
-    controllerVM.succeed("ssh -o StrictHostKeyChecking=no computeVM echo")
+    controllerVM.wait_until_succeeds(
+        "ssh -n -o BatchMode=yes -o UserKnownHostsFile=/dev/null "
+        "-o StrictHostKeyChecking=no computeVM true"
+    )
 
     controllerVM.succeed(
         'virsh pool-define-as --name "nfs-share" --type netfs --source-host "localhost" --source-path "nfs-root" --source-format "nfs" --target "/var/lib/libvirt/storage-pools/nfs-share"'
@@ -158,7 +161,10 @@ def initialComputeVMSetup(computeVM: Machine) -> None:
     computeVM.wait_for_unit("multi-user.target")
     computeVM.succeed("mkdir -p /var/lib/libvirt/storage-pools/nfs-share")
 
-    computeVM.succeed("ssh -o StrictHostKeyChecking=no controllerVM echo")
+    computeVM.wait_until_succeeds(
+        "ssh -n -o BatchMode=yes -o UserKnownHostsFile=/dev/null "
+        "-o StrictHostKeyChecking=no controllerVM true"
+    )
 
     computeVM.succeed(
         'virsh pool-define-as --name "nfs-share" --type netfs --source-host "controllerVM" --source-path "nfs-root" --source-format "nfs" --target "/var/lib/libvirt/storage-pools/nfs-share"'
