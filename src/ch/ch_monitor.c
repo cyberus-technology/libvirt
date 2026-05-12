@@ -546,6 +546,15 @@ virCHMonitorBuildDiskJson(virJSONValue *disks, virDomainDiskDef *diskdef)
             }
         }
 
+        if (diskdef->info.bootIndex) {
+            if (virJSONValueObjectAppendNumberInt(disk, "bootindex", diskdef->info.bootIndex) < 0) {
+                virReportError(VIR_ERR_INTERNAL_ERROR,
+                           ("Failed to add boot index to JSON for disk with alias '%s'"),
+                           diskdef->info.alias);
+                return -1;
+            }
+        }
+
         if (diskdef->src->format == VIR_STORAGE_FILE_RAW) {
             if (virJSONValueObjectAppendString(disk, "image_type", "Raw") < 0)
                 return -1;
