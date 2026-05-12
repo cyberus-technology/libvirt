@@ -34,28 +34,14 @@ The approval is done with two bot users (Gitlab Access Token).
 * add two tasks:
 
 ```yaml
-bump:auto-approve-check:
+bump:auto-approve:
   stage: bump
   extends:
     - .nix_build_template
+  variables:
+    GIT_DEPTH: "0"  # Ensures full Git history is fetched
   rules:
-    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
-      changes:
-        - flake.lock
-  script:
-    # Determine the target branch of the merge request
-    - TARGET_BRANCH=${CI_MERGE_REQUEST_TARGET_BRANCH_NAME:-$CI_DEFAULT_BRANCH}
-    - echo "TARGET_BRANCH=$TARGET_BRANCH"
-    # Lint commit messages in the range from target branch to current HEAD
-    - nix run nixpkgs#gitlint -- --commits origin/$TARGET_BRANCH.. -C .gitlint_auto_approve
-
-bump:auto-approve-merge:
-  stage: bump
-  needs: [ "bump:auto-approve-check" ]
-  extends:
-    - .nix_build_template
-  rules:
-    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: ($CI_PIPELINE_SOURCE == "merge_request_event" && $CI_PROJECT_PATH == "cyberus/cloud/libvirt")
       changes:
         - flake.lock
   script:
