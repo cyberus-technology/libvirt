@@ -645,6 +645,13 @@ in
             argument = "${pkgs.writeText "domain.xml" (virsh_ch_xml { })}";
           };
         };
+        "/etc/domain-chv-no-serial.xml" = {
+          "C+" = {
+            argument = "${pkgs.writeText "domain.xml" (virsh_ch_xml {
+              serial = "";
+            })}";
+          };
+        };
         "/etc/domain-chv-serial-tcp.xml" = {
           "C+" = {
             argument = "${pkgs.writeText "domain.xml" (virsh_ch_xml {

@@ -311,6 +311,23 @@ class LibvirtTests(LibvirtTestsBase):  # type: ignore
                 "virsh migrate --domain testvm --desturi ch+tcp://controllerVM/session --persistent --live --p2p"
             )
 
+    def test_live_migration_without_serial(self):
+        """
+        Test that a live migration of a VM without any serial device works.
+        We had issues with this in the past, so we test this explicity.
+        """
+
+        controllerVM.succeed("virsh define /etc/domain-chv-no-serial.xml")
+        controllerVM.succeed("virsh start testvm")
+
+        wait_for_ssh(controllerVM)
+
+        controllerVM.succeed(
+            "virsh migrate --domain testvm --desturi ch+tcp://computeVM/session --persistent --live --p2p"
+        )
+
+        wait_for_ssh(computeVM)
+
     def test_live_migration_cancel_basic(self):
         """
         Test to cancel (abort) a migration.
