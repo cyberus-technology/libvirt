@@ -1594,6 +1594,27 @@ class LibvirtTests(LibvirtTestsBase):  # type: ignore
             sender.succeed(migration_command)
             wait_for_ssh(receiver)
 
+    def test_live_migration_attach_remove_net_dev(self):
+        """
+        Test the live migration after attaching a network device and removing
+        the network device the VM was originally started with.
+        """
+        controllerVM.succeed("virsh define /etc/domain-chv.xml")
+        controllerVM.succeed("virsh start testvm")
+
+        wait_for_ssh(controllerVM)
+
+        hotplug(controllerVM, "virsh attach-device testvm /etc/new_interface.xml")
+        wait_for_ssh(controllerVM, ip="192.168.2.2")
+
+        controllerVM.succeed("virsh detach-device testvm /etc/initial_interface.xml")
+        wait_for_ssh(controllerVM, ip="192.168.2.2")
+
+        controllerVM.succeed(
+            "virsh migrate --domain testvm --desturi ch+tcp://computeVM/session --live --p2p"
+        )
+        wait_for_ssh(computeVM, ip="192.168.2.2")
+
     def test_live_migration_print_versions(self):
         """
         The test prints the versions of cloud-hypervisor and libvirt.
@@ -1613,6 +1634,7 @@ def suite():
         LibvirtTests.test_bdf_implicit_assignment,
         LibvirtTests.test_live_migration,
         LibvirtTests.test_live_migration_after_failed_migration,
+        LibvirtTests.test_live_migration_attach_remove_net_dev,
         LibvirtTests.test_live_migration_cancel_basic,
         LibvirtTests.test_live_migration_cancel_complex,
         LibvirtTests.test_live_migration_during_boot,

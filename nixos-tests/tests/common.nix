@@ -279,13 +279,7 @@ let
             else
               ""
           }
-          <interface type='ethernet'>
-            <mac address='52:54:00:e5:b8:01'/>
-            <target dev='tap1'/>
-            <model type='virtio'/>
-            <driver queues='${toString netQueues}'/>
-            <address type='pci' domain='0x0000' bus='0x00' slot='0x02' function='0x0'/>
-          </interface>
+          ${initial_interface { queues = netQueues; }}
           ${
             if serial == "pty" then
               ''
@@ -336,6 +330,20 @@ let
           else
             ""
         }
+      </interface>
+    '';
+
+  initial_interface =
+    {
+      queues ? 1,
+    }:
+    ''
+      <interface type='ethernet'>
+        <mac address='52:54:00:e5:b8:01'/>
+        <target dev='tap1'/>
+        <model type='virtio'/>
+        <driver queues='${toString queues}'/>
+        <address type='pci' domain='0x0000' bus='0x00' slot='0x02' function='0x0'/>
       </interface>
     '';
 
@@ -811,6 +819,11 @@ in
         "/etc/new_interface.xml" = {
           "C+" = {
             argument = "${pkgs.writeText "new_interface.xml" (new_interface { })}";
+          };
+        };
+        "/etc/initial_interface.xml" = {
+          "C+" = {
+            argument = "${pkgs.writeText "initial_interface.xml" (initial_interface { })}";
           };
         };
         "/etc/new_interface_explicit_bdf.xml" = {
