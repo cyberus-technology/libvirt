@@ -1418,10 +1418,30 @@ class LibvirtTests(LibvirtTestsBase):  # type: ignore
         controllerVM.succeed("virsh start testvm")
         wait_for_ssh(controllerVM)
 
+    def test_add_remove_add_net_dev(self):
+        """
+        Test that we can add a network device (net_1), remove the originally present
+        network device (net_0), then add another network device (net_2).
+        Libvirt should provide network device ids to cloud-hypervisor without collision.
+        """
+        controllerVM.succeed("virsh define /etc/domain-chv.xml")
+        controllerVM.succeed("virsh start testvm")
+
+        wait_for_ssh(controllerVM)
+
+        hotplug(controllerVM, "virsh attach-device testvm /etc/new_interface.xml")
+        wait_for_ssh(controllerVM, ip="192.168.2.2")
+
+        controllerVM.succeed("virsh detach-device testvm /etc/initial_interface.xml")
+        wait_for_ssh(controllerVM, ip="192.168.2.2")
+
+        controllerVM.succeed("virsh attach-device testvm /etc/new_interface_type_network.xml")
+        wait_for_ssh(controllerVM, ip="192.168.2.2")
 
 def suite():
     # Test cases sorted in alphabetical order.
     testcases = [
+        LibvirtTests.test_add_remove_add_net_dev,
         LibvirtTests.test_bdf_domain_defs_in_sync_after_transient_hotplug,
         LibvirtTests.test_bdf_domain_defs_in_sync_after_transient_unplug,
         LibvirtTests.test_bdf_invalid_device_id,
