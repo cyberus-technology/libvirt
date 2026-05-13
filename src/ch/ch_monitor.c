@@ -1866,7 +1866,7 @@ int virCHMonitorMigrationReceive(virCHMonitor *mon,
         goto err;
     }
 
-    if (vmdef->serials[0]->source->type == VIR_DOMAIN_CHR_TYPE_TCP) {
+    if (vmdef->nserials > 0 && vmdef->serials[0]->source->type == VIR_DOMAIN_CHR_TYPE_TCP) {
         DBG("TCP serial in use. Pass adapted TCP serial url: %s", tcp_serial_url);
         if (virJSONValueObjectAppendString(content, "tcp_serial_url", tcp_serial_url) < 0) {
             DBG("virJSONValueObjectAppendString failed for tcp_serial_url");
