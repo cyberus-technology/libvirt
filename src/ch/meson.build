@@ -13,6 +13,7 @@ ch_driver_sources = [
   'ch_events.h',
   'ch_interface.c',
   'ch_interface.h',
+  'ch_migration_cookie.c',
   'ch_monitor.c',
   'ch_monitor.h',
   'ch_process.c',

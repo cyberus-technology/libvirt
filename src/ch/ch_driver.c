@@ -26,6 +26,7 @@
 #include "ch_conf.h"
 #include "ch_domain.h"
 #include "ch_driver.h"
+#include "ch_migration_cookie.h"
 #include "ch_monitor.h"
 #include "ch_pci_addr.h"
 #include "ch_process.h"
@@ -2876,6 +2877,8 @@ chDomainMigrateBegin3(virDomainPtr domain,
     virDomainObj *vm;
     char *xml = NULL;
     virCHDriver *driver = domain->conn->privateData;
+    g_autoptr(chMigrationCookie) migration_cookie = NULL;
+    g_auto(virBuffer) buf = VIR_BUFFER_INITIALIZER;
 
     VIR_INFO("chDomainMigrateBegin3 %p %s %p %p %lu %s",
               domain, xmlin, cookieout, cookieoutlen, flags, dname);
@@ -2899,6 +2902,20 @@ chDomainMigrateBegin3(virDomainPtr domain,
     // Copied from libxl_migration.c:386
     if (virDomainObjBeginJob(vm, VIR_JOB_MODIFY) < 0)
         goto cleanup;
+
+    if (cookieout && cookieoutlen) {
+        if (!(migration_cookie = chMigrationCookieNew(vm->def))) {
+            goto cleanup;
+        }
+
+        if (chMigrationCookieXMLFormat(&buf, migration_cookie) < 0) {
+            goto cleanup;
+        }
+        *cookieoutlen = virBufferUse(&buf) + 1;
+        *cookieout = virBufferContentAndReset(&buf);
+
+        VIR_DEBUG("cookielen=%d cookie=%s", *cookieoutlen, *cookieout);
+    }
 
     xml = virDomainDefFormat(vm->def, driver->xmlopt, VIR_DOMAIN_DEF_FORMAT_SECURE);
 
@@ -3197,6 +3214,7 @@ chDomainMigratePrepare3(virConnectPtr dconn,
     g_autoptr(virCHDriverConfig) cfg = virCHDriverGetConfig(driver);
     int rc = -1;
     const char *incFormat = "%s:%s:%d"; // seems to differ for AF_INET6
+    g_autoptr(chMigrationCookie) migration_cookie = NULL;
 
     DBG("%p %s %u %p %p %s %p %lu %s %s",
         dconn, cookiein, cookieinlen, cookieout, cookieoutlen, uri_in, uri_out, flags, dname, dom_xml);
@@ -3232,6 +3250,44 @@ chDomainMigratePrepare3(virConnectPtr dconn,
     } else if ((server_addr = virGetHostname()) == NULL) {
         rc = -1;
         goto err_cleanup_port_alloc;
+    }
+
+    migration_cookie = chMigrationCookieParse(cookiein, cookieinlen);
+    if (cookiein && !migration_cookie) {
+        virReportError(VIR_ERR_INTERNAL_ERROR, "%s",
+                       _("Migration cookie parsing failed"));
+        rc = -1;
+        goto err_cleanup_port_alloc;
+    }
+
+    if (migration_cookie){
+        if (migration_cookie->nnets != def->nnets) {
+            virReportError(VIR_ERR_INTERNAL_ERROR, "%s",
+                           _("Number of network devices in migration cookie and migration XML does not match"));
+            rc = -1;
+            goto err_cleanup_port_alloc;
+        }
+        for (size_t i = 0; i < migration_cookie->nnets; i++) {
+            if (migration_cookie->net[i].alias) {
+                if (def->nets[i]->info.alias) {
+                    if (STRNEQ_NULLABLE(def->nets[i]->info.alias, migration_cookie->net[i].alias)) {
+                        virReportError(VIR_ERR_INTERNAL_ERROR, "%s",
+                                       _("Mismatch between migration cookie and migration XML for network alias"));
+                        rc = -1;
+                        goto err_cleanup_port_alloc;
+                    }
+                } else {
+                    def->nets[i]->info.alias = g_strdup(migration_cookie->net[i].alias);
+                }
+            } else {
+                if (def->nets[i]->info.alias) {
+                    virReportError(VIR_ERR_INTERNAL_ERROR, "%s",
+                                   _("Mismatch between migration cookie and migration XML for network alias"));
+                    rc = -1;
+                    goto err_cleanup_port_alloc;
+                }
+            }
+        }
     }
 
     if (!(vm = virDomainObjListAdd(driver->domains, &def,
@@ -3711,14 +3767,43 @@ chDomainMigratePerform3Impl(virDomainObj *vm,
             DBG("Parse dconnuri failed.");
         }
 
-        if (dconn->driver->domainMigratePrepare3(dconn, cookiein, cookieinlen,
-                                                 cookieout, cookieoutlen,
-                                                 uri_parsed ? uri_parsed->server : NULL,
-                                                 &uri_out, flags, dname,
-                                                 0 /* bandwidth */, dom_xml) < 0) {
-            DBG("Failed to prepare migration.");
-            rc = -1;
-            goto cleanup;
+        // Set the cookie if there is none.
+        if (!cookiein && !cookieinlen) {
+            g_autoptr(chMigrationCookie) migration_cookie = NULL;
+            g_auto(virBuffer) buf = VIR_BUFFER_INITIALIZER;
+            g_autofree char *custom_cookiein = NULL;
+            int custom_cookieinlen = 0;
+
+            if (!(migration_cookie = chMigrationCookieNew(vm->def))) {
+                goto cleanup;
+            }
+
+            if (chMigrationCookieXMLFormat(&buf, migration_cookie) < 0) {
+                goto cleanup;
+            }
+            custom_cookieinlen = virBufferUse(&buf) + 1;
+            custom_cookiein = virBufferContentAndReset(&buf);
+
+            DBG("custom_cookieinlen=%d custom_cookiein=%s", custom_cookieinlen, custom_cookiein);
+            if (dconn->driver->domainMigratePrepare3(dconn, custom_cookiein, custom_cookieinlen,
+                                                     cookieout, cookieoutlen,
+                                                     uri_parsed ? uri_parsed->server : NULL,
+                                                     &uri_out, flags, dname,
+                                                     0 /* bandwidth */, dom_xml) < 0) {
+                DBG("Failed to prepare migration.");
+                rc = -1;
+                goto cleanup;
+            }
+        } else {
+            if (dconn->driver->domainMigratePrepare3(dconn, cookiein, cookieinlen,
+                                                     cookieout, cookieoutlen,
+                                                     uri_parsed ? uri_parsed->server : NULL,
+                                                     &uri_out, flags, dname,
+                                                     0 /* bandwidth */, dom_xml) < 0) {
+                DBG("Failed to prepare migration.");
+                rc = -1;
+                goto cleanup;
+            }
         }
 
         DBG("Got uri_out that will be used for CHV migration: %s", uri_out);

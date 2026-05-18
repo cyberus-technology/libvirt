@@ -1904,11 +1904,14 @@ int virCHMonitorMigrationReceive(virCHMonitor *mon,
                 vmdef->nets[i]->driver.virtio.queues = 1;
             }
             net_json = virJSONValueNewObject();
-            // TODO switch to chAssignDeviceNetAlias from ch_alias.c
-            id = g_strdup_printf("%s_%zu", CH_NET_ID_PREFIX, i);
-            vmdef->nets[i]->info.alias = g_strdup_printf("%s", id);
+            if (!vmdef->nets[i]->info.alias) {
+                // TODO switch to chAssignDeviceNetAlias from ch_alias.c
+                id = g_strdup_printf("%s_%zu", CH_NET_ID_PREFIX, i);
+                DBG("No alias set for device at index \"%zu\", setting to \"%s\"", i, id);
+                vmdef->nets[i]->info.alias = g_strdup_printf("%s", id);
+            }
 
-            if (virJSONValueObjectAppendString(net_json, "id", id) < 0) {
+            if (virJSONValueObjectAppendString(net_json, "id", vmdef->nets[i]->info.alias) < 0) {
                 DBG("virJSONValueObjectAppendString failed for id");
                 rc = -1;
                 goto err;
