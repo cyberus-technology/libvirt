@@ -1,3 +1,4 @@
+import string
 import textwrap
 import time
 import unittest
@@ -1376,6 +1377,47 @@ class LibvirtTests(LibvirtTestsBase):  # type: ignore
         setup_nested_cirros(controllerVM)
         assert_nested_cirros_connectivity(controllerVM)
 
+    def test_domain_with_many_devices_without_explicit_bdf(self):
+        """
+        We ran into an segfault when defining a domain that has a lot of
+        devices defined in the initial domain XML. The segfault came because
+        the queue where we collected the devices needed to be increased in
+        size, and we resized it not enough (we used g_realloc with new element
+        count, and not required bytes as expected).
+
+        This test checks that defining and starting a domain that has a lot of
+        initial devices defined works as expected.
+
+        To be able to create a domain XML with a lot of devices defined, we
+            1. start a working domain
+            2. hotplug multiple disk devices
+            3. shutdown the domain
+            4. copy the persistent XML and strip the PCI addresses from it
+            5. define a new domain from that XML
+        """
+        INITIAL_DISK_DEVICE_COUNT = 20
+
+        controllerVM.succeed("virsh define /etc/domain-chv.xml")
+        controllerVM.succeed("virsh start testvm")
+
+        wait_for_ssh(controllerVM)
+
+        for i in range(1, INITIAL_DISK_DEVICE_COUNT + 1):
+            controllerVM.succeed(f"qemu-img create -f raw /tmp/disk{i}.img 1M")
+            hotplug(
+                controllerVM,
+                f"virsh attach-disk --domain testvm --target vd{string.ascii_lowercase[i]} --persistent --source /tmp/disk{i}.img",
+            )
+
+        controllerVM.succeed("cp /var/lib/libvirt/ch/testvm.xml /tmp/domain.xml")
+        controllerVM.succeed("sed -i '/<address/d' /tmp/domain.xml")
+        controllerVM.succeed("virsh destroy testvm")
+        controllerVM.succeed("virsh undefine testvm")
+
+        controllerVM.succeed("virsh define /tmp/domain.xml")
+        controllerVM.succeed("virsh start testvm")
+        wait_for_ssh(controllerVM)
+
 
 def suite():
     # Test cases sorted in alphabetical order.
@@ -1389,6 +1431,7 @@ def suite():
         LibvirtTests.test_disk_is_locked,
         LibvirtTests.test_disk_resize_qcow2,
         LibvirtTests.test_disk_resize_raw,
+        LibvirtTests.test_domain_with_many_devices_without_explicit_bdf,
         LibvirtTests.test_hotplug,
         LibvirtTests.test_libvirt_default_net_prefix_triggers_desynchronizing,
         LibvirtTests.test_libvirt_event_stop_failed,
