@@ -60,7 +60,8 @@ static int new_addr_queue(dynamicAddressQueue **queue) {
 static int add_info_to_queue(dynamicAddressQueue *queue, virDomainDeviceInfo *devInfo) {
     if (queue->nextIdx >= queue->size) {
         queue->size *= 2;
-        queue->devInfos = g_realloc(queue->devInfos, queue->size);
+        queue->devInfos = g_renew(virDomainDeviceInfo *, queue->devInfos,
+                                  queue->size);
         if (!queue->devInfos) {
             return -1;
         }
