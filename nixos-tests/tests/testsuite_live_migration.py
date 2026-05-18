@@ -440,6 +440,44 @@ class LibvirtTests(LibvirtTestsBase):  # type: ignore
         migrate_cancel_migrate(controllerVM, computeVM)
         migrate_cancel_migrate(computeVM, controllerVM)
 
+    def test_live_migration_with_detach_and_attach_of_the_same_device_after_migration(self):
+        """
+        This is a regression test for a bug we had in cloud-hypervisor. We first hot-attach
+        a disk and then we live-migrate. Afterwards, we detach the device and re-attach the
+        exact same device as before. The assumption is that this works without any issues
+        as it is a valid use-case.
+        """
+
+        controllerVM.succeed("virsh define /etc/domain-chv.xml")
+        controllerVM.succeed("virsh start testvm")
+
+        wait_for_ssh(controllerVM)
+
+        controllerVM.succeed("qemu-img create -f raw /nfs-root/disk1.img 10M")
+        controllerVM.succeed("chmod 0666 /nfs-root/disk1.img")
+
+        hotplug(
+            controllerVM,
+            "virsh attach-disk --domain testvm --target vdb --persistent --source /var/lib/libvirt/storage-pools/nfs-share/disk1.img",
+        )
+
+        controllerVM.succeed(
+            "virsh migrate --domain testvm --desturi ch+tcp://computeVM/session --persistent --live --p2p --parallel --parallel-connections 4"
+        )
+
+        wait_for_ssh(computeVM)
+
+        hotplug(
+            computeVM,
+            "virsh detach-disk --domain testvm --target vdb --persistent",
+        )
+
+        hotplug(
+            computeVM,
+            "virsh attach-disk --domain testvm --target vdb --persistent --source /var/lib/libvirt/storage-pools/nfs-share/disk1.img",
+        )
+
+
     def test_live_migration_with_hotplug(self):
         """
         Test that transient and persistent devices are correctly handled during live migrations.
@@ -1590,6 +1628,7 @@ def suite():
         LibvirtTests.test_live_migration_tls_without_certificates,
         LibvirtTests.test_live_migration_to_self_is_rejected,
         LibvirtTests.test_live_migration_virsh_non_blocking,
+        LibvirtTests.test_live_migration_with_detach_and_attach_of_the_same_device_after_migration,
         LibvirtTests.test_live_migration_with_guest_reboot,
         LibvirtTests.test_live_migration_with_guest_shutdown,
         LibvirtTests.test_live_migration_with_hotplug,
