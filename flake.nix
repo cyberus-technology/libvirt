@@ -12,7 +12,7 @@
     # Previous release of libvirt for migration testing with different versions.
     # Using the shorthand notation of "github:user/repo..." may lead to build errors
     # like "source-with-submodules> cp: cannot create regular file '[...]': Permission denied".
-    libvirt-prev.url = "git+https://github.com/cyberus-technology/libvirt?ref=refs/tags/gardenlinux-release-26-03-31&submodules=1";
+    libvirt-prev.url = "git+https://github.com/cyberus-technology/libvirt?ref=refs/tags/gardenlinux-release-26-04-20&submodules=1";
     libvirt-prev.flake = false;
 
     keycodemapdb.url = "git+https://gitlab.com/keycodemap/keycodemapdb.git";
