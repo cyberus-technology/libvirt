@@ -10,7 +10,7 @@
 #include "virlog.h"
 
 #define VIR_FROM_THIS VIR_FROM_CH
-#define CH_NET_ID_PREFIX "net"
+#define CH_NET_ID_PREFIX "net_"
 
 VIR_LOG_INIT("ch.ch_alias");
 

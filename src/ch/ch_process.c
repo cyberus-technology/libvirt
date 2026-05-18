@@ -606,7 +606,6 @@ chProcessAddNetworkDevice(virCHDriver *driver,
     size_t nnicindexes = 0;
     size_t tapfd_len = 0;
     size_t payload_len;
-    size_t new_net_id = 0;
     int saved_errno = 0;
     int rc = 0;
     int ret = -1;
@@ -655,8 +654,9 @@ chProcessAddNetworkDevice(virCHDriver *driver,
         goto cleanup;
     }
 
-    new_net_id = vmdef->nnets - 1; // IDs start at 0
-    if (virCHMonitorBuildNetJson(net, new_net_id, &netJson, hyperv_enabled) < 0) {
+    chAssignDeviceNetAlias(vmdef, net);
+
+    if (virCHMonitorBuildNetJson(net, &netJson, hyperv_enabled) < 0) {
         virReportError(VIR_ERR_INTERNAL_ERROR, "%s",
                         _("Failed to build net json"));
         DBG("virCHMonitorBuildNetJson failed.");
@@ -776,7 +776,9 @@ chProcessAddNetworkDevices(virCHDriver *driver,
             return -1;
         }
 
-        if (virCHMonitorBuildNetJson(vmdef->nets[i], i, &netJson, hyperv_enabled) < 0) {
+        chAssignDeviceNetAlias(vmdef, vmdef->nets[i]);
+
+        if (virCHMonitorBuildNetJson(vmdef->nets[i], &netJson, hyperv_enabled) < 0) {
             virReportError(VIR_ERR_INTERNAL_ERROR, "%s",
                            _("Failed to build net json"));
             DBG("virCHMonitorBuildNetJson failed.");

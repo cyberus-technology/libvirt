@@ -48,7 +48,6 @@
 
 #define VIRCH_THREAD_NAME_LEN   16
 
-#define CH_NET_ID_PREFIX "net"
 
 typedef enum {
     virCHThreadTypeEmulator,
@@ -225,7 +224,6 @@ virCHMonitorBuildDiskJson(virJSONValue *disks, virDomainDiskDef *diskdef);
 
 int
 virCHMonitorBuildNetJson(virDomainNetDef *netdef,
-                         int netindex,
                          char **jsonstr,
                          bool hyperv_enabled);
 int virCHMonitorBuildRestoreJson(virDomainDef *vmdef,

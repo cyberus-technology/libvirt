@@ -653,7 +653,6 @@ virCHMonitorBuildRngJson(virJSONValue *content, virDomainDef *vmdef)
 /**
  * virCHMonitorBuildNetJson:
  * @net: pointer to a guest network definition
- * @netindex: index of the guest network definition
  * @jsonstr: returned network json
  *
  * Build net json to send to CH
@@ -661,7 +660,6 @@ virCHMonitorBuildRngJson(virJSONValue *content, virDomainDef *vmdef)
  */
 int
 virCHMonitorBuildNetJson(virDomainNetDef *net,
-                         int netindex,
                          char **jsonstr,
                          bool hyperv_enabled)
 {
@@ -669,12 +667,8 @@ virCHMonitorBuildNetJson(virDomainNetDef *net,
     g_autoptr(virJSONValue) net_json = virJSONValueNewObject();
     virDomainNetType actualType = virDomainNetGetActualType(net);
 
-    // TODO switch to chAssignDeviceNetAlias from ch_alias.c
-    g_autofree char *id = g_strdup_printf("%s_%d", CH_NET_ID_PREFIX, netindex);
-    if (virJSONValueObjectAppendString(net_json, "id", id) < 0)
+    if (virJSONValueObjectAppendString(net_json, "id", net->info.alias) < 0)
         return -1;
-
-    net->info.alias = g_strdup_printf("%s", id);
 
     if (actualType == VIR_DOMAIN_NET_TYPE_ETHERNET &&
         net->guestIP.nips == 1) {
@@ -1904,12 +1898,6 @@ int virCHMonitorMigrationReceive(virCHMonitor *mon,
                 vmdef->nets[i]->driver.virtio.queues = 1;
             }
             net_json = virJSONValueNewObject();
-            if (!vmdef->nets[i]->info.alias) {
-                // TODO switch to chAssignDeviceNetAlias from ch_alias.c
-                id = g_strdup_printf("%s_%zu", CH_NET_ID_PREFIX, i);
-                DBG("No alias set for device at index \"%zu\", setting to \"%s\"", i, id);
-                vmdef->nets[i]->info.alias = g_strdup_printf("%s", id);
-            }
 
             if (virJSONValueObjectAppendString(net_json, "id", vmdef->nets[i]->info.alias) < 0) {
                 DBG("virJSONValueObjectAppendString failed for id");
@@ -2057,7 +2045,6 @@ virCHMonitorBuildRestoreJson(virDomainDef *vmdef,
         g_autoptr(virJSONValue) nets = virJSONValueNewArray();
         for (i = 0; i < vmdef->nnets; i++) {
             g_autoptr(virJSONValue) net_json = virJSONValueNewObject();
-            g_autofree char *id = g_strdup_printf("%s_%zu", CH_NET_ID_PREFIX, i);
 
             // This is set to 0 in domain_conf.c always. Figure out how to
             // handle this properly!
@@ -2068,7 +2055,7 @@ virCHMonitorBuildRestoreJson(virDomainDef *vmdef,
                 vmdef->nets[i]->driver.virtio.queues = 1;
             }
 
-            if (virJSONValueObjectAppendString(net_json, "id", id) < 0)
+            if (virJSONValueObjectAppendString(net_json, "id", vmdef->nets[i]->info.alias) < 0)
                 return -1;
             if (virJSONValueObjectAppendNumberInt(net_json, "num_fds", vmdef->nets[i]->driver.virtio.queues))
                 return -1;
