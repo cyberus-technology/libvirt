@@ -7,7 +7,7 @@
     cloud-hypervisor.url = "github:cyberus-technology/cloud-hypervisor?ref=gardenlinux";
     cloud-hypervisor.inputs.nixpkgs.follows = "nixpkgs";
     # Previous release of cloud-hypervisor for migration testing with different versions.
-    cloud-hypervisor-prev.url = "github:cyberus-technology/cloud-hypervisor?ref=gardenlinux-release-26-03-31";
+    cloud-hypervisor-prev.url = "github:cyberus-technology/cloud-hypervisor?ref=gardenlinux-release-26-04-20";
     cloud-hypervisor-prev.inputs.nixpkgs.follows = "nixpkgs";
     # Previous release of libvirt for migration testing with different versions.
     # Using the shorthand notation of "github:user/repo..." may lead to build errors
