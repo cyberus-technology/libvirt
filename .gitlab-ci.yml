@@ -236,7 +236,7 @@ test:cpu_profiles:
     - nix-shell -p openssh --run 'ssh -F ~/.ssh/config ${TARGETHOST} "./tmp-${CI_PIPELINE_ID}/${CI_PROJECT_NAME}/local_tests/kill_child_pids.sh"' || true
     - nix-shell -p openssh --run 'ssh -F ~/.ssh/config ${TARGETHOST} "rm -rf tmp-${CI_PIPELINE_ID}"' || true
 
-test:live-migration-bare-metal:
+test:bm:live-migration:
   stage: test
   resource_group: ferona-hardware
   extends:
@@ -255,7 +255,7 @@ test:live-migration-bare-metal:
     # build vm and run live migration
     - nix-shell -p openssh --run './local_tests/run_chv_profile_test.sh ${CI_PIPELINE_ID} ${CI_PROJECT_NAME}'
 
-test:live-migration-windows-bare-metal:
+test:bm:live-migration-windows:
   stage: test
   resource_group: ferona-hardware
   extends:
@@ -274,7 +274,7 @@ test:live-migration-windows-bare-metal:
     # build vm and run live migration
     - nix-shell -p openssh --run './local_tests/run_chv_profile_test_windows.sh ${CI_PIPELINE_ID} ${CI_PROJECT_NAME}'
 
-test:live-migration-windows-different-versions-bare-metal:
+test:bm:live-migration-windows-different-versions:
   stage: test
   resource_group: ferona-hardware
   extends:
@@ -297,9 +297,8 @@ test:live-migration-windows-different-versions-bare-metal:
 # this post job should always run
 # the test stage job may run into an error and a pipeline timeout
 # then this job removes all leftovers from the previos stage
-post:live-migration-bare-metal-cleanup:
+post:bm:live-migration-cleanup:
   stage: post
-  resource_group: ferona-hardware
   extends:
     - .hardware_build_template
   script:
