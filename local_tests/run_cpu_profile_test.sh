@@ -26,11 +26,11 @@ cd $1
 # build test suite
 ########################
 echo ">>> Build test suite"
-nix build .\#tests.x86_64-linux.cpu_profiles.driver
+nix build .\#tests.x86_64-linux.cpu_profiles.passthru.no_port_forwarding.driver
 
 ########################
 # run test suite
 ########################
 ./local_tests/get_child_pids.sh & # run in background
 echo ">>> Run test suite"
-nix run .\#tests.x86_64-linux.cpu_profiles.driver
+nix run .\#tests.x86_64-linux.cpu_profiles.passthru.no_port_forwarding.driver
