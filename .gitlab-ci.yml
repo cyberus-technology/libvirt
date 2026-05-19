@@ -65,6 +65,10 @@ variables:
     - echo 'Host *' > ~/.ssh/config
     - echo "  UserKnownHostsFile ${HOME}/.ssh/known_hosts" >> ~/.ssh/config
     - echo "  User benchmark" >> ${HOME}/.ssh/config
+    - echo "  ConnectTimeout 5" >> ~/.ssh/config
+    - echo "  ServerAliveInterval 5" >> ~/.ssh/config
+    - echo "  ServerAliveCountMax 3" >> ~/.ssh/config
+    - echo "  BatchMode yes" >> ~/.ssh/config
     - echo "  IdentityFile ${HOME}/.ssh/id_ed25519" >> ~/.ssh/config
     - echo "  SendEnv CI_SERVER_PROTOCOL" >> ~/.ssh/config
     - echo "  SendEnv CI_JOB_TOKEN" >> ~/.ssh/config
