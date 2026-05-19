@@ -94,7 +94,7 @@ ssh -F ~/.ssh/config ${HOST2} "ps axu | grep tmp-${CI_PIPELINE_ID}"
 echo "Run ch-remote send-migration on host1: ${HOST1}"
 ssh -F ~/.ssh/config ${HOST1} \
   "./tmp-${CI_PIPELINE_ID}/${CI_PROJECT_NAME}/result/bin/ch-remote \
-  --api-socket /tmp/chv.${CI_PIPELINE_ID}.sock send-migration tcp:172.16.0.82:${VMM_PORT} \
+  --api-socket /tmp/chv.${CI_PIPELINE_ID}.sock send-migration destination_url=tcp:172.16.0.82:${VMM_PORT},connections=8 \
   | tee -a ./tmp-${CI_PIPELINE_ID}/${HOST1}.ch-remote.log"
 
 echo "Migration complete from ${HOST1} to ${HOST2}"
