@@ -82,6 +82,7 @@ variables:
     - |
       nix shell nixpkgs#openssh --command bash -c '
         set -euo pipefail
+        set -x
         ./local_tests/run_chv_profile_cleanup.sh ${CI_PIPELINE_ID} ${CI_PROJECT_NAME}
         echo "Cleanup all working directories on each host"
         ssh -F ~/.ssh/config ferona-turin "rm -rf tmp-${CI_PIPELINE_ID}" || true
@@ -238,6 +239,7 @@ test:cpu_profiles:
     - |
       nix shell nixpkgs#openssh --command bash -c '
         set -euo pipefail
+        set -x
         ./local_tests/checkout_repo_remote.sh ${TARGETHOST}
         ssh -F ~/.ssh/config ${TARGETHOST} "./tmp-${CI_PIPELINE_ID}/${CI_PROJECT_NAME}/local_tests/${TESTSUITE} tmp-${CI_PIPELINE_ID}/${CI_PROJECT_NAME}" 2>&1 | tee logs/${TARGETHOST}.log
       '
@@ -245,6 +247,7 @@ test:cpu_profiles:
     - |
       nix shell nixpkgs#openssh --command bash -c '
         set -euo pipefail
+        set -x
         ssh -F ~/.ssh/config ${TARGETHOST} "./tmp-${CI_PIPELINE_ID}/${CI_PROJECT_NAME}/local_tests/kill_child_pids.sh" || true
         ssh -F ~/.ssh/config ${TARGETHOST} "rm -rf tmp-${CI_PIPELINE_ID}" || true
       '
@@ -284,6 +287,7 @@ test:bm:live-migration-windows:
     - |
       nix shell nixpkgs#openssh --command bash -c '
         set -euo pipefail
+        set -x
         # checkout repo on each host
         ./local_tests/checkout_repo_remote.sh ferona-turin
         ./local_tests/checkout_repo_remote.sh ferona-granite-rapids
@@ -308,6 +312,7 @@ test:bm:live-migration-windows-different-versions:
     - |
       nix shell nixpkgs#openssh --command bash -c '
         set -euo pipefail
+        set -x
         # checkout repo on each host
         ./local_tests/checkout_repo_remote.sh ferona-turin
         ./local_tests/checkout_repo_remote.sh ferona-granite-rapids
@@ -335,6 +340,7 @@ post:bm:live-migration-cleanup:
     - |
       nix shell nixpkgs#openssh --command bash -c '
         set -euo pipefail
+        set -x
         ./local_tests/run_chv_profile_cleanup.sh ${CI_PIPELINE_ID} ${CI_PROJECT_NAME} || true
         echo "Cleanup all working directories on each host"
         ssh -F ~/.ssh/config ferona-turin "rm -rf tmp-${CI_PIPELINE_ID}" || true
