@@ -220,6 +220,7 @@ test:default-windows-tests:
 test:cpu_profiles:
   stage: test
   resource_group: ferona-hardware
+  timeout: "15 minutes"
   extends:
     - .hardware_build_template
   parallel:
@@ -239,6 +240,7 @@ test:cpu_profiles:
 test:bm:live-migration:
   stage: test
   resource_group: ferona-hardware
+  timeout: "10 minutes"
   extends:
     - .hardware_build_template
   script:
@@ -258,6 +260,7 @@ test:bm:live-migration:
 test:bm:live-migration-windows:
   stage: test
   resource_group: ferona-hardware
+  timeout: "10 minutes"
   extends:
     - .hardware_build_template
   script:
@@ -277,6 +280,7 @@ test:bm:live-migration-windows:
 test:bm:live-migration-windows-different-versions:
   stage: test
   resource_group: ferona-hardware
+  timeout: "10 minutes"
   extends:
     - .hardware_build_template
   script:
@@ -299,6 +303,7 @@ test:bm:live-migration-windows-different-versions:
 # then this job removes all leftovers from the previos stage
 post:bm:live-migration-cleanup:
   stage: post
+  timeout: "2 minutes"
   extends:
     - .hardware_build_template
   script:
