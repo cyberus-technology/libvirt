@@ -341,7 +341,9 @@ class LibvirtTests(LibvirtTestsBase):  # type: ignore
         computeVM.fail("virsh domjobabort testvm")
 
         # Stress the VM to make the migration take longer
-        ssh(controllerVM, "screen -dmS stress stress -m 4 --vm-bytes 400M")
+        ssh(controllerVM, "screen -dmS stress stress --vm 4 --vm-bytes 400M --vm-keep")
+        # Give stress time to unfold its impact.
+        time.sleep(1)
 
         def migrate_and_cancel(parallel: int = 1):
             print(f"Testing with {parallel} connections:")
@@ -394,7 +396,9 @@ class LibvirtTests(LibvirtTestsBase):  # type: ignore
             is canceled before it is supposed to succeed.
             """
             # Stress the VM to make the migration take longer
-            ssh(src, "screen -dmS stress stress -m 4 --vm-bytes 400M")
+            ssh(src, "screen -dmS stress stress --vm 4 --vm-bytes 400M --vm-keep")
+            # Give stress time to unfold its impact.
+            time.sleep(1)
 
             # Start migration in background
             src.succeed(
@@ -598,7 +602,9 @@ class LibvirtTests(LibvirtTestsBase):  # type: ignore
         wait_for_ssh(controllerVM)
 
         # Stress the CH VM in order to make the migration take longer
-        ssh(controllerVM, "screen -dmS stress stress -m 4 --vm-bytes 400M")
+        ssh(controllerVM, "screen -dmS stress stress --vm 4 --vm-bytes 400M --vm-keep")
+        # Give stress time to unfold its impact.
+        time.sleep(1)
 
         # Do migration in a screen session and detach
         controllerVM.succeed(
@@ -652,7 +658,9 @@ class LibvirtTests(LibvirtTestsBase):  # type: ignore
         wait_for_ssh(controllerVM)
         old_boot_id = guest_boot_id(controllerVM)
 
-        ssh(controllerVM, "screen -dmS stress stress -m 2 --vm-bytes 400M")
+        ssh(controllerVM, "screen -dmS stress stress --vm 4 --vm-bytes 400M --vm-keep")
+        # Give stress time to unfold its impact.
+        time.sleep(1)
         ssh(controllerVM, "systemd-run --on-active=7s --unit=test-reboot reboot")
 
         migration_ms = measure_ms(
@@ -681,7 +689,9 @@ class LibvirtTests(LibvirtTestsBase):  # type: ignore
 
         wait_for_ssh(controllerVM)
 
-        ssh(controllerVM, "screen -dmS stress stress -m 2 --vm-bytes 400M")
+        ssh(controllerVM, "screen -dmS stress stress --vm 4 --vm-bytes 400M --vm-keep")
+        # Give stress time to unfold its impact.
+        time.sleep(1)
         ssh(
             controllerVM,
             "systemd-run --on-active=7s --unit=test-shutdown shutdown now",
@@ -718,7 +728,9 @@ class LibvirtTests(LibvirtTestsBase):  # type: ignore
         wait_for_ssh(controllerVM)
         old_boot_id = guest_boot_id(controllerVM)
 
-        ssh(controllerVM, "screen -dmS stress stress -m 2 --vm-bytes 400M")
+        ssh(controllerVM, "screen -dmS stress stress --vm 4 --vm-bytes 400M --vm-keep")
+        # Give stress time to unfold its impact.
+        time.sleep(1)
 
         controllerVM.succeed(
             "screen -dmS migrate virsh migrate --domain testvm --desturi ch+tcp://computeVM/session --persistent --live --p2p"
@@ -743,7 +755,9 @@ class LibvirtTests(LibvirtTestsBase):  # type: ignore
         controllerVM.succeed("virsh start testvm")
 
         wait_for_ssh(controllerVM)
-        ssh(controllerVM, "screen -dmS stress stress -m 2 --vm-bytes 400M")
+        ssh(controllerVM, "screen -dmS stress stress --vm 4 --vm-bytes 400M --vm-keep")
+        # Give stress time to unfold its impact.
+        time.sleep(1)
 
         controllerVM.succeed(
             "screen -dmS migrate virsh migrate --domain testvm --desturi ch+tcp://computeVM/session --persistent --live --p2p"
@@ -829,7 +843,9 @@ class LibvirtTests(LibvirtTestsBase):  # type: ignore
         wait_for_ssh(controllerVM)
 
         # Stress the CH VM in order to make the migration take longer
-        ssh(controllerVM, "screen -dmS stress stress -m 4 --vm-bytes 400M")
+        ssh(controllerVM, "screen -dmS stress stress --vm 4 --vm-bytes 400M --vm-keep")
+        # Give stress time to unfold its impact.
+        time.sleep(1)
 
         # Do migration in a screen session and detach
         controllerVM.succeed(
@@ -1310,7 +1326,9 @@ class LibvirtTests(LibvirtTestsBase):  # type: ignore
         wait_for_ssh(controllerVM)
 
         # Stress the CH VM in order to make the migration take longer
-        ssh(controllerVM, "screen -dmS stress stress -m 4 --vm-bytes 400M")
+        ssh(controllerVM, "screen -dmS stress stress --vm 4 --vm-bytes 400M --vm-keep")
+        # Give stress time to unfold its impact.
+        time.sleep(1)
 
         # Next, we attempt multiple times to migrate a VM but each fails with a
         # certain variance in timing. After each failed migration, the VM must
@@ -1457,7 +1475,9 @@ class LibvirtTests(LibvirtTestsBase):  # type: ignore
         )
 
         # Stress the CH VM in order to make the migration take longer
-        ssh(controllerVM, "screen -dmS stress stress -m 2 --vm-bytes 1000M")
+        ssh(controllerVM, "screen -dmS stress stress --vm 4 --vm-bytes 400M --vm-keep")
+        # Give stress time to unfold its impact.
+        time.sleep(1)
 
         # Do migration in a screen session and detach
         controllerVM.succeed(
@@ -1554,7 +1574,9 @@ class LibvirtTests(LibvirtTestsBase):  # type: ignore
             wait_for_ssh(sender)
 
             # Stress the VM in order to make the migration take longer
-            ssh(sender, "screen -dmS stress stress -m 4 --vm-bytes 400M")
+            ssh(sender, "screen -dmS stress stress --vm 4 --vm-bytes 400M --vm-keep")
+            # Give stress time to unfold its impact.
+            time.sleep(1)
 
             # Build migration command
             parallel_args = "--parallel --parallel-connections 4"
