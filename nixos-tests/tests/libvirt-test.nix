@@ -22,6 +22,16 @@ let
       controller = c.mkHostCert "controllerVM" "192.168.100.1";
       compute = c.mkHostCert "computeVM" "192.168.100.2";
     };
+  hostVMHosts = {
+    "192.168.100.1" = [
+      "controllerVM"
+      "controllerVM.local"
+    ];
+    "192.168.100.2" = [
+      "computeVM"
+      "computeVM.local"
+    ];
+  };
 in
 pkgs.testers.nixosTest {
   name = "Libvirt test suite for Cloud Hypervisor";
@@ -44,7 +54,8 @@ pkgs.testers.nixosTest {
       virtualisation = {
         cores = 4;
         memorySize = 4096;
-        interfaces.eth1.vlan = 1;
+        # Deactivate default eth1 network setup as we configure it manually
+        vlans = [ ];
         diskSize = 28672;
         forwardPorts =
           # Port forwarding prevents us from executing the nixos tests in
@@ -59,11 +70,17 @@ pkgs.testers.nixosTest {
               }
             ]
           );
+        qemu.networkingOptions = lib.mkAfter [
+          "-device virtio-net-pci,netdev=hostvm,mac=52:54:00:12:01:02"
+          ''-netdev stream,id=hostvm,server=off,addr.type=unix,addr.path="$SHARED_DIR"/hostvm-net.sock''
+        ];
       };
 
-      networking.extraHosts = ''
-        192.168.100.2 computeVM computeVM.local
+      boot.initrd.services.udev.rules = ''
+        SUBSYSTEM=="net",ACTION=="add",ATTR{address}=="52:54:00:12:01:02",NAME="eth1"
       '';
+
+      networking.hosts = hostVMHosts;
 
       systemd.network = {
         enable = true;
@@ -77,8 +94,9 @@ pkgs.testers.nixosTest {
             matchConfig.Name = [ "eth1" ];
             networkConfig = {
               Address = "192.168.100.1/24";
-              Gateway = "192.168.100.1";
-              DNS = "8.8.8.8";
+              DHCP = "no";
+              IPv6AcceptRA = false;
+              LinkLocalAddressing = "no";
             };
           };
         };
@@ -100,14 +118,13 @@ pkgs.testers.nixosTest {
       ]
       ++ extraComputeConfig;
 
-      networking.extraHosts = ''
-        192.168.100.1 controllerVM controllerVM.local
-      '';
+      networking.hosts = hostVMHosts;
 
       virtualisation = {
         cores = 4;
         memorySize = 4096;
-        interfaces.eth1.vlan = 1;
+        # Deactivate default eth1 network setup as we configure it manually
+        vlans = [ ];
         diskSize = 2048;
         forwardPorts =
           # Port forwarding prevents us from executing the nixos tests in
@@ -122,7 +139,17 @@ pkgs.testers.nixosTest {
               }
             ]
           );
+        qemu.networkingOptions = lib.mkAfter [
+          "-device virtio-net-pci,netdev=hostvm,mac=52:54:00:12:01:01"
+          # The test driver starts computeVM before controllerVM, so computeVM
+          # owns the listening end of the host-VM socket.
+          ''-netdev stream,id=hostvm,server=on,addr.type=unix,addr.path="$SHARED_DIR"/hostvm-net.sock''
+        ];
       };
+
+      boot.initrd.services.udev.rules = ''
+        SUBSYSTEM=="net",ACTION=="add",ATTR{address}=="52:54:00:12:01:01",NAME="eth1"
+      '';
 
       livemig.nfs.host = "192.168.100.1";
 
@@ -138,8 +165,9 @@ pkgs.testers.nixosTest {
             matchConfig.Name = [ "eth1" ];
             networkConfig = {
               Address = "192.168.100.2/24";
-              Gateway = "192.168.100.1";
-              DNS = "8.8.8.8";
+              DHCP = "no";
+              IPv6AcceptRA = false;
+              LinkLocalAddressing = "no";
             };
           };
         };

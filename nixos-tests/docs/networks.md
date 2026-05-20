@@ -7,4 +7,4 @@
 | `192.168.3.0/24`   | `52:54:00:e5:b8:03`, `tap3`       | `br3`       | `eth1339`              | Hotplugged device (type `network`)  |
 | `192.168.4.0/24`   | `52:54:00:e5:b8:04`, `tap4`       | `br4`       | `eth1340`              | Hotplugged device (type `bridge`)   |
 | `192.168.30.0/24`  | `52:54:00:e5:b9:01`, `nestedtap0` | -           | -                      | Tap for nested VM tests             |
-| `192.168.100.0/24` | <dynamic>          , `eth1`       | -           | -                      | Network between host VMs            |
+| `192.168.100.0/24` | `52:54:00:12:01:*`, `eth1`       | -           | -                      | QEMU stream network between host VMs |
