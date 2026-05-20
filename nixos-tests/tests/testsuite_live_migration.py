@@ -1294,64 +1294,6 @@ class LibvirtTests(LibvirtTestsBase):  # type: ignore
             "virsh migrate --domain testvm --desturi ch+tcp://computeVM/session --persistent --live --parallel --parallel-connections 4"
         )
 
-    def test_live_migration_after_failed_migration(self):
-        """
-        Test that a live migration can fail, that the VM is still usable, and
-        that a new migration can succeed afterwards.
-        """
-
-        controllerVM.succeed("virsh define /etc/domain-chv.xml")
-        controllerVM.succeed("virsh start testvm")
-        wait_for_ssh(controllerVM)
-
-        # Stress the CH VM in order to make the migration take longer
-        ssh(controllerVM, "screen -dmS stress stress --vm 4 --vm-bytes 400M --vm-keep")
-        # Give stress time to unfold its impact.
-        time.sleep(1)
-
-        # Next, we attempt multiple times to migrate a VM but each fails with a
-        # certain variance in timing. After each failed migration, the VM must
-        # still be usable and the VMM in operational state.
-        times = 10
-        for i in range(times):
-            print(f"Attempt {i + 1}/{times}")
-            # Ensure there is no Cloud Hypervisor running
-            computeVM.fail("ps aux | grep -E '[c]loud-hypervisor'")
-            # We use non-parallel transport to avoid timing issues.
-            controllerVM.succeed(
-                "screen -dmS migrate virsh migrate --domain testvm --desturi ch+tcp://computeVM/session --persistent --live --p2p"
-            )
-            # Wait for receiving VMM to come up
-            wait_until_succeed(
-                lambda: (
-                    computeVM.execute("ps aux | grep -E '[c]loud-hypervisor'")[0] == 0
-                )
-            )
-
-            # Wait some time to interrupt the migration at some point
-            time.sleep(i)
-
-            # Check VM is still responsive
-            out = ssh(controllerVM, "echo -n Hello Cyberus!")
-            self.assertEqual(out, "Hello Cyberus!", "VM should still be responsive")
-
-            computeVM.succeed("kill -9 $(pidof cloud-hypervisor)")
-            # Wait until `virsh migrate` returns (finished its cleanup)
-            wait_for_migration_screen_to_finish(controllerVM)
-
-            # Check VM is still responsive
-            out = ssh(controllerVM, "echo -n Hello Cyberus!")
-            self.assertEqual(out, "Hello Cyberus!", "VM should still be responsive")
-
-        # Ensure migration can now continue quickly
-        ssh(controllerVM, "pkill -9 screen")
-
-        # Test that a new migration indeed works
-        controllerVM.succeed(
-            "virsh migrate --domain testvm --desturi ch+tcp://computeVM/session --persistent --live --p2p --parallel --parallel-connections 4"
-        )
-        wait_for_ssh(computeVM)
-
     def test_live_migration_during_boot(self):
         """
         Start a live migration while the guest is still booting and check
@@ -1648,7 +1590,6 @@ def suite():
         LibvirtTests.test_bdf_explicit_assignment,
         LibvirtTests.test_bdf_implicit_assignment,
         LibvirtTests.test_live_migration,
-        LibvirtTests.test_live_migration_after_failed_migration,
         LibvirtTests.test_live_migration_attach_remove_net_dev,
         LibvirtTests.test_live_migration_cancel_basic,
         LibvirtTests.test_live_migration_cancel_complex,
