@@ -184,7 +184,7 @@
                   # Helps to keep track of the commit hash in the libvirt log.
                   # Nix strips all `.git`, so we need to be explicit here. This
                   # is a non-standard functionality of our own libvirt fork.
-                  commitHash = if self ? rev then self.rev else self.dirtyRev;
+                  commitHash = if self ? rev then self.rev else "local-dirty";
                 })
                 libvirt
                 libvirt-debugoptimized
