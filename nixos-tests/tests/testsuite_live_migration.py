@@ -1538,6 +1538,27 @@ class LibvirtTests(LibvirtTestsBase):  # type: ignore
                 vm.name
             ]
 
+        def drop_network(machine: Machine):
+            """
+            Simulate a network partition, not a NIC unplug: keep eth1 link-up
+            so host networking stays configured, but drop traffic so migration
+            I/O fails.
+            """
+            # Be idempotent if an earlier attempt left the qdisc installed.
+            machine.execute("tc qdisc del dev eth1 clsact")
+            machine.succeed("tc qdisc add dev eth1 clsact")
+            # clsact gives us an ingress and egress hooks where matchall can
+            # drop traffic.
+            machine.succeed("tc filter add dev eth1 ingress matchall action drop")
+            machine.succeed("tc filter add dev eth1 egress matchall action drop")
+
+        def restore_network(machine: Machine):
+            """
+            Restore normal test network connectivity after drop_network().
+            """
+            # Deleting clsact also removes the ingress filter attached to it.
+            machine.execute("tc qdisc del dev eth1 clsact")
+
         controllerVM.succeed("virsh define /etc/domain-chv.xml")
         controllerVM.succeed("virsh start testvm")
 
@@ -1559,10 +1580,9 @@ class LibvirtTests(LibvirtTestsBase):  # type: ignore
             # We wait for the first iteration of sending memory, then cut off the network on
             # the computeVM.
             sender.wait_until_succeeds(
-                "grep -qF 'iter=0' /var/log/libvirt/ch/testvm.log", 60
+                "grep -qF 'migration-started' /var/log/libvirt/ch/testvm.log", 60
             )
-            receiver.succeed("ip link set dev eth0 down")
-            receiver.succeed("ip link set dev eth1 down")
+            drop_network(receiver)
 
             # Now we wait until the VM disappears on the receiver side, and appears as
             # `running` on the sender side.
@@ -1578,8 +1598,7 @@ class LibvirtTests(LibvirtTestsBase):  # type: ignore
             # block and our test will fail.
 
             # We now restore the network connection and check that the live migration still works.
-            receiver.succeed("ip link set dev eth0 up")
-            receiver.succeed("ip link set dev eth1 up")
+            restore_network(receiver)
             wait_for_ping(sender, get_ip(receiver))
 
             # Make sure the VM is still good.
