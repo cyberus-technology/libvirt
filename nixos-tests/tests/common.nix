@@ -593,6 +593,7 @@ in
     fcntl-tool
     gdb
     htop
+    iperf3
     jq
     lsof
     mount
