@@ -1435,8 +1435,11 @@ class LibvirtTests(LibvirtTestsBase):  # type: ignore
         controllerVM.succeed("virsh detach-device testvm /etc/initial_interface.xml")
         wait_for_ssh(controllerVM, ip="192.168.2.2")
 
-        controllerVM.succeed("virsh attach-device testvm /etc/new_interface_type_network.xml")
+        controllerVM.succeed(
+            "virsh attach-device testvm /etc/new_interface_type_network.xml"
+        )
         wait_for_ssh(controllerVM, ip="192.168.2.2")
+
 
 def suite():
     # Test cases sorted in alphabetical order.

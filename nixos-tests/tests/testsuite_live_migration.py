@@ -440,7 +440,9 @@ class LibvirtTests(LibvirtTestsBase):  # type: ignore
         migrate_cancel_migrate(controllerVM, computeVM)
         migrate_cancel_migrate(computeVM, controllerVM)
 
-    def test_live_migration_with_detach_and_attach_of_the_same_device_after_migration(self):
+    def test_live_migration_with_detach_and_attach_of_the_same_device_after_migration(
+        self,
+    ):
         """
         This is a regression test for a bug we had in cloud-hypervisor. We first hot-attach
         a disk and then we live-migrate. Afterwards, we detach the device and re-attach the
@@ -476,7 +478,6 @@ class LibvirtTests(LibvirtTestsBase):  # type: ignore
             computeVM,
             "virsh attach-disk --domain testvm --target vdb --persistent --source /var/lib/libvirt/storage-pools/nfs-share/disk1.img",
         )
-
 
     def test_live_migration_with_hotplug(self):
         """
@@ -696,8 +697,9 @@ class LibvirtTests(LibvirtTestsBase):  # type: ignore
         )
 
         wait_until_succeed(
-            lambda: computeVM.execute("virsh domstate testvm | grep -q 'shut off'")[0]
-            == 0
+            lambda: (
+                computeVM.execute("virsh domstate testvm | grep -q 'shut off'")[0] == 0
+            )
         )
 
         assert_domain_domstate(controllerVM, "shut off")
@@ -757,10 +759,10 @@ class LibvirtTests(LibvirtTestsBase):  # type: ignore
         wait_for_migration_screen_to_finish(controllerVM)
 
         wait_until_succeed(
-            lambda: controllerVM.execute("virsh domstate testvm | grep -q 'shut off'")[
-                0
-            ]
-            == 0
+            lambda: (
+                controllerVM.execute("virsh domstate testvm | grep -q 'shut off'")[0]
+                == 0
+            )
         )
 
         assert_domain_domstate(controllerVM, "shut off")
@@ -1324,8 +1326,9 @@ class LibvirtTests(LibvirtTestsBase):  # type: ignore
             )
             # Wait for receiving VMM to come up
             wait_until_succeed(
-                lambda: computeVM.execute("ps aux | grep -E '[c]loud-hypervisor'")[0]
-                == 0
+                lambda: (
+                    computeVM.execute("ps aux | grep -E '[c]loud-hypervisor'")[0] == 0
+                )
             )
 
             # Wait some time to interrupt the migration at some point

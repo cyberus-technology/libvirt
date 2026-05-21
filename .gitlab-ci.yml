@@ -128,6 +128,7 @@ lint:nixos-tests:
   script:
     # We run each check separately first, and at the end run all in case we forgot to add a check here.
     - nix build -L .#checks.x86_64-linux.deadnix
+    - nix build -L .#checks.x86_64-linux.pythonFormat
     - nix build -L .#checks.x86_64-linux.pythonLint
     - nix build -L .#checks.x86_64-linux.pythonTypes
 
