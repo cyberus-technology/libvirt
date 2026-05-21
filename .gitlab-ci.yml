@@ -132,6 +132,7 @@ lint:nixos-tests:
     - nix build -L .#checks.x86_64-linux.pythonLint
     - nix build -L .#checks.x86_64-linux.pythonTypes
     - nix build -L .#checks.x86_64-linux.typos
+    - nix flake check
 
 build:packages:
   stage: build
