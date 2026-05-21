@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 
 set -euo pipefail
+set -x
 
 if [ "$1" == "" ]; then
   echo "error: usage $0 <workdir>"

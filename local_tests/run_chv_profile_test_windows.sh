@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 
 set -euo pipefail
+set -x
 
 CI_PIPELINE_ID=$1
 CI_PROJECT_NAME=$2

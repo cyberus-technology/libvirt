@@ -3,6 +3,7 @@
 ## prepare Ubuntu root disk on shared NFS storage
 
 set -euo pipefail
+set -x
 
 CI_PIPELINE_ID=$1
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
