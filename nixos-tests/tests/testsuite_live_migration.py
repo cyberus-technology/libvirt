@@ -314,7 +314,7 @@ class LibvirtTests(LibvirtTestsBase):  # type: ignore
     def test_live_migration_without_serial(self):
         """
         Test that a live migration of a VM without any serial device works.
-        We had issues with this in the past, so we test this explicity.
+        We had issues with this in the past, so we test this explicitly.
         """
 
         controllerVM.succeed("virsh define /etc/domain-chv-no-serial.xml")
