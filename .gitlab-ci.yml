@@ -121,6 +121,16 @@ lint:nix-fmt:
   script:
     - nix fmt -- --ci
 
+lint:nixos-tests:
+  stage: lint
+  extends:
+    - .nix_build_template
+  script:
+    # We run each check separately first, and at the end run all in case we forgot to add a check here.
+    - nix build -L .#checks.x86_64-linux.deadnix
+    - nix build -L .#checks.x86_64-linux.pythonLint
+    - nix build -L .#checks.x86_64-linux.pythonTypes
+
 build:packages:
   stage: build
   rules:
