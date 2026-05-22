@@ -32,6 +32,7 @@ let
       "computeVM.local"
     ];
   };
+  hostVMNetworkMtu = 9000;
 in
 pkgs.testers.nixosTest {
   name = "Libvirt test suite for Cloud Hypervisor";
@@ -71,7 +72,7 @@ pkgs.testers.nixosTest {
             ]
           );
         qemu.networkingOptions = lib.mkAfter [
-          "-device virtio-net-pci,netdev=hostvm,mac=52:54:00:12:01:02"
+          "-device virtio-net-pci,netdev=hostvm,mac=52:54:00:12:01:02,host_mtu=${toString hostVMNetworkMtu}"
           ''-netdev stream,id=hostvm,server=off,addr.type=unix,addr.path="$SHARED_DIR"/hostvm-net.sock''
         ];
       };
@@ -92,6 +93,7 @@ pkgs.testers.nixosTest {
           };
           eth1 = {
             matchConfig.Name = [ "eth1" ];
+            linkConfig.MTUBytes = toString hostVMNetworkMtu;
             networkConfig = {
               Address = "192.168.100.1/24";
               DHCP = "no";
@@ -140,7 +142,7 @@ pkgs.testers.nixosTest {
             ]
           );
         qemu.networkingOptions = lib.mkAfter [
-          "-device virtio-net-pci,netdev=hostvm,mac=52:54:00:12:01:01"
+          "-device virtio-net-pci,netdev=hostvm,mac=52:54:00:12:01:01,host_mtu=${toString hostVMNetworkMtu}"
           # The test driver starts computeVM before controllerVM, so computeVM
           # owns the listening end of the host-VM socket.
           ''-netdev stream,id=hostvm,server=on,addr.type=unix,addr.path="$SHARED_DIR"/hostvm-net.sock''
@@ -163,6 +165,7 @@ pkgs.testers.nixosTest {
           };
           eth1 = {
             matchConfig.Name = [ "eth1" ];
+            linkConfig.MTUBytes = toString hostVMNetworkMtu;
             networkConfig = {
               Address = "192.168.100.2/24";
               DHCP = "no";
