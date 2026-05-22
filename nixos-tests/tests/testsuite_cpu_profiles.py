@@ -7,25 +7,25 @@ import unittest
 # additional IDE configuration.
 try:
     from ..test_helper.test_helper import (  # type: ignore
+        BENIGN_FORBIDDEN_MSRS,
+        FORBIDDEN_ARCHITECTURAL_MSRS,
+        FORBIDDEN_NON_ARCHITECTURAL_MSRS,
         LibvirtTestsBase,
         initialComputeVMSetup,
         initialControllerVMSetup,
-        wait_for_ssh,
         ssh,
-        FORBIDDEN_ARCHITECTURAL_MSRS,
-        FORBIDDEN_NON_ARCHITECTURAL_MSRS,
-        BENIGN_FORBIDDEN_MSRS,
+        wait_for_ssh,
     )
 except Exception:
     from test_helper import (
+        BENIGN_FORBIDDEN_MSRS,
+        FORBIDDEN_ARCHITECTURAL_MSRS,
+        FORBIDDEN_NON_ARCHITECTURAL_MSRS,
         LibvirtTestsBase,
         initialComputeVMSetup,
         initialControllerVMSetup,
-        wait_for_ssh,
         ssh,
-        FORBIDDEN_ARCHITECTURAL_MSRS,
-        FORBIDDEN_NON_ARCHITECTURAL_MSRS,
-        BENIGN_FORBIDDEN_MSRS,
+        wait_for_ssh,
     )
 
 # pyright: reportPossiblyUnboundVariable=false

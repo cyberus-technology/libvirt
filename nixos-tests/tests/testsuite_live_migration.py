@@ -9,13 +9,13 @@ import unittest
 # additional IDE configuration.
 try:
     from ..test_helper.test_helper import (  # type: ignore
-        assert_domain_domstate,
         CommandGuard,
         LibvirtTestsBase,
         MigrationThrottleGuard,
         VIRTIO_BLOCK_DEVICE,
         VIRTIO_ENTROPY_SOURCE,
         VIRTIO_NETWORK_DEVICE,
+        assert_domain_domstate,
         hotplug,
         hotplug_fail,
         initialComputeVMSetup,
@@ -35,13 +35,13 @@ try:
     )
 except Exception:
     from test_helper import (
-        assert_domain_domstate,
         CommandGuard,
         LibvirtTestsBase,
         MigrationThrottleGuard,
         VIRTIO_BLOCK_DEVICE,
         VIRTIO_ENTROPY_SOURCE,
         VIRTIO_NETWORK_DEVICE,
+        assert_domain_domstate,
         hotplug,
         hotplug_fail,
         initialComputeVMSetup,
