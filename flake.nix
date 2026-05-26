@@ -144,7 +144,6 @@
 
       nixos-tests-outputs = import ./nixos-tests/outputs.nix {
         inherit
-          self
           pkgs
           nixpkgs
           cloud-hypervisor
@@ -152,12 +151,12 @@
           edk2-src
           fcntl-tool
           ;
-        src = ./nixos-tests;
         libvirt = self;
         libvirt-prev = libvirt-prev-flake;
       };
     in
     nixpkgs.lib.recursiveUpdate nixos-tests-outputs {
+      formatter."x86_64-linux" = pkgs.nixfmt-tree;
       devShells = nixpkgs.lib.recursiveUpdate nixos-tests-outputs.devShells ({
         "x86_64-linux".default = pkgs.mkShell {
           inputsFrom = [ pkgs.libvirt ];

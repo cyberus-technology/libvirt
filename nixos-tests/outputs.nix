@@ -1,6 +1,4 @@
 {
-  self,
-  src,
   pkgs,
   nixpkgs,
   cloud-hypervisor,
@@ -11,9 +9,11 @@
   libvirt-prev,
 }:
 # Shared flake outputs for the NixOS test environment. The root flake imports
-# this file and recursively augments the exported attrsets as needed. The
-# exported attrsets mirror the usual attrsets of a flake.
+# this file and combines the exported attrsets with its own outputs as needed.
+# The exported attrsets mirror the usual attrsets of a flake.
 let
+  src = ./.;
+
   # Debug optimized Cloud Hypervisor build, suited for quicker rebuilds
   # with reasonable good performance.
   toDebugOptimizedChv =
@@ -70,8 +70,7 @@ let
         # deterministic.
         cp ${iso}/iso/*.iso $out
       '';
-in
-{
+
   checks."x86_64-linux" =
     let
       fs = pkgs.lib.fileset;
@@ -155,10 +154,8 @@ in
       default = all;
     };
 
-  formatter."x86_64-linux" = pkgs.nixfmt-tree;
-
   devShells."x86_64-linux".default = pkgs.mkShellNoCC {
-    inputsFrom = builtins.attrValues self.checks."x86_64-linux";
+    inputsFrom = builtins.attrValues checks."x86_64-linux";
     packages = with pkgs; [
       gitlint
     ];
@@ -207,4 +204,12 @@ in
       ;
     pkgs = testPkgs;
   };
+in
+{
+  inherit
+    checks
+    devShells
+    packages
+    tests
+    ;
 }
