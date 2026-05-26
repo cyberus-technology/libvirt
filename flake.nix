@@ -182,8 +182,21 @@
       checks = nixosTestsOutputs.checks;
       formatter."x86_64-linux" = pkgs.nixfmt-tree;
       tests = nixosTestsOutputs.tests;
-      devShells."x86_64-linux" =
-        nixosTestsOutputs.devShells."x86_64-linux" // libvirtOutputs.devShells."x86_64-linux";
+      devShells."x86_64-linux".default =
+        let
+          main = libvirtOutputs.devShells."x86_64-linux".default;
+          tests = nixosTestsOutputs.devShells."x86_64-linux".default;
+        in
+        pkgs.mkShell {
+          inputsFrom = [
+            main
+            tests
+          ];
+          shellHook = ''
+            ${main.shellHook}
+            ${tests.shellHook}
+          '';
+        };
       packages."x86_64-linux" =
         nixosTestsOutputs.packages."x86_64-linux" // libvirtOutputs.packages."x86_64-linux";
     };
