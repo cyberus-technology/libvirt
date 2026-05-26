@@ -131,27 +131,21 @@
           inherit libvirt libvirt-debugoptimized;
         };
 
-      systems = [ "x86_64-linux" ];
-      forAllSystems =
-        function: nixpkgs.lib.genAttrs systems (system: function nixpkgs.legacyPackages.${system});
-
       # Minimal flake-shaped wrapper for the previous libvirt release so the
       # NixOS test outputs can consume it like a normal flake input via
       # `libvirt-prev.packages.<system>`.
       libvirt-prev-flake = {
-        packages = forAllSystems (
-          pkgs:
-          mkLibvirtPackageSet {
-            inherit pkgs;
-            src = libvirtPrevSourceWithSubmodules;
-            name = "libvirt-prev-chv";
-          }
-        );
+        packages."x86_64-linux" = mkLibvirtPackageSet {
+          inherit pkgs;
+          src = libvirtPrevSourceWithSubmodules;
+          name = "libvirt-prev-chv";
+        };
       };
 
       nixos-tests-outputs = import ./nixos-tests/outputs.nix {
         inherit
           self
+          pkgs
           nixpkgs
           cloud-hypervisor
           cloud-hypervisor-prev
@@ -164,17 +158,14 @@
       };
     in
     nixpkgs.lib.recursiveUpdate nixos-tests-outputs {
-      devShells = nixpkgs.lib.recursiveUpdate nixos-tests-outputs.devShells (
-        forAllSystems (pkgs: {
-          default = pkgs.mkShell {
-            inputsFrom = [ pkgs.libvirt ];
-          };
-        })
-      );
+      devShells = nixpkgs.lib.recursiveUpdate nixos-tests-outputs.devShells ({
+        "x86_64-linux".default = pkgs.mkShell {
+          inputsFrom = [ pkgs.libvirt ];
+        };
+      });
       packages = nixpkgs.lib.recursiveUpdate nixos-tests-outputs.packages (
-        nixpkgs.lib.recursiveUpdate cloud-hypervisor.packages (
-          forAllSystems (
-            pkgs:
+        nixpkgs.lib.recursiveUpdate cloud-hypervisor.packages ({
+          "x86_64-linux" =
             let
               inherit
                 (mkLibvirtPackageSet {
@@ -205,9 +196,8 @@
               '';
               prepare-images = import ./local_tests/prepare-images.nix { inherit pkgs; };
               prepare-windows-image = import ./local_tests/prepare-windows-image.nix { inherit pkgs; };
-            }
-          )
-        )
+            };
+        })
       );
     };
 }
