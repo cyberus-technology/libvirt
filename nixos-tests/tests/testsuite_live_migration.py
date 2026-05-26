@@ -12,6 +12,7 @@ try:
         assert_domain_domstate,
         CommandGuard,
         LibvirtTestsBase,
+        MigrationThrottleGuard,
         VIRTIO_BLOCK_DEVICE,
         VIRTIO_ENTROPY_SOURCE,
         VIRTIO_NETWORK_DEVICE,
@@ -37,6 +38,7 @@ except Exception:
         assert_domain_domstate,
         CommandGuard,
         LibvirtTestsBase,
+        MigrationThrottleGuard,
         VIRTIO_BLOCK_DEVICE,
         VIRTIO_ENTROPY_SOURCE,
         VIRTIO_NETWORK_DEVICE,
@@ -372,8 +374,9 @@ class LibvirtTests(LibvirtTestsBase):  # type: ignore
 
             ssh(controllerVM, "echo VM still usable")
 
-        migrate_and_cancel(1)  # single connection
-        migrate_and_cancel(4)  # multiple TCP connections
+        with MigrationThrottleGuard(controllerVM, computeVM):
+            migrate_and_cancel(1)  # single connection
+            migrate_and_cancel(4)  # multiple TCP connections
 
         # Kill workload (migration will be faster)
         stop_stress_in_vm(controllerVM)
@@ -398,26 +401,23 @@ class LibvirtTests(LibvirtTestsBase):  # type: ignore
             """
 
             start_stress_in_vm(src)
+            with MigrationThrottleGuard(controllerVM, computeVM):
+                # Start migration in background
+                src.succeed(
+                    f"screen -dmS migrate virsh migrate --domain testvm --desturi ch+tcp://{dst.name}/session --persistent --live --p2p --parallel --parallel-connections 4"
+                )
+                # We wait for the first iteration of sending memory
+                src.wait_until_succeeds(
+                    "grep -qF 'iter=0' /var/log/libvirt/ch/testvm.log", 60
+                )
 
-            # Start migration in background
-            src.succeed(
-                f"screen -dmS migrate virsh migrate --domain testvm --desturi ch+tcp://{dst.name}/session --persistent --live --p2p --parallel --parallel-connections 4"
-            )
-            # We wait for the first iteration of sending memory
-            src.wait_until_succeeds(
-                "grep -qF 'iter=0' /var/log/libvirt/ch/testvm.log", 60
-            )
-
-            # Check migration is running and didn't crash
-            src.succeed("screen -ls | grep migrate")
-
-            # Cancel migration + checks
-            dst.fail("virsh domjobabort testvm")  # can't be canceled on receiver
-            src.succeed("virsh domjobabort testvm")  # blocking
-            src.wait_until_fails(
-                "screen -ls | grep migrate", timeout=10
-            )  # assert migration is dead
-            ssh(src, "echo VM still usable")
+                # Cancel migration + checks
+                dst.fail("virsh domjobabort testvm")  # can't be canceled on receiver
+                src.succeed("virsh domjobabort testvm")  # blocking
+                src.wait_until_fails(
+                    "screen -ls | grep migrate", timeout=10
+                )  # assert migration is dead
+                ssh(src, "echo VM still usable")
 
             # Sanity checks before the next iteration
             #
@@ -601,39 +601,41 @@ class LibvirtTests(LibvirtTestsBase):  # type: ignore
         wait_for_ssh(controllerVM)
         start_stress_in_vm(controllerVM)
 
-        # Do migration in a screen session and detach
-        controllerVM.succeed(
-            "screen -dmS migrate virsh migrate --domain testvm --desturi ch+tcp://computeVM/session --persistent --live --p2p --parallel --parallel-connections 4"
-        )
-
-        # Wait a moment to let the migration start
-        time.sleep(2)
-
-        # Check that 'virsh list' can be done without blocking
-        self.assertLess(
-            measure_ms(lambda: controllerVM.succeed("grep -q testvm < <(virsh list)")),
-            1000,
-            msg="Expect virsh list to execute fast",
-        )
-
-        # Check that modifying commands like 'virsh shutdown' block until the
-        # migration has finished or the timeout hits.
-        self.assertGreater(
-            measure_ms(lambda: controllerVM.execute("virsh shutdown testvm")),
-            3000,
-            msg="Expect virsh shutdown execution to take longer",
-        )
-
-        try:
-            # Turn off the stress process to let the migration finish faster
-            stop_stress_in_vm(
-                controllerVM,
-                extra_ssh_params="-o ConnectTimeout=3 -o TCPKeepAlive=yes -o ServerAliveInterval=2 -o ServerAliveCountMax=3",
+        with MigrationThrottleGuard(controllerVM, computeVM):
+            # Do migration in a screen session and detach
+            controllerVM.succeed(
+                "screen -dmS migrate virsh migrate --domain testvm --desturi ch+tcp://computeVM/session --persistent --live --p2p --parallel --parallel-connections 4"
             )
-        except RuntimeError:
-            # The VM might already be migrated and SSH fails. This is no
-            # problem in this test scenario.
-            pass
+            # Wait a moment to let the migration start
+            time.sleep(2)
+
+            # Check that 'virsh list' can be done without blocking
+            self.assertLess(
+                measure_ms(
+                    lambda: controllerVM.succeed("grep -q testvm < <(virsh list)")
+                ),
+                1000,
+                msg="Expect virsh list to execute fast",
+            )
+
+            # Check that modifying commands like 'virsh shutdown' block until the
+            # migration has finished or the timeout hits.
+            self.assertGreater(
+                measure_ms(lambda: controllerVM.execute("virsh shutdown testvm")),
+                3000,
+                msg="Expect virsh shutdown execution to take longer",
+            )
+
+            try:
+                # Turn off the stress process to let the migration finish faster
+                stop_stress_in_vm(
+                    controllerVM,
+                    extra_ssh_params="-o ConnectTimeout=3 -o TCPKeepAlive=yes -o ServerAliveInterval=2 -o ServerAliveCountMax=3",
+                )
+            except RuntimeError:
+                # The VM might already be migrated and SSH fails. This is no
+                # problem in this test scenario.
+                pass
 
         wait_for_migration_screen_to_finish(controllerVM)
 
@@ -654,11 +656,12 @@ class LibvirtTests(LibvirtTestsBase):  # type: ignore
         start_stress_in_vm(controllerVM)
         ssh(controllerVM, "systemd-run --on-active=7s --unit=test-reboot reboot")
 
-        migration_ms = measure_ms(
-            lambda: controllerVM.succeed(
-                "virsh migrate --domain testvm --desturi ch+tcp://computeVM/session --persistent --live --p2p"
+        with MigrationThrottleGuard(controllerVM, computeVM):
+            migration_ms = measure_ms(
+                lambda: controllerVM.succeed(
+                    "virsh migrate --domain testvm --desturi ch+tcp://computeVM/session --persistent --live --p2p"
+                )
             )
-        )
         self.assertGreater(
             migration_ms, 7000, msg=f"migration was too fast: {migration_ms} ms"
         )
@@ -680,16 +683,19 @@ class LibvirtTests(LibvirtTestsBase):  # type: ignore
 
         wait_for_ssh(controllerVM)
         start_stress_in_vm(controllerVM)
+
         ssh(
             controllerVM,
             "systemd-run --on-active=7s --unit=test-shutdown shutdown now",
         )
 
-        migration_ms = measure_ms(
-            lambda: controllerVM.succeed(
-                "virsh migrate --domain testvm --desturi ch+tcp://computeVM/session --persistent --live --p2p"
+        with MigrationThrottleGuard(controllerVM, computeVM):
+            migration_ms = measure_ms(
+                lambda: controllerVM.succeed(
+                    "virsh migrate --domain testvm --desturi ch+tcp://computeVM/session --persistent --live --p2p"
+                )
             )
-        )
+
         self.assertGreater(
             migration_ms, 7000, msg=f"migration was too fast: {migration_ms} ms"
         )
@@ -717,13 +723,15 @@ class LibvirtTests(LibvirtTestsBase):  # type: ignore
         old_boot_id = guest_boot_id(controllerVM)
         start_stress_in_vm(controllerVM)
 
-        controllerVM.succeed(
-            "screen -dmS migrate virsh migrate --domain testvm --desturi ch+tcp://computeVM/session --persistent --live --p2p"
-        )
-        ssh(controllerVM, "systemd-run --on-active=5s --unit=test-reboot reboot")
-        time.sleep(6)
-        computeVM.succeed("kill -9 $(pidof cloud-hypervisor)")
-        wait_for_migration_screen_to_finish(controllerVM)
+        with MigrationThrottleGuard(controllerVM, computeVM):
+            controllerVM.succeed(
+                "screen -dmS migrate virsh migrate --domain testvm --desturi ch+tcp://computeVM/session --persistent --live --p2p"
+            )
+            ssh(controllerVM, "systemd-run --on-active=5s --unit=test-reboot reboot")
+            time.sleep(6)
+            computeVM.succeed("kill -9 $(pidof cloud-hypervisor)")
+            wait_for_migration_screen_to_finish(controllerVM)
+
         wait_for_guest_boot_id_change(controllerVM, old_boot_id)
 
         assert_domain_domstate(controllerVM, "running")
@@ -742,17 +750,16 @@ class LibvirtTests(LibvirtTestsBase):  # type: ignore
         wait_for_ssh(controllerVM)
         start_stress_in_vm(controllerVM)
 
-        controllerVM.succeed(
-            "screen -dmS migrate virsh migrate --domain testvm --desturi ch+tcp://computeVM/session --persistent --live --p2p"
-        )
-
-        ssh(
-            controllerVM,
-            "systemd-run --on-active=2s --unit=test-shutdown shutdown now",
-        )
-        time.sleep(6)
-
-        computeVM.succeed("kill -9 $(pidof cloud-hypervisor)")
+        with MigrationThrottleGuard(controllerVM, computeVM):
+            controllerVM.succeed(
+                "screen -dmS migrate virsh migrate --domain testvm --desturi ch+tcp://computeVM/session --persistent --live --p2p"
+            )
+            ssh(
+                controllerVM,
+                "systemd-run --on-active=2s --unit=test-shutdown shutdown now",
+            )
+            time.sleep(6)
+            computeVM.succeed("kill -9 $(pidof cloud-hypervisor)")
         wait_for_migration_screen_to_finish(controllerVM)
 
         wait_until_succeed(
@@ -826,16 +833,16 @@ class LibvirtTests(LibvirtTestsBase):  # type: ignore
         wait_for_ssh(controllerVM)
         start_stress_in_vm(controllerVM)
 
-        # Do migration in a screen session and detach
-        controllerVM.succeed(
-            "screen -dmS migrate virsh migrate --domain testvm --desturi ch+tcp://computeVM/session --persistent --live --p2p --parallel --parallel-connections 4"
-        )
+        with MigrationThrottleGuard(controllerVM, computeVM):
+            # Do migration in a screen session and detach
+            controllerVM.succeed(
+                "screen -dmS migrate virsh migrate --domain testvm --desturi ch+tcp://computeVM/session --persistent --live --p2p --parallel --parallel-connections 4"
+            )
+            # Wait a moment to let the migration start
+            time.sleep(5)
 
-        # Wait a moment to let the migration start
-        time.sleep(5)
-
-        # Kill the cloud-hypervisor on the sender side
-        controllerVM.succeed("kill -9 $(pidof cloud-hypervisor)")
+            # Kill the cloud-hypervisor on the sender side
+            controllerVM.succeed("kill -9 $(pidof cloud-hypervisor)")
 
         # Ensure the VM is really gone and we have no zombie VMs
         def check_virsh_list(vm):
@@ -1397,33 +1404,34 @@ class LibvirtTests(LibvirtTestsBase):  # type: ignore
 
         start_stress_in_vm(controllerVM)
 
-        # Do migration in a screen session and detach
-        controllerVM.succeed(
-            "screen -dmS migrate virsh migrate --domain testvm --desturi ch+tcp://computeVM/session --persistent --live --p2p"
-        )
+        with MigrationThrottleGuard(controllerVM, computeVM):
+            # Do migration in a screen session and detach
+            controllerVM.succeed(
+                "screen -dmS migrate virsh migrate --domain testvm --desturi ch+tcp://computeVM/session --persistent --live --p2p"
+            )
 
-        # Wait a moment to let the migration start
-        time.sleep(1)
+            # Wait a moment to let the migration start
+            time.sleep(1)
 
-        out = controllerVM.succeed("virsh domjobinfo --rawstats testvm")
+            out = controllerVM.succeed("virsh domjobinfo --rawstats testvm")
 
-        for entry in [
-            "downtime:",
-            "memory_iteration:",
-            "memory_total:",
-            "time_elapsed",
-        ]:
-            self.assertIn(entry, out, "should have domjobinfo metric")
+            for entry in [
+                "downtime:",
+                "memory_iteration:",
+                "memory_total:",
+                "time_elapsed",
+            ]:
+                self.assertIn(entry, out, "should have domjobinfo metric")
 
-        # Receiving side does not offer statistics about the incoming migration
-        out = computeVM.succeed("virsh domjobinfo --rawstats testvm")
+            # Receiving side does not offer statistics about the incoming migration
+            out = computeVM.succeed("virsh domjobinfo --rawstats testvm")
 
-        # No actual stats when no migration is running
-        self.assertNotIn(
-            "memory_total:",
-            out,
-            "should not have domjobinfo metric when no migration is outgoing",
-        )
+            # No actual stats when no migration is running
+            self.assertNotIn(
+                "memory_total:",
+                out,
+                "should not have domjobinfo metric when no migration is outgoing",
+            )
 
         try:
             # Turn off the stress process to let the migration finish faster
