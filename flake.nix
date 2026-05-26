@@ -141,15 +141,10 @@
         commitHash = if self ? rev then self.rev else "local-dirty";
       };
 
-      # Minimal flake-shaped wrapper for the previous libvirt release so the
-      # NixOS test outputs can consume it like a normal flake input via
-      # `libvirt-prev.packages.<system>`.
-      libvirt-prev-flake = {
-        packages."x86_64-linux" = mkLibvirtPackageSet {
-          inherit pkgs;
-          src = libvirtPrevSourceWithSubmodules;
-          name = "libvirt-prev-chv";
-        };
+      libvirtPrevPackageSet = mkLibvirtPackageSet {
+        inherit pkgs;
+        src = libvirtPrevSourceWithSubmodules;
+        name = "libvirt-prev-chv";
       };
 
       nixos-tests-outputs = import ./nixos-tests/outputs.nix {
@@ -161,8 +156,8 @@
           edk2-src
           fcntl-tool
           ;
-        libvirt = self;
-        libvirt-prev = libvirt-prev-flake;
+        libvirt = libvirtPackageSet.libvirt-debugoptimized;
+        libvirt-prev = libvirtPrevPackageSet.libvirt-debugoptimized;
       };
     in
     nixpkgs.lib.recursiveUpdate nixos-tests-outputs {

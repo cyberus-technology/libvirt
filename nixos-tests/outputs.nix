@@ -46,8 +46,7 @@ let
       fcntl-tool = fcntl-tool.packages."x86_64-linux".default;
       cloud-hypervisor = toDebugOptimizedChv cloud-hypervisor.packages."x86_64-linux".default;
       cloud-hypervisor-prev = toDebugOptimizedChv cloud-hypervisor-prev.packages."x86_64-linux".default;
-      libvirt = libvirt.packages."x86_64-linux".libvirt-debugoptimized;
-      libvirt-prev = libvirt-prev.packages."x86_64-linux".libvirt-debugoptimized;
+      inherit libvirt libvirt-prev;
       python3Packages = prev.python3Packages.overrideScope (
         _: _: {
           inherit test-helper;
