@@ -147,7 +147,8 @@
         name = "libvirt-prev-chv";
       };
 
-      nixos-tests-outputs = import ./nixos-tests/outputs.nix {
+      # Flake-like output structure for the NixOS test environment.
+      nixosTestsOutputs = import ./nixos-tests/outputs.nix {
         inherit
           pkgs
           nixpkgs
@@ -159,38 +160,31 @@
         libvirt = libvirtPackageSet.libvirt-debugoptimized;
         libvirt-prev = libvirtPrevPackageSet.libvirt-debugoptimized;
       };
-    in
-    nixpkgs.lib.recursiveUpdate nixos-tests-outputs {
-      formatter."x86_64-linux" = pkgs.nixfmt-tree;
-      devShells = nixpkgs.lib.recursiveUpdate nixos-tests-outputs.devShells ({
-        "x86_64-linux".default = pkgs.mkShell {
-          inputsFrom = [ pkgs.libvirt ];
+
+      libvirtPackages = libvirtPackageSet // {
+        libvirt-prev = libvirtPrevPackageSet.libvirt;
+        libvirt-prev-debugoptimized = libvirtPrevPackageSet.libvirt-debugoptimized;
+        default = libvirtPackageSet.libvirt;
+        prepare-images = import ./local_tests/prepare-images.nix { inherit pkgs; };
+        prepare-windows-image = import ./local_tests/prepare-windows-image.nix { inherit pkgs; };
+      };
+
+      # Flake outputs of libvirt itself.
+      libvirtOutputs = {
+        devShells."x86_64-linux".default = pkgs.mkShell {
+          inputsFrom = builtins.attrValues libvirtPackageSet;
         };
-      });
-      packages = nixpkgs.lib.recursiveUpdate nixos-tests-outputs.packages (
-        nixpkgs.lib.recursiveUpdate cloud-hypervisor.packages ({
-
-          "x86_64-linux" =
-            let
-              inherit (libvirtPackageSet) libvirt libvirt-debugoptimized;
-
-              chv-ovmf = pkgs.OVMF-cloud-hypervisor.overrideAttrs (_old: {
-                version = "cbs";
-                src = edk2-src;
-              });
-
-            in
-            {
-              inherit libvirt libvirt-debugoptimized;
-              inherit cloud-hypervisor cloud-hypervisor-prev;
-              default = libvirt;
-              chv-ovmf = pkgs.runCommand "OVMF-CLOUHDHV.fd" { } ''
-                cp ${chv-ovmf.fd}/FV/CLOUDHV.fd $out
-              '';
-              prepare-images = import ./local_tests/prepare-images.nix { inherit pkgs; };
-              prepare-windows-image = import ./local_tests/prepare-windows-image.nix { inherit pkgs; };
-            };
-        })
-      );
+        packages."x86_64-linux" = libvirtPackages;
+      };
+    in
+    # Gracefully aggregated flake outputs of libvirt and the test suite.
+    {
+      checks = nixosTestsOutputs.checks;
+      formatter."x86_64-linux" = pkgs.nixfmt-tree;
+      tests = nixosTestsOutputs.tests;
+      devShells."x86_64-linux" =
+        nixosTestsOutputs.devShells."x86_64-linux" // libvirtOutputs.devShells."x86_64-linux";
+      packages."x86_64-linux" =
+        nixosTestsOutputs.packages."x86_64-linux" // libvirtOutputs.packages."x86_64-linux";
     };
 }
