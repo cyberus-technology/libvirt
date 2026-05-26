@@ -131,6 +131,16 @@
           inherit libvirt libvirt-debugoptimized;
         };
 
+      libvirtPackageSet = mkLibvirtPackageSet {
+        inherit pkgs;
+        src = cleanSourceWithSubmodules;
+        name = "libvirt-chv";
+        # Helps to keep track of the commit hash in the libvirt log.
+        # Nix strips all `.git`, so we need to be explicit here. This
+        # is a non-standard functionality of our own libvirt fork.
+        commitHash = if self ? rev then self.rev else "local-dirty";
+      };
+
       # Minimal flake-shaped wrapper for the previous libvirt release so the
       # NixOS test outputs can consume it like a normal flake input via
       # `libvirt-prev.packages.<system>`.
@@ -164,21 +174,10 @@
       });
       packages = nixpkgs.lib.recursiveUpdate nixos-tests-outputs.packages (
         nixpkgs.lib.recursiveUpdate cloud-hypervisor.packages ({
+
           "x86_64-linux" =
             let
-              inherit
-                (mkLibvirtPackageSet {
-                  inherit pkgs;
-                  src = cleanSourceWithSubmodules;
-                  name = "libvirt-chv";
-                  # Helps to keep track of the commit hash in the libvirt log.
-                  # Nix strips all `.git`, so we need to be explicit here. This
-                  # is a non-standard functionality of our own libvirt fork.
-                  commitHash = if self ? rev then self.rev else "local-dirty";
-                })
-                libvirt
-                libvirt-debugoptimized
-                ;
+              inherit (libvirtPackageSet) libvirt libvirt-debugoptimized;
 
               chv-ovmf = pkgs.OVMF-cloud-hypervisor.overrideAttrs (_old: {
                 version = "cbs";
