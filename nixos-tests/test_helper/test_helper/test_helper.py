@@ -310,6 +310,18 @@ def tearDownCommands(test: unittest.TestCase) -> List[str]:
     ]
 
 
+def seccompViolationJournalCmd(test: unittest.TestCase) -> str:
+    """
+    Checks if CH caused seccomp violations by looking for audit
+    messages of type AUDIT_SECCOMP(1326) in the kernel log.
+    """
+    return (
+        "journalctl --quiet SYSLOG_IDENTIFIER=kernel + SYSLOG_IDENTIFIER=testscript "
+        f"| sed -n '/{testcase_start_marker(test._testMethodName)}/,$p' "
+        "| grep '\\btype=1326\\b'"
+    )
+
+
 def teardownTestControllerVM(controllerVM: Machine, test: unittest.TestCase) -> None:
     """
     Tear down of the actual test case on the controllerVM. Takes care of
@@ -372,6 +384,11 @@ def teardownTestControllerVM(controllerVM: Machine, test: unittest.TestCase) -> 
         statusController, 0, msg=f"Sanitizer detected an issue: {outController}"
     )
 
+    # Check the the kernel log since the test began for seccomp violations
+    _, seccompOut = controllerVM.execute(seccompViolationJournalCmd(test))
+    if seccompOut != "":
+        raise RuntimeError(f"Cloud Hypervisor caused seccomp violations\n{seccompOut}")
+
 
 def teardownTestComputeVM(computeVM: Machine, test: unittest.TestCase) -> None:
     """
@@ -413,6 +430,11 @@ def teardownTestComputeVM(computeVM: Machine, test: unittest.TestCase) -> None:
     test.assertNotEqual(
         statusCompute, 0, msg=f"Sanitizer detected an issue: {outCompute}"
     )
+
+    # Check the the kernel log since the test began for seccomp violations
+    _, seccompOut = computeVM.execute(seccompViolationJournalCmd(test))
+    if seccompOut != "":
+        raise RuntimeError(f"Cloud Hypervisor caused seccomp violations\n{seccompOut}")
 
 
 class CommandGuard:
