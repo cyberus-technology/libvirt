@@ -8,7 +8,7 @@ try:
         LibvirtTestsBase,
         initialComputeVMSetup,
         initialControllerVMSetup,
-        ssh,
+        start_stress_in_vm,
         wait_for_ssh,
     )
 except Exception:
@@ -16,7 +16,7 @@ except Exception:
         LibvirtTestsBase,
         initialComputeVMSetup,
         initialControllerVMSetup,
-        ssh,
+        start_stress_in_vm,
         wait_for_ssh,
     )
 import unittest
@@ -56,8 +56,7 @@ class LibvirtTests(LibvirtTestsBase):  # type: ignore
         controllerVM.succeed("virsh start testvm")
 
         wait_for_ssh(controllerVM)
-
-        ssh(controllerVM, "screen -dmS stress stress -m 4 --vm-bytes 400M")
+        start_stress_in_vm(controllerVM)
 
         run_loops = 500
         for i in range(run_loops):

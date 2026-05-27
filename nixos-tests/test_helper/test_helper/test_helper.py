@@ -1114,3 +1114,40 @@ def assert_nested_cirros_connectivity(machine: Machine) -> None:
         return False
 
     wait_until_succeed(login)
+
+
+def start_stress_in_vm(machine: Machine):
+    """
+    Starts a memory-intensive stress instance in the VM in background, which
+    increases the dirty rate and slows down the migration.
+
+    :param machine: Machine to run SSH on
+    :return:
+    """
+
+    ssh(machine, "screen -dmS stress stress --vm 4 --vm-bytes 400M --vm-keep")
+    # Give stress time to unfold its impact.
+    time.sleep(1)
+
+
+def stop_stress_in_vm(machine: Machine, extra_ssh_params: str = ""):
+    """
+    Counterpart to `start_stress_in_vm`.
+
+    :param machine: Machine to run SSH on
+    :param extra_ssh_params: extra SSH params
+    :return:
+    """
+
+    # Ask the named screen session to exit first. This is the graceful path and
+    # should remove both screen and its stress child.
+    ssh(machine, "screen -S stress -X quit || true", extra_ssh_params=extra_ssh_params)
+
+    # Give screen a short chance to reap stress before using SIGKILL. This
+    # keeps the normal path quiet, but still bounded.
+    time.sleep(1)
+
+    # Guarantee that the workload is gone even if the graceful screen shutdown
+    # did not terminate its child. Match the exact process name so unrelated
+    # processes are left alone.
+    ssh(machine, "pkill -9 -x stress || true", extra_ssh_params=extra_ssh_params)
