@@ -457,6 +457,39 @@ class CommandGuard:
         return False
 
 
+def MigrationThrottleGuard(controllerVM: Machine, computeVM: Machine) -> CommandGuard:
+    """
+    Creates a guard that throttles the migration.
+    """
+    start_migration_throttling(controllerVM)
+    start_migration_throttling(computeVM)
+    return CommandGuard(
+        lambda machine: stop_migration_throttling(machine), controllerVM, computeVM
+    )
+
+
+def stop_migration_throttling(machine: Machine) -> None:
+    """
+    Remove the controllerVM migration network bandwidth limit.
+    """
+    machine.execute("tc qdisc del dev eth1 root")
+
+
+def start_migration_throttling(machine: Machine, bandwidth: str = "1gbit") -> None:
+    """
+    Limit controllerVM migration network bandwidth to 1gbit/s for outgoing
+    traffic.
+
+    This enables timing-sensitive use-cases, such as aborting live migrations.
+    """
+
+    # Attach a CAKE shaping qdisc to eth1's egress path, hard-capping outbound
+    # throughput at 1 Gbit/s. CAKE (sch_cake.ko, mainline since Linux 4.19)
+    # handles burst and scheduling internally, unlike TBF which requires manual
+    # HZ-dependent burst tuning.
+    machine.succeed(f"tc qdisc add dev eth1 root cake bandwidth {bandwidth}")
+
+
 def measure_ms(func: Callable[[], Any]) -> float:
     """
     Measure the execution time of a given function in ms.
