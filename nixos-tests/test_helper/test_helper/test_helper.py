@@ -3,7 +3,6 @@ import json
 import os
 import time
 import unittest
-import weakref
 from unittest import TestCase
 
 try:
@@ -12,7 +11,7 @@ except ImportError:
     pass
 
 from test_driver.machine import Machine  # type: ignore
-from typing import Any, Callable, List, Literal
+from typing import Any, Callable, List, Literal, Self
 
 # VIRTIO PCI constants
 VIRTIO_NETWORK_DEVICE = "1af4:1041"
@@ -407,29 +406,55 @@ def teardownTestComputeVM(computeVM: Machine, test: unittest.TestCase) -> None:
 
 class CommandGuard:
     """
-    Guard that executes a command after being garbage collected.
+    Python context manager that executes a cleanup command when leaving a scope.
 
-    Some test might need to run addition cleanup when exiting/failing.
-    This guard ensures that these cleanup function are run
+    The cleanup command is run when the with-block exits, both on success and
+    on failure.
     """
 
-    def __init__(self, command, machine):
+    def __init__(
+        self,
+        command: Callable[[Any], None],
+        machine: Machine,
+        machine2: Machine | None = None,
+    ) -> None:
         """
-        Initializes the guard with a command to work on a given machine.
+        Initializes the guard with a cleanup command for a given machine.
 
-        :param command: Function that runs a command on the given machine
-        :type command: Callable (Machine)
-        :param machine: Virtual machine to send the command from
-        :type machine: Machine
+        :param command: Cleanup function to call
+        :param machine: Machine passed to the cleanup function
+        :param machine2: Second machine passed to the cleanup function
         """
 
-        self._finilizer = weakref.finalize(self, command, machine)  # pyright: ignore[reportCallIssue]
+        self._command = command
+        self._machine = machine
+        self._machine2 = machine2
 
-    def __enter__(self):
+    def __enter__(self) -> Self:
+        """
+        Enters the guarded scope.
+
+        :return: This guard instance
+        """
+
         return self
 
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        self._finilizer()
+    def __exit__(
+        self,
+        _exc_type,
+        _exc_val,
+        _exc_tb,
+    ) -> bool:
+        """
+        Exits the guarded scope and runs cleanup.
+
+        Returning False keeps exceptions from the with-block visible.
+        """
+
+        self._command(self._machine)
+        if self._machine2 is not None:
+            self._command(self._machine2)
+        return False
 
 
 def measure_ms(func: Callable[[], Any]) -> float:
