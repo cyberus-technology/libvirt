@@ -22,6 +22,17 @@ VIRTCHD_RESTART_TIMEOUT_SEC = 15
 CLOUD_HYPERVISOR_EXIT_RETRIES = 50
 
 
+def testcase_start_marker(name: str) -> str:
+    """
+    Returns the marker in the (journalctl) log unambiguously identifying the
+    start of a certain test case.
+
+    :param name: Test case
+    :return: Marker
+    """
+    return f"Running test: {name}"
+
+
 class LibvirtTestsBase(unittest.TestCase):
     """
     Custom test base class handling multiple things:
@@ -45,7 +56,7 @@ class LibvirtTestsBase(unittest.TestCase):
 
         if self.computeVM:
             setupTestComputeVM(self.computeVM, self)
-        print(f"\n\nRunning test: {self._testMethodName}\n\n")
+        print(f"\n\n{testcase_start_marker(self._testMethodName)}\n\n")
 
     def tearDown(self):
         if self.controllerVM:
@@ -259,7 +270,7 @@ def setupTestControllerVM(controllerVM: Machine, test: unittest.TestCase) -> Non
     # In order to be able to differentiate the journal log for different
     # tests, we print a message with the test name as a marker
     controllerVM.succeed(
-        f'echo "Running test: {test._testMethodName}" | systemd-cat -t testscript -p info'
+        f'echo "{testcase_start_marker(test._testMethodName)}" | systemd-cat -t testscript -p info'
     )
 
 
@@ -277,7 +288,7 @@ def setupTestComputeVM(computeVM: Machine, test: unittest.TestCase) -> None:
     # In order to be able to differentiate the journal log for different
     # tests, we print a message with the test name as a marker
     computeVM.succeed(
-        f'echo "Running test: {test._testMethodName}" | systemd-cat -t testscript -p info'
+        f'echo "{testcase_start_marker(test._testMethodName)}" | systemd-cat -t testscript -p info'
     )
 
 
@@ -319,7 +330,7 @@ def teardownTestControllerVM(controllerVM: Machine, test: unittest.TestCase) -> 
     # Make sure there are no reports of the sanitizers. We retrieve the
     # journal for only the recent test run, by looking for the test run
     # marker. We then check for any ERROR messages of the sanitizers.
-    jrnCmd = f"journalctl _SYSTEMD_UNIT=virtchd.service + SYSLOG_IDENTIFIER=testscript | sed -n '/Running test: {test._testMethodName}/,$p' | grep ERROR"
+    jrnCmd = f"journalctl _SYSTEMD_UNIT=virtchd.service + SYSLOG_IDENTIFIER=testscript | sed -n '/{testcase_start_marker(test._testMethodName)}/,$p' | grep ERROR"
     statusController, outController = controllerVM.execute(jrnCmd)
 
     # Destroy and undefine all running and persistent domains
