@@ -92,6 +92,13 @@ class LibvirtTestsBase(unittest.TestCase):
         except Exception:
             pass
 
+    def save_machine_journal(self, machine: Machine, test, dst_path):
+        marker = testcase_start_marker(test._testMethodName)
+        machine.execute(
+            f"journalctl --quiet | sed -n '/{marker}/,$p' > /tmp/journalctl.log"
+        )
+        self.save_machine_log(machine, "/tmp/journalctl.log", dst_path)
+
     def save_logs(self, test, message):
         print(f"{message}")
 
@@ -107,6 +114,7 @@ class LibvirtTestsBase(unittest.TestCase):
             self.save_machine_log(machine, "/var/log/libvirt/ch/testvm.log", dst_path)
             self.save_machine_log(machine, "/var/log/libvirt/libvirtd.log", dst_path)
             self.save_machine_log(machine, "/tmp/vm_serial.log", dst_path)
+            self.save_machine_journal(machine, test, dst_path)
 
 
 def initialControllerVMSetup(
