@@ -69,13 +69,14 @@ ssh -F ~/.ssh/config ${HOST1} \
   --memory size=8G --cpus boot=2,kvm_hyperv=on,profile=sapphire-rapids \
   --serial tty \
   --console off \
+  --no-shutdown \
   --api-socket /tmp/chv.${CI_PIPELINE_ID}.sock | tee -a ./tmp-${CI_PIPELINE_ID}/${HOST1}.chv.log" &
 
 check_vm ${HOST1} ${VM_IP} 15
 
 echo "Run CHV only with api socket on host2: ${HOST2}"
 ssh -F ~/.ssh/config ${HOST2} \
-  "nohup ./tmp-${CI_PIPELINE_ID}/${CI_PROJECT_NAME}/result/bin/cloud-hypervisor \
+  "nohup ./tmp-${CI_PIPELINE_ID}/${CI_PROJECT_NAME}/result/bin/cloud-hypervisor --no-shutdown \
   --api-socket /tmp/chv.${CI_PIPELINE_ID}.sock | tee -a ./tmp-${CI_PIPELINE_ID}/${HOST2}.chv.log" &
 
 sleep 2
