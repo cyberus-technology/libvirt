@@ -609,7 +609,6 @@ chProcessAddNetworkDevice(virCHDriver *driver,
     int saved_errno = 0;
     int rc = 0;
     int ret = -1;
-    bool hyperv_enabled = vmdef->features[VIR_DOMAIN_FEATURE_HYPERV] == VIR_DOMAIN_HYPERV_MODE_CUSTOM;
 
     if (!virBitmapIsBitSet(driver->chCaps, CH_MULTIFD_IN_ADDNET)) {
         virReportError(VIR_ERR_INTERNAL_ERROR, "%s",
@@ -656,7 +655,7 @@ chProcessAddNetworkDevice(virCHDriver *driver,
 
     chAssignDeviceNetAlias(vmdef, net);
 
-    if (virCHMonitorBuildNetJson(net, &netJson, hyperv_enabled) < 0) {
+    if (virCHMonitorBuildNetJson(net, &netJson) < 0) {
         virReportError(VIR_ERR_INTERNAL_ERROR, "%s",
                         _("Failed to build net json"));
         DBG("virCHMonitorBuildNetJson failed.");
@@ -722,7 +721,6 @@ chProcessAddNetworkDevices(virCHDriver *driver,
     VIR_AUTOCLOSE mon_sockfd = -1;
     g_auto(virBuffer) buf = VIR_BUFFER_INITIALIZER;
     g_auto(virBuffer) http_headers = VIR_BUFFER_INITIALIZER;
-    bool hyperv_enabled = vmdef->features[VIR_DOMAIN_FEATURE_HYPERV] == VIR_DOMAIN_HYPERV_MODE_CUSTOM;
 
     if (!virBitmapIsBitSet(driver->chCaps, CH_MULTIFD_IN_ADDNET)) {
         virReportError(VIR_ERR_INTERNAL_ERROR, "%s",
@@ -778,7 +776,7 @@ chProcessAddNetworkDevices(virCHDriver *driver,
 
         chAssignDeviceNetAlias(vmdef, vmdef->nets[i]);
 
-        if (virCHMonitorBuildNetJson(vmdef->nets[i], &netJson, hyperv_enabled) < 0) {
+        if (virCHMonitorBuildNetJson(vmdef->nets[i], &netJson) < 0) {
             virReportError(VIR_ERR_INTERNAL_ERROR, "%s",
                            _("Failed to build net json"));
             DBG("virCHMonitorBuildNetJson failed.");

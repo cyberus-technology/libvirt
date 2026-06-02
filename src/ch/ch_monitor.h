@@ -224,8 +224,8 @@ virCHMonitorBuildDiskJson(virJSONValue *disks, virDomainDiskDef *diskdef);
 
 int
 virCHMonitorBuildNetJson(virDomainNetDef *netdef,
-                         char **jsonstr,
-                         bool hyperv_enabled);
+                         char **jsonstr);
+
 int virCHMonitorBuildRestoreJson(virDomainDef *vmdef,
                                  const char *from,
                                  char **jsonstr);
