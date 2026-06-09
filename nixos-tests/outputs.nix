@@ -38,10 +38,23 @@ let
     inherit (pkgs.python3Packages) buildPythonPackage setuptools;
   };
 
-  chv-ovmf = pkgs.OVMF-cloud-hypervisor.overrideAttrs (_: {
-    version = "cbs";
-    src = edk2-src;
-  });
+  chv-ovmf = pkgs.lib.pipe pkgs.OVMF-cloud-hypervisor [
+    # Set to `true` to enable debug logging in OVMF.
+    # Enabling debug logging may require more memory to boot successfully.
+    # More detailed debug information can be enabled by setting the
+    # `DEBUG_PRINT_ERROR_LEVEL` bit mask accordingly and adding patches.
+    # See https://github.com/scholzp/edk2-overlay for more information.
+    (drv: drv.override { debug = false; })
+    (
+      drv:
+      drv.overrideAttrs {
+        version = "cbs";
+        src = edk2-src;
+        # Add custom EDK2 patches here:
+        patches = [ ];
+      }
+    )
+  ];
 
   testPkgs = pkgs.appendOverlays [
     (_: prev: {
