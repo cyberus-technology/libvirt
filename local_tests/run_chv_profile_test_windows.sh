@@ -1,108 +1,108 @@
 #!/usr/bin/env bash
 
-set -euo pipefail
-set -x
+# all cleanup tasks are done by generic script: bare_metal_chv_cleanup.sh
+#
+# DON'T use any pipes in a `start_async` remote command
 
-CI_PIPELINE_ID=$1
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source ${SCRIPT_DIR}/process_handling.sh
+source ${SCRIPT_DIR}/helper_functions.sh
+
+CI_JOB_ID=$1
 CI_PROJECT_NAME=$2
+TAPDEV=$3
+
+# please look into helper_functions.sh
+VM_IP=$(get_vm_ip_address $TAPDEV)
+VM_MAC=$(get_vm_mac_address $TAPDEV)
+VMM_PORT=$(get_vmm_port $TAPDEV)
 
 HOST1="ferona-granite-rapids"   # 172.16.0.159
 HOST2="ferona-sapphire-rapids"  # 172.16.0.82
-VMM_PORT="4711"
-VM_IP="192.168.100.60"          # must match to MAC: 02:50:F2:00:01:81 -> see dnsmask configuration on ferona hardware
 
-NFS_ROOT="/shared/ferona-turin/gitlab/${CI_PIPELINE_ID}"
+NFS_ROOT="/shared/ferona-turin/gitlab/${CI_JOB_ID}"
 
-# Shutdown the VM and the VMM
-shutdown_vmm() {
-  local HOST=$1
-  export CI_BIN="./tmp-${CI_PIPELINE_ID}/${CI_PROJECT_NAME}/result/bin"
-  ssh -F ~/.ssh/config ${HOST} \
-  ${CI_BIN}/ch-remote \
-  --api-socket /tmp/chv.${CI_PIPELINE_ID}.sock shutdown
-
-  sleep 3
-
-  ssh -F ~/.ssh/config ${HOST} \
-  ${CI_BIN}/ch-remote \
-  --api-socket /tmp/chv.${CI_PIPELINE_ID}.sock shutdown-vmm
-}
-
-collect_logs() {
-  echo "Collect log files from bare metal hosts"
-  scp -F ~/.ssh/config ${HOST1}:/home/benchmark/tmp-${CI_PIPELINE_ID}/*.log ./logs
-  scp -F ~/.ssh/config ${HOST2}:/home/benchmark/tmp-${CI_PIPELINE_ID}/*.log ./logs
-}
-
-check_vm() {
-  local SSH_HOST=$1
-  local TARGET=$2
-  local tries=$3
-
-  echo "Check Host: ${TARGET} from: ${SSH_HOST}"
-
-  for i in $(seq 1 ${tries}); do
-    set +e
-    ssh -F ~/.ssh/config ${SSH_HOST} ping -c 1 ${TARGET}
-    if [ $? -eq 0 ]; then
-      echo "Host: ${TARGET} are reachable from: ${SSH_HOST}"
-      set -e
-      return 0
-    else
-      echo "Host: ${TARGET} are not reachable from: ${SSH_HOST} - iteration $i / ${tries}"
-      sleep 1
-    fi
-  done
-  set -e
-  return 1
+# Perform specific tasks when we have received the INT / TERM / EXIT signals.
+# This function is called in process_handling.sh
+# This function is can be specific for each test script.
+forward_signal_local() {
+  logging "Running forward_signal_local"
+  collect_logs
 }
 
 # run vm on host1
-# keep mac address in sync with dnsmask configuration on each host (static dhcp configuration of test-vm ip: 192.168.100.60)
-#   look here: https://gitlab.cyberus-technology.de/cyberus/cloud/hardware/-/blob/main/modules/host-services.nix?ref_type=heads#L43
-echo "Start test-vm on: ${HOST1}"
-ssh -F ~/.ssh/config ${HOST1} \
-  "nohup ./tmp-${CI_PIPELINE_ID}/${CI_PROJECT_NAME}/result/bin/cloud-hypervisor \
-  --net tap=tap10,mac=02:50:F2:00:01:81 \
+logging "Start test-vm on host1: ${HOST1}"
+start_async ssh -F ~/.ssh/config ${HOST1} \
+  "/home/benchmark/tmp-${CI_JOB_ID}/${CI_PROJECT_NAME}/result/bin/cloud-hypervisor \
+  --net tap=${TAPDEV},mac=${VM_MAC},offload_tso=off,offload_ufo=off,offload_csum=off \
   --firmware ${NFS_ROOT}/CLOUDHV.fd \
   --disk path=${NFS_ROOT}/windows-root.raw,image_type=raw,sparse=off \
   --memory size=8G --cpus boot=2,kvm_hyperv=on,profile=sapphire-rapids \
   --serial tty \
   --console off \
   --no-shutdown \
-  --api-socket /tmp/chv.${CI_PIPELINE_ID}.sock | tee -a ./tmp-${CI_PIPELINE_ID}/${HOST1}.chv.log" &
+  --log-file /home/benchmark/tmp-${CI_JOB_ID}/${HOST1}.chv.log \
+  --api-socket /tmp/chv.${CI_JOB_ID}.sock"
 
 check_vm ${HOST1} ${VM_IP} 15
 
-echo "Run CHV only with api socket on host2: ${HOST2}"
-ssh -F ~/.ssh/config ${HOST2} \
-  "nohup ./tmp-${CI_PIPELINE_ID}/${CI_PROJECT_NAME}/result/bin/cloud-hypervisor --no-shutdown \
-  --api-socket /tmp/chv.${CI_PIPELINE_ID}.sock | tee -a ./tmp-${CI_PIPELINE_ID}/${HOST2}.chv.log" &
+logging "Run CHV only with api socket on host2: ${HOST2}"
+start_async ssh -F ~/.ssh/config ${HOST2} \
+  "/home/benchmark/tmp-${CI_JOB_ID}/${CI_PROJECT_NAME}/result/bin/cloud-hypervisor \
+  --log-file /home/benchmark/tmp-${CI_JOB_ID}/${HOST2}.chv.log \
+  --no-shutdown \
+  --api-socket /tmp/chv.${CI_JOB_ID}.sock"
 
 sleep 2
 
-echo "Debug Host2 socket"
+logging "Debug Host2 socket"
 ssh -F ~/.ssh/config ${HOST2} 'ls -l /tmp/chv*'
 
-echo "Run ch-remote receive-migration on host2: ${HOST2}"
-ssh -F ~/.ssh/config ${HOST2} \
-  "nohup ./tmp-${CI_PIPELINE_ID}/${CI_PROJECT_NAME}/result/bin/ch-remote \
-  --api-socket /tmp/chv.${CI_PIPELINE_ID}.sock receive-migration tcp:0.0.0.0:${VMM_PORT} \
-  | tee -a ./tmp-${CI_PIPELINE_ID}/${HOST2}.ch-remote.log" &
+logging "Run ch-remote info on host: ${HOST1}"
+start_sync ssh -F ~/.ssh/config ${HOST1} \
+  "/home/benchmark/tmp-${CI_JOB_ID}/${CI_PROJECT_NAME}/result/bin/ch-remote \
+  --api-socket \
+  /tmp/chv.${CI_JOB_ID}.sock info" || collect_logs_exit_error
 
-echo "Debug processes on host2"
-ssh -F ~/.ssh/config ${HOST2} "ps axu | grep tmp-${CI_PIPELINE_ID}"
+logging "Run ch-remote ping on host: ${HOST1}"
+start_sync ssh -F ~/.ssh/config ${HOST1} \
+  "/home/benchmark/tmp-${CI_JOB_ID}/${CI_PROJECT_NAME}/result/bin/ch-remote \
+  --api-socket \
+  /tmp/chv.${CI_JOB_ID}.sock ping" || collect_logs_exit_error
 
-echo "Run ch-remote send-migration on host1: ${HOST1}"
-ssh -F ~/.ssh/config ${HOST1} \
-  "./tmp-${CI_PIPELINE_ID}/${CI_PROJECT_NAME}/result/bin/ch-remote \
-  --api-socket /tmp/chv.${CI_PIPELINE_ID}.sock send-migration destination_url=tcp:172.16.0.82:${VMM_PORT},connections=8 \
-  | tee -a ./tmp-${CI_PIPELINE_ID}/${HOST1}.ch-remote.log"
+logging "Run ch-remote ping on host: ${HOST2}"
+start_sync ssh -F ~/.ssh/config ${HOST2} \
+  "/home/benchmark/tmp-${CI_JOB_ID}/${CI_PROJECT_NAME}/result/bin/ch-remote \
+  --api-socket \
+  /tmp/chv.${CI_JOB_ID}.sock ping" || collect_logs_exit_error
 
-echo "Migration complete from ${HOST1} to ${HOST2}"
+# prepare host2
+logging "Run ch-remote receive-migration on host2: ${HOST2}"
+start_async ssh -F ~/.ssh/config ${HOST2} \
+  "/home/benchmark/tmp-${CI_JOB_ID}/${CI_PROJECT_NAME}/result/bin/ch-remote \
+  --api-socket \
+  /tmp/chv.${CI_JOB_ID}.sock receive-migration tcp:0.0.0.0:${VMM_PORT}"
+
+logging "Debug processes on host2"
+ssh -F ~/.ssh/config ${HOST2} "ps axu | grep tmp-${CI_JOB_ID}"
+
+# send vm
+logging "Run ch-remote send-migration on host: ${HOST1}"
+start_sync ssh -F ~/.ssh/config ${HOST1} \
+  "/home/benchmark/tmp-${CI_JOB_ID}/${CI_PROJECT_NAME}/result/bin/ch-remote \
+  --api-socket \
+  /tmp/chv.${CI_JOB_ID}.sock send-migration destination_url=tcp:172.16.0.82:${VMM_PORT},connections=8,keep_alive=true" || collect_logs_exit_error
+  # /tmp/chv.${CI_JOB_ID}.sock send-migration destination_url=tcp:172.16.0.82:${VMM_PORT},connections=8" || collect_logs_exit_error
+
+logging "Run ch-remote info on host: ${HOST2}"
+start_sync ssh -F ~/.ssh/config ${HOST2} \
+  "/home/benchmark/tmp-${CI_JOB_ID}/${CI_PROJECT_NAME}/result/bin/ch-remote \
+  --api-socket \
+  /tmp/chv.${CI_JOB_ID}.sock info" || collect_logs_exit_error
+
+logging "Migration complete from ${HOST1} to ${HOST2} - check vm on ${HOST2} now"
 check_vm ${HOST2} ${VM_IP} 15
 collect_logs
-
-# cleanup
-set +e
-shutdown_vmm ${HOST2}
+cleanup
