@@ -49,6 +49,7 @@ class LibvirtTestsBase(unittest.TestCase):
         super().__init__(methodName)
         self.controllerVM = controllerVM
         self.computeVM = computeVM
+        self.test_start_time = 0
 
     def setUp(self):
         if self.controllerVM:
@@ -57,6 +58,7 @@ class LibvirtTestsBase(unittest.TestCase):
         if self.computeVM:
             setupTestComputeVM(self.computeVM, self)
         print(f"\n\n{testcase_start_marker(self._testMethodName)}\n\n")
+        self.test_start_time = time.time()
 
     def tearDown(self):
         if self.controllerVM:
@@ -64,6 +66,9 @@ class LibvirtTestsBase(unittest.TestCase):
 
         if self.computeVM:
             teardownTestComputeVM(self.computeVM, self)
+
+        duration_s = int(time.time() - self.test_start_time)
+        print(f"\n\nRan test {self._testMethodName} in {duration_s}s\n\n")
 
     def run(self, result=None):
         if result is None:
