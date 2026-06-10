@@ -12,7 +12,7 @@ TEST_DRIVER_PIDS=$(pgrep -f .nixos-test-driver-wrapped)
 for P in ${TEST_DRIVER_PIDS}; do
   PROD_CWD=$(readlink -f /proc/${P}/cwd)
   if [ "$PROD_CWD" == "$REPO_DIR" ]; then
-    pgrep -P ${P} > ${SCRIPT_DIR}/../../child_pids.txt  # the tmp-${CI_PIPELINE_ID} directory
+    pgrep -P ${P} > ${SCRIPT_DIR}/../../child_pids.txt  # the tmp-${CI_JOB_ID} directory
     echo ${P} >> ${SCRIPT_DIR}/../../child_pids.txt
   fi
 done

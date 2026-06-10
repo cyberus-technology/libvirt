@@ -5,7 +5,7 @@
 
 SRC_PATH=""
 REMOTE_HOST=$1
-REMOTE_DIR="/home/benchmark/tmp-${CI_PIPELINE_ID}"
+REMOTE_DIR="/home/benchmark/tmp-${CI_JOB_ID}"
 
 if [ -n "${CI_MERGE_REQUEST_SOURCE_PROJECT_PATH}" ]; then
   SRC_PATH=${CI_MERGE_REQUEST_SOURCE_PROJECT_PATH}
@@ -18,8 +18,8 @@ if [ -z "${REMOTE_HOST}" ]; then
   exit 1
 fi
 
-if [ -z "${CI_PIPELINE_ID}" ]; then
-  echo "Error: environment variable CI_PIPELINE_ID is not set"
+if [ -z "${CI_JOB_ID}" ]; then
+  echo "Error: environment variable CI_JOB_ID is not set"
   exit 1
 fi
 

@@ -3,13 +3,12 @@
 ## prepare Ubuntu root disk on shared NFS storage
 
 set -euo pipefail
-set -x
 
-CI_PIPELINE_ID=$1
+CI_JOB_ID=$1
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BASE_DIR="${SCRIPT_DIR}/.."
 NFS_ROOT="/exports/gitlab"
-WORK_DIR="${NFS_ROOT}/${CI_PIPELINE_ID}"
+WORK_DIR="${NFS_ROOT}/${CI_JOB_ID}"
 cd ${BASE_DIR}
 
 nix build .\#packages.x86_64-linux.prepare-images
