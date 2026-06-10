@@ -76,6 +76,7 @@ variables:
     - echo "  SendEnv CI_COMMIT_REF_NAME" >> ~/.ssh/config
     - echo "  SendEnv CI_PROJECT_NAME" >> ~/.ssh/config
     - echo "  SendEnv CI_PROJECT_PATH" >> ~/.ssh/config
+    - echo "  SendEnv CI_JOB_ID" >> ~/.ssh/config
     - echo "  SendEnv CI_PIPELINE_ID" >> ~/.ssh/config
     - echo "  SendEnv CI_MERGE_REQUEST_SOURCE_PROJECT_PATH" >> ~/.ssh/config
     - echo "  SendEnv TESTSUITE" >> ~/.ssh/config
@@ -84,16 +85,15 @@ variables:
   after_script:
     - echo "Cleanup all VMs on each host"
     - |
-      nix shell nixpkgs#openssh --command bash -c '
+      nix shell nixpkgs#{openssh,curl,jq} --command bash -c '
         set -euo pipefail
-        set -x
-        ./local_tests/run_chv_profile_cleanup.sh ${CI_PIPELINE_ID} ${CI_PROJECT_NAME}
+        ./local_tests/bare_metal_chv_cleanup.sh
         echo "Cleanup all working directories on each host"
-        ssh -F ~/.ssh/config ferona-turin "rm -rf tmp-${CI_PIPELINE_ID}" || true
-        ssh -F ~/.ssh/config ferona-granite-rapids "rm -rf tmp-${CI_PIPELINE_ID}" || true
-        ssh -F ~/.ssh/config ferona-sapphire-rapids "rm -rf tmp-${CI_PIPELINE_ID}" || true
+        ssh -F ~/.ssh/config ferona-turin "rm -rf tmp-${CI_JOB_ID}" || true
+        ssh -F ~/.ssh/config ferona-granite-rapids "rm -rf tmp-${CI_JOB_ID}" || true
+        ssh -F ~/.ssh/config ferona-sapphire-rapids "rm -rf tmp-${CI_JOB_ID}" || true
         echo "Clean shared nfs directory"
-        ssh -F ~/.ssh/config ferona-turin "rm -rf /exports/gitlab/${CI_PIPELINE_ID}" || true
+        ssh -F ~/.ssh/config ferona-turin "rm -rf /exports/gitlab/${CI_JOB_ID}" || true
       '
 
 lint:commit:
@@ -256,22 +256,20 @@ test:cpu_profiles:
     - |
       nix shell nixpkgs#openssh --command bash -c '
         set -euo pipefail
-        set -x
         ./local_tests/checkout_repo_remote.sh ${TARGETHOST}
-        ssh -F ~/.ssh/config ${TARGETHOST} "./tmp-${CI_PIPELINE_ID}/${CI_PROJECT_NAME}/local_tests/${TESTSUITE} tmp-${CI_PIPELINE_ID}/${CI_PROJECT_NAME}" 2>&1 | tee logs/${TARGETHOST}.log
+        ./local_tests/run_remote.sh ${TARGETHOST} "./tmp-${CI_JOB_ID}/${CI_PROJECT_NAME}/local_tests/${TESTSUITE} ${CI_JOB_ID} ${CI_PROJECT_NAME}" 2>&1 | tee logs/${TARGETHOST}.log
       '
   after_script:
     - |
       nix shell nixpkgs#openssh --command bash -c '
         set -euo pipefail
-        set -x
-        ssh -F ~/.ssh/config ${TARGETHOST} "./tmp-${CI_PIPELINE_ID}/${CI_PROJECT_NAME}/local_tests/kill_child_pids.sh" || true
-        ssh -F ~/.ssh/config ${TARGETHOST} "rm -rf tmp-${CI_PIPELINE_ID}" || true
+        ssh -F ~/.ssh/config ${TARGETHOST} "./tmp-${CI_JOB_ID}/${CI_PROJECT_NAME}/local_tests/cleanup_remote.sh ${CI_JOB_ID} ${CI_PROJECT_NAME} ${TESTSUITE}" || true
+        # ssh -F ~/.ssh/config ${TARGETHOST} "rm -rf tmp-${CI_JOB_ID}" || true
       '
 
 test:bm:live-migration:
   stage: test
-  resource_group: ferona-hardware
+  resource_group: ferona-hardware-tap15
   timeout: "10 minutes"
   extends:
     - .hardware_build_template
@@ -285,17 +283,17 @@ test:bm:live-migration:
         ./local_tests/checkout_repo_remote.sh ferona-granite-rapids
         ./local_tests/checkout_repo_remote.sh ferona-sapphire-rapids
         # prepare image on nfs server host
-        ssh -F ~/.ssh/config ferona-turin "./tmp-${CI_PIPELINE_ID}/${CI_PROJECT_NAME}/local_tests/run_chv_profile_prepare_images.sh ${CI_PIPELINE_ID}" 2>&1 | tee -a logs/ferona-turin.log
+        ssh -F ~/.ssh/config ferona-turin "./tmp-${CI_JOB_ID}/${CI_PROJECT_NAME}/local_tests/run_chv_profile_prepare_images.sh ${CI_JOB_ID}" 2>&1 | tee -a logs/ferona-turin.log
         # build CHV on each host
-        ssh -F ~/.ssh/config ferona-granite-rapids "./tmp-${CI_PIPELINE_ID}/${CI_PROJECT_NAME}/local_tests/run_chv_profile_prepare_chv.sh"
-        ssh -F ~/.ssh/config ferona-sapphire-rapids "./tmp-${CI_PIPELINE_ID}/${CI_PROJECT_NAME}/local_tests/run_chv_profile_prepare_chv.sh"
+        ssh -F ~/.ssh/config ferona-granite-rapids "./tmp-${CI_JOB_ID}/${CI_PROJECT_NAME}/local_tests/run_chv_profile_prepare_chv.sh ${CI_JOB_ID} ${CI_PROJECT_NAME}"
+        ssh -F ~/.ssh/config ferona-sapphire-rapids "./tmp-${CI_JOB_ID}/${CI_PROJECT_NAME}/local_tests/run_chv_profile_prepare_chv.sh ${CI_JOB_ID} ${CI_PROJECT_NAME}"
         # build vm and run live migration
-        ./local_tests/run_chv_profile_test.sh ${CI_PIPELINE_ID} ${CI_PROJECT_NAME}
+        ./local_tests/run_chv_profile_test.sh ${CI_JOB_ID} ${CI_PROJECT_NAME} "tap15"
       '
 
 test:bm:live-migration-windows:
   stage: test
-  resource_group: ferona-hardware
+  resource_group: ferona-hardware-tap10
   timeout: "10 minutes"
   extends:
     - .hardware_build_template
@@ -310,17 +308,17 @@ test:bm:live-migration-windows:
         ./local_tests/checkout_repo_remote.sh ferona-granite-rapids
         ./local_tests/checkout_repo_remote.sh ferona-sapphire-rapids
         # prepare image on nfs server host
-        ssh -F ~/.ssh/config ferona-turin "./tmp-${CI_PIPELINE_ID}/${CI_PROJECT_NAME}/local_tests/run_chv_profile_prepare_windows_image.sh ${CI_PIPELINE_ID}" 2>&1 | tee -a logs/ferona-turin.log
+        ssh -F ~/.ssh/config ferona-turin "./tmp-${CI_JOB_ID}/${CI_PROJECT_NAME}/local_tests/run_chv_profile_prepare_windows_image.sh ${CI_JOB_ID}" 2>&1 | tee -a logs/ferona-turin.log
         # build CHV on each host
-        ssh -F ~/.ssh/config ferona-granite-rapids "./tmp-${CI_PIPELINE_ID}/${CI_PROJECT_NAME}/local_tests/run_chv_profile_prepare_chv.sh"
-        ssh -F ~/.ssh/config ferona-sapphire-rapids "./tmp-${CI_PIPELINE_ID}/${CI_PROJECT_NAME}/local_tests/run_chv_profile_prepare_chv.sh"
+        ssh -F ~/.ssh/config ferona-granite-rapids "./tmp-${CI_JOB_ID}/${CI_PROJECT_NAME}/local_tests/run_chv_profile_prepare_chv.sh ${CI_JOB_ID} ${CI_PROJECT_NAME}"
+        ssh -F ~/.ssh/config ferona-sapphire-rapids "./tmp-${CI_JOB_ID}/${CI_PROJECT_NAME}/local_tests/run_chv_profile_prepare_chv.sh ${CI_JOB_ID} ${CI_PROJECT_NAME}"
         # build vm and run live migration
-        ./local_tests/run_chv_profile_test_windows.sh ${CI_PIPELINE_ID} ${CI_PROJECT_NAME}
+        ./local_tests/run_chv_profile_test_windows.sh ${CI_JOB_ID} ${CI_PROJECT_NAME} "tap10"
       '
 
 test:bm:live-migration-windows-different-versions:
   stage: test
-  resource_group: ferona-hardware
+  resource_group: ferona-hardware-tap11
   timeout: "10 minutes"
   extends:
     - .hardware_build_template
@@ -335,13 +333,13 @@ test:bm:live-migration-windows-different-versions:
         ./local_tests/checkout_repo_remote.sh ferona-granite-rapids
         ./local_tests/checkout_repo_remote.sh ferona-sapphire-rapids
         # prepare image on nfs server host
-        ssh -F ~/.ssh/config ferona-turin "./tmp-${CI_PIPELINE_ID}/${CI_PROJECT_NAME}/local_tests/run_chv_profile_prepare_windows_image.sh ${CI_PIPELINE_ID}" 2>&1 | tee -a logs/ferona-turin.log
+        ssh -F ~/.ssh/config ferona-turin "./tmp-${CI_JOB_ID}/${CI_PROJECT_NAME}/local_tests/run_chv_profile_prepare_windows_image.sh ${CI_JOB_ID}" 2>&1 | tee -a logs/ferona-turin.log
         # build CHV on each host
-        ssh -F ~/.ssh/config ferona-granite-rapids "./tmp-${CI_PIPELINE_ID}/${CI_PROJECT_NAME}/local_tests/run_chv_profile_prepare_chv.sh"
+        ssh -F ~/.ssh/config ferona-granite-rapids "./tmp-${CI_JOB_ID}/${CI_PROJECT_NAME}/local_tests/run_chv_profile_prepare_chv.sh ${CI_JOB_ID} ${CI_PROJECT_NAME}"
         # build previous version in this host
-        ssh -F ~/.ssh/config ferona-sapphire-rapids "./tmp-${CI_PIPELINE_ID}/${CI_PROJECT_NAME}/local_tests/run_chv_profile_prepare_chv.sh prev"
+        ssh -F ~/.ssh/config ferona-sapphire-rapids "./tmp-${CI_JOB_ID}/${CI_PROJECT_NAME}/local_tests/run_chv_profile_prepare_chv.sh ${CI_JOB_ID} ${CI_PROJECT_NAME} prev"
         # build vm and run live migration
-        ./local_tests/run_chv_profile_test_windows.sh ${CI_PIPELINE_ID} ${CI_PROJECT_NAME}
+        ./local_tests/run_chv_profile_test_windows.sh ${CI_JOB_ID} ${CI_PROJECT_NAME} "tap11"
       '
 
 # this post job should always run
@@ -355,16 +353,15 @@ post:bm:live-migration-cleanup:
   script:
     - echo "Cleanup all VMs on each host"
     - |
-      nix shell nixpkgs#openssh --command bash -c '
+      nix shell nixpkgs#{openssh,curl,jq} --command bash -c '
         set -euo pipefail
-        set -x
-        ./local_tests/run_chv_profile_cleanup.sh ${CI_PIPELINE_ID} ${CI_PROJECT_NAME} || true
+        ./local_tests/bare_metal_chv_cleanup.sh all || true
         echo "Cleanup all working directories on each host"
-        ssh -F ~/.ssh/config ferona-turin "rm -rf tmp-${CI_PIPELINE_ID}" || true
-        ssh -F ~/.ssh/config ferona-granite-rapids "rm -rf tmp-${CI_PIPELINE_ID}" || true
-        ssh -F ~/.ssh/config ferona-sapphire-rapids "rm -rf tmp-${CI_PIPELINE_ID}" || true
+        ssh -F ~/.ssh/config ferona-turin "rm -rf tmp-${CI_JOB_ID}" || true
+        ssh -F ~/.ssh/config ferona-granite-rapids "rm -rf tmp-${CI_JOB_ID}" || true
+        ssh -F ~/.ssh/config ferona-sapphire-rapids "rm -rf tmp-${CI_JOB_ID}" || true
         echo "Clean shared nfs directory"
-        ssh -F ~/.ssh/config ferona-turin "rm -rf /exports/gitlab/${CI_PIPELINE_ID}" || true
+        ssh -F ~/.ssh/config ferona-turin "rm -rf /exports/gitlab/${CI_JOB_ID}" || true
       '
   after_script: []
 
