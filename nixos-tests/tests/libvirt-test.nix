@@ -37,11 +37,10 @@ in
 pkgs.testers.nixosTest {
   name = "Libvirt test suite for Cloud Hypervisor";
 
-  extraPythonPackages =
-    p: with p; [
-      pytest
-      test-helper
-    ];
+  extraPythonPackages = p: [
+    p.pytest
+    pkgs.test-helper
+  ];
 
   nodes.controllerVM =
     { lib, ... }:

@@ -91,6 +91,7 @@ let
         (
           { ... }:
           {
+            virtualisation.qemu.enableSharedMemory = false;
             virtualisation.qemu.options =
 
               [
@@ -108,6 +109,7 @@ let
         (
           { ... }:
           {
+            virtualisation.qemu.enableSharedMemory = false;
             virtualisation.qemu.options =
 
               [

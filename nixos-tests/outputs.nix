@@ -29,7 +29,9 @@ let
 
   # The nixos python test-driver is currently not exported, but we require it
   # for our test helper lib to get all required type information.
-  nixos-test-driver = pkgs.callPackage "${pkgs.path}/nixos/lib/test-driver/default.nix" { };
+  nixos-test-driver =
+    pkgs.python3Packages.callPackage "${pkgs.path}/nixos/lib/test-driver/default.nix"
+      { };
 
   test-helper = pkgs.callPackage ./test_helper.nix {
     inherit nixos-test-driver;
@@ -46,7 +48,7 @@ let
       fcntl-tool = fcntl-tool.packages."x86_64-linux".default;
       cloud-hypervisor = toDebugOptimizedChv cloud-hypervisor.packages."x86_64-linux".default;
       cloud-hypervisor-prev = toDebugOptimizedChv cloud-hypervisor-prev.packages."x86_64-linux".default;
-      inherit libvirt libvirt-prev;
+      inherit libvirt libvirt-prev test-helper;
       python3Packages = prev.python3Packages.overrideScope (
         _: _: {
           inherit test-helper;

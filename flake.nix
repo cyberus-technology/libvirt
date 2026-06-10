@@ -18,7 +18,7 @@
     keycodemapdb.url = "git+https://gitlab.com/keycodemap/keycodemapdb.git";
     keycodemapdb.flake = false;
     # We follow the latest stable release of nixpkgs
-    nixpkgs.url = "github:nixos/nixpkgs/nixos-25.11";
+    nixpkgs.url = "github:nixos/nixpkgs/nixos-26.05";
     # We use our custom firmware
     edk2-src.url = "git+https://github.com/cyberus-technology/edk2?ref=gardenlinux&submodules=1";
     edk2-src.flake = false;

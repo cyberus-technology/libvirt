@@ -36,7 +36,7 @@ except Exception:
 # in order to allow the IDE to lint the python code successfully.
 if "start_all" not in globals():
     from ..test_helper.test_helper.nixos_test_stubs import (  # type: ignore
-        Machine,
+        QemuMachine,
         computeVM,
         controllerVM,
         start_all,
@@ -67,7 +67,7 @@ class LibvirtTests(LibvirtTestsBase):  # type: ignore
 
         print("Note: This test can only run on Intel hardware!")
 
-        def test_cycle(src: Machine, dst: Machine):
+        def test_cycle(src: QemuMachine, dst: QemuMachine):
             src.succeed("virsh define /etc/domain-chv-cpu-skylake.xml")
             src.succeed("virsh start testvm")
             wait_for_ssh(src)
@@ -112,7 +112,7 @@ class LibvirtTests(LibvirtTestsBase):  # type: ignore
             "Note: This test can only run on hardware compatible to the Icelake-Server-v7 CPU profile!"
         )
 
-        def test_cycle(machine: Machine):
+        def test_cycle(machine: QemuMachine):
             machine.succeed("virsh define /etc/domain-chv-cpu-skylake.xml")
             machine.succeed("virsh start testvm")
             wait_for_ssh(machine)

@@ -68,33 +68,33 @@ except Exception:
 # in order to allow the IDE to lint the python code successfully.
 if "start_all" not in globals():
     from ..test_helper.test_helper.nixos_test_stubs import (  # type: ignore
-        Machine,
+        QemuMachine,
         computeVM,
         controllerVM,
         start_all,
     )
 
 
-def guest_boot_id(machine: Machine) -> str:
+def guest_boot_id(machine: QemuMachine) -> str:
     return ssh(machine, "cat /proc/sys/kernel/random/boot_id").strip()
 
 
-def domain_is_running(machine: Machine) -> bool:
+def domain_is_running(machine: QemuMachine) -> bool:
     return machine.execute("virsh domstate testvm | grep -q running")[0] == 0
 
 
-def assert_domain_absent(machine: Machine) -> None:
+def assert_domain_absent(machine: QemuMachine) -> None:
     machine.fail("virsh list --all | grep -q testvm")
 
 
 def screen_disappeared(
-    machine: Machine = controllerVM, screen_name: str = "migrate"
+    machine: QemuMachine = controllerVM, screen_name: str = "migrate"
 ) -> bool:
     return machine.execute(f"screen -ls | grep {screen_name}")[0] != 0
 
 
 def wait_for_guest_boot_id_change(
-    machine: Machine, old_boot_id: str, retries: int = 300
+    machine: QemuMachine, old_boot_id: str, retries: int = 300
 ) -> None:
     def boot_id_changed() -> bool:
         try:
@@ -106,7 +106,7 @@ def wait_for_guest_boot_id_change(
 
 
 def wait_for_migration_screen_to_finish(
-    machine: Machine, screen_name: str = "migrate"
+    machine: QemuMachine, screen_name: str = "migrate"
 ) -> None:
     wait_until_succeed(lambda: screen_disappeared(machine, screen_name))
 
@@ -394,7 +394,7 @@ class LibvirtTests(LibvirtTestsBase):  # type: ignore
         controllerVM.succeed("virsh start testvm")
         wait_for_ssh(controllerVM)
 
-        def migrate_cancel_migrate(src: Machine, dst: Machine):
+        def migrate_cancel_migrate(src: QemuMachine, dst: QemuMachine):
             """
             Performs a migration roundtrip between both VM hosts. Each migration
             is canceled before it is supposed to succeed.
@@ -1312,7 +1312,7 @@ class LibvirtTests(LibvirtTestsBase):  # type: ignore
         on computeVM and must no longer be running on controllerVM.
         """
 
-        def cleanup_iteration(machine: Machine) -> None:
+        def cleanup_iteration(machine: QemuMachine) -> None:
             machine.execute("screen -S migrate -X quit")
             machine.execute("virsh destroy testvm")
             machine.execute("virsh undefine testvm")
@@ -1488,7 +1488,7 @@ class LibvirtTests(LibvirtTestsBase):  # type: ignore
                 vm.name
             ]
 
-        def drop_network(machine: Machine):
+        def drop_network(machine: QemuMachine):
             """
             Simulate a network partition, not a NIC unplug: keep eth1 link-up
             so host networking stays configured, but drop traffic so migration
@@ -1502,7 +1502,7 @@ class LibvirtTests(LibvirtTestsBase):  # type: ignore
             machine.succeed("tc filter add dev eth1 ingress matchall action drop")
             machine.succeed("tc filter add dev eth1 egress matchall action drop")
 
-        def restore_network(machine: Machine):
+        def restore_network(machine: QemuMachine):
             """
             Restore normal test network connectivity after drop_network().
             """

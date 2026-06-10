@@ -6,11 +6,11 @@ import unittest
 from unittest import TestCase
 
 try:
-    from .nixos_test_stubs import Machine  # type: ignore
+    from .nixos_test_stubs import QemuMachine  # type: ignore
 except ImportError:
     pass
 
-from test_driver.machine import Machine  # type: ignore
+from test_driver.machine import QemuMachine  # type: ignore
 from typing import Any, Callable, List, Literal, Self
 
 # VIRTIO PCI constants
@@ -43,8 +43,8 @@ class LibvirtTestsBase(unittest.TestCase):
     def __init__(
         self,
         methodName,
-        controllerVM: Machine | None,
-        computeVM: Machine | None = None,  # Allow for tests with only a single VM
+        controllerVM: QemuMachine | None,
+        computeVM: QemuMachine | None = None,  # Allow for tests with only a single VM
     ):
         super().__init__(methodName)
         self.controllerVM = controllerVM
@@ -85,14 +85,14 @@ class LibvirtTestsBase(unittest.TestCase):
 
         return super().run(result)
 
-    def save_machine_log(self, machine: Machine, log_path, dst_path):
+    def save_machine_log(self, machine: QemuMachine, log_path, dst_path):
         try:
-            machine.copy_from_vm(log_path, dst_path)
+            machine.copy_from_machine(log_path, dst_path)
         # Non-existing logs lead to an Exception that we ignore
         except Exception:
             pass
 
-    def save_machine_journal(self, machine: Machine, test, dst_path):
+    def save_machine_journal(self, machine: QemuMachine, test, dst_path):
         marker = testcase_start_marker(test._testMethodName)
         machine.execute(
             f"journalctl --quiet | sed -n '/{marker}/,$p' > /tmp/journalctl.log"
@@ -118,7 +118,7 @@ class LibvirtTestsBase(unittest.TestCase):
 
 
 def initialControllerVMSetup(
-    controllerVM: Machine, target_os: Literal["linux", "windows"] = "linux"
+    controllerVM: QemuMachine, target_os: Literal["linux", "windows"] = "linux"
 ) -> None:
     """
     This method configures the controllerVM initially, before the test
@@ -165,7 +165,7 @@ def initialControllerVMSetup(
     controllerVM.succeed("virsh net-create /etc/libvirt_test_network.xml")
 
 
-def initialComputeVMSetup(computeVM: Machine) -> None:
+def initialComputeVMSetup(computeVM: QemuMachine) -> None:
     """
     This method configures the computeVM initially, before the test suite
     runs. It sets up e.g. the NFS share in client mode.
@@ -191,7 +191,7 @@ def initialComputeVMSetup(computeVM: Machine) -> None:
 
 
 def assert_domain_domstate(
-    machine: Machine,
+    machine: QemuMachine,
     expected_state: Literal["running", "paused", "shut off"],
     vm_name: str = "testvm",
 ) -> None:
@@ -203,7 +203,7 @@ def assert_domain_domstate(
         )
 
 
-def _kill_cloud_hypervisor(machine: Machine) -> bool:
+def _kill_cloud_hypervisor(machine: QemuMachine) -> bool:
     status, _ = machine.execute("pidof cloud-hypervisor")
     if status != 0:
         return False
@@ -217,7 +217,7 @@ def _kill_cloud_hypervisor(machine: Machine) -> bool:
 
 
 def restart_virtchd(
-    machine: Machine, timeout_sec: int = VIRTCHD_RESTART_TIMEOUT_SEC
+    machine: QemuMachine, timeout_sec: int = VIRTCHD_RESTART_TIMEOUT_SEC
 ) -> None:
     """
     Restart virtchd during teardown.
@@ -263,7 +263,7 @@ def restart_virtchd(
         )
 
 
-def setupTestControllerVM(controllerVM: Machine, test: unittest.TestCase) -> None:
+def setupTestControllerVM(controllerVM: QemuMachine, test: unittest.TestCase) -> None:
     if controllerVM.name != "controllerVM":
         raise RuntimeError(
             f"Setup method called with unexpected VM {controllerVM.name}"
@@ -282,7 +282,7 @@ def setupTestControllerVM(controllerVM: Machine, test: unittest.TestCase) -> Non
     )
 
 
-def setupTestComputeVM(computeVM: Machine, test: unittest.TestCase) -> None:
+def setupTestComputeVM(computeVM: QemuMachine, test: unittest.TestCase) -> None:
     if computeVM.name != "computeVM":
         raise RuntimeError(f"Setup method called with unexpected VM {computeVM.name}")
 
@@ -330,7 +330,9 @@ def seccompViolationJournalCmd(test: unittest.TestCase) -> str:
     )
 
 
-def teardownTestControllerVM(controllerVM: Machine, test: unittest.TestCase) -> None:
+def teardownTestControllerVM(
+    controllerVM: QemuMachine, test: unittest.TestCase
+) -> None:
     """
     Tear down of the actual test case on the controllerVM. Takes care of
     resetting the nixos image back to the golden state.
@@ -398,7 +400,7 @@ def teardownTestControllerVM(controllerVM: Machine, test: unittest.TestCase) -> 
         raise RuntimeError(f"Cloud Hypervisor caused seccomp violations\n{seccompOut}")
 
 
-def teardownTestComputeVM(computeVM: Machine, test: unittest.TestCase) -> None:
+def teardownTestComputeVM(computeVM: QemuMachine, test: unittest.TestCase) -> None:
     """
     Tear down of the actual test case on the computeVM.
 
@@ -456,14 +458,14 @@ class CommandGuard:
     def __init__(
         self,
         command: Callable[[Any], None],
-        machine: Machine,
-        machine2: Machine | None = None,
+        machine: QemuMachine,
+        machine2: QemuMachine | None = None,
     ) -> None:
         """
         Initializes the guard with a cleanup command for a given machine.
 
         :param command: Cleanup function to call
-        :param machine: Machine passed to the cleanup function
+        :param machine: QemuMachine passed to the cleanup function
         :param machine2: Second machine passed to the cleanup function
         """
 
@@ -498,7 +500,9 @@ class CommandGuard:
         return False
 
 
-def MigrationThrottleGuard(controllerVM: Machine, computeVM: Machine) -> CommandGuard:
+def MigrationThrottleGuard(
+    controllerVM: QemuMachine, computeVM: QemuMachine
+) -> CommandGuard:
     """
     Creates a guard that throttles the migration.
     """
@@ -509,14 +513,14 @@ def MigrationThrottleGuard(controllerVM: Machine, computeVM: Machine) -> Command
     )
 
 
-def stop_migration_throttling(machine: Machine) -> None:
+def stop_migration_throttling(machine: QemuMachine) -> None:
     """
     Remove the controllerVM migration network bandwidth limit.
     """
     machine.execute("tc qdisc del dev eth1 root")
 
 
-def start_migration_throttling(machine: Machine, bandwidth: str = "1gbit") -> None:
+def start_migration_throttling(machine: QemuMachine, bandwidth: str = "1gbit") -> None:
     """
     Limit controllerVM migration network bandwidth to 1gbit/s for outgoing
     traffic.
@@ -573,7 +577,7 @@ def wait_until_fail(func: Callable[[], bool], retries: int = 600) -> None:
 
 
 def wait_for_host_shares_ipv4_network(
-    machine: Machine, ip: str = "192.168.1.2", retries=20
+    machine: QemuMachine, ip: str = "192.168.1.2", retries=20
 ):
     """
     Wait until the host has an IPv4 address in the same /24 network as the
@@ -604,7 +608,7 @@ def wait_for_host_shares_ipv4_network(
 
 
 def wait_for_ping(
-    machine: Machine, ip: str = "192.168.1.2", retries: int = 200
+    machine: QemuMachine, ip: str = "192.168.1.2", retries: int = 200
 ) -> None:
     """
     Waits for the VM to become pingable.
@@ -630,7 +634,7 @@ def wait_for_ping(
 
 
 def wait_for_ssh(
-    machine: Machine,
+    machine: QemuMachine,
     user: str = "root",
     password: str = "root",
     ip: str = "192.168.1.2",
@@ -672,7 +676,7 @@ def wait_for_ssh(
 
 
 def ssh(
-    machine: Machine,
+    machine: QemuMachine,
     cmd: str,
     user: str = "root",
     password: str = "root",
@@ -685,7 +689,7 @@ def ssh(
 
     The specified machine is used as SSH jump host.
 
-    :param machine: Machine to run SSH on
+    :param machine: QemuMachine to run SSH on
     :param cmd: The command to execute via SSH
     :param user: user for SSH login
     :param password: password for SSH login
@@ -711,7 +715,7 @@ def ssh(
     return out
 
 
-def number_of_devices(machine: Machine, filter: str = "") -> int:
+def number_of_devices(machine: QemuMachine, filter: str = "") -> int:
     """
     Returns the number of PCI devices in the VM.
 
@@ -728,7 +732,7 @@ def number_of_devices(machine: Machine, filter: str = "") -> int:
     return int(out)
 
 
-def number_of_network_devices(machine: Machine) -> int:
+def number_of_network_devices(machine: QemuMachine) -> int:
     """
     Returns the number of PCI virtio-net devices in the VM.
 
@@ -739,7 +743,7 @@ def number_of_network_devices(machine: Machine) -> int:
     return number_of_devices(machine, PCI_CLASS_GENERIC_ETHERNET_CONTROLLER)
 
 
-def number_of_storage_devices(machine: Machine) -> int:
+def number_of_storage_devices(machine: QemuMachine) -> int:
     """
     Returns the number of PCI virtio-blk devices in the VM.
 
@@ -750,7 +754,7 @@ def number_of_storage_devices(machine: Machine) -> int:
     return number_of_devices(machine, PCI_CLASS_GENERIC_STORAGE_CONTROLLER)
 
 
-def hotplug(machine: Machine, cmd: str, expect_success: bool = True) -> None:
+def hotplug(machine: QemuMachine, cmd: str, expect_success: bool = True) -> None:
     """
     Hotplugs (attaches or detaches) a device and waits for the guest to
     acknowledge that.
@@ -789,7 +793,7 @@ def hotplug(machine: Machine, cmd: str, expect_success: bool = True) -> None:
     wait_for_guest_pci_device_enumeration(machine, num_new_expected)
 
 
-def hotplug_fail(machine: Machine, cmd: str) -> None:
+def hotplug_fail(machine: QemuMachine, cmd: str) -> None:
     """
     Hotplugs (attaches or detaches) a device and expect that to fail.
 
@@ -800,7 +804,7 @@ def hotplug_fail(machine: Machine, cmd: str) -> None:
     hotplug(machine, cmd, False)
 
 
-def reset_system_image(machine: Machine) -> None:
+def reset_system_image(machine: QemuMachine) -> None:
     """
     Replaces the (possibly modified) system image with its original
     image.
@@ -814,7 +818,7 @@ def reset_system_image(machine: Machine) -> None:
     )
 
 
-def pci_devices_by_bdf(machine: Machine) -> dict[str, str]:
+def pci_devices_by_bdf(machine: QemuMachine) -> dict[str, str]:
     """
     Creates a dict of all PCI devices addressable by their BDF in the VM.
 
@@ -836,7 +840,7 @@ def pci_devices_by_bdf(machine: Machine) -> dict[str, str]:
     return out
 
 
-def wait_for_guest_pci_device_enumeration(machine: Machine, new_count: int) -> None:
+def wait_for_guest_pci_device_enumeration(machine: QemuMachine, new_count: int) -> None:
     """
     Block until the guest operating system has observed a PCI topology change
     (hotplug or unplug) by verifying that the number of enumerated PCI devices
@@ -856,7 +860,7 @@ def wait_for_guest_pci_device_enumeration(machine: Machine, new_count: int) -> N
     wait_until_succeed(lambda: number_of_devices(machine) == new_count, 20)
 
 
-def number_of_free_hugepages(machine: Machine) -> int:
+def number_of_free_hugepages(machine: QemuMachine) -> int:
     """
     Returns the number of free hugepages on the given machine.
 
@@ -867,7 +871,7 @@ def number_of_free_hugepages(machine: Machine) -> int:
     return int(out)
 
 
-def allocate_hugepages(machine: Machine, nr_hugepages: int) -> None:
+def allocate_hugepages(machine: QemuMachine, nr_hugepages: int) -> None:
     """
     Allocates the given amount of hugepages on the given machine, and checks
     whether the allocation was successful.
@@ -886,14 +890,16 @@ def allocate_hugepages(machine: Machine, nr_hugepages: int) -> None:
     wait_until_succeed(lambda: number_of_free_hugepages(machine) == nr_hugepages, 10)
 
 
-def get_local_192_168_net24_networks(machine: Machine) -> List[ipaddress.IPv4Network]:
+def get_local_192_168_net24_networks(
+    machine: QemuMachine,
+) -> List[ipaddress.IPv4Network]:
     """
     Discover local IPv4 interface networks that match all the following:
       - IPv4 only
       - Prefix length exactly /24
       - Network is within 192.168.0.0/16
 
-    :param machine: Machine to execute the SSH command on.
+    :param machine: QemuMachine to execute the SSH command on.
     """
     status, result = machine.execute("ip -j a")
     assert status == 0
@@ -928,7 +934,7 @@ def get_local_192_168_net24_networks(machine: Machine) -> List[ipaddress.IPv4Net
     return sorted(networks)
 
 
-def ip_in_local_192_168_net24(machine: Machine, ip: str) -> bool:
+def ip_in_local_192_168_net24(machine: QemuMachine, ip: str) -> bool:
     """
     Checks if the given IPv4 address belongs to one of the machine's local
     192.168.x.0/24 networks.
@@ -942,7 +948,7 @@ def ip_in_local_192_168_net24(machine: Machine, ip: str) -> bool:
     192.168.x.x address (e.g. after network reconfiguration, hotplug,
     or unintended interface changes).
 
-    :param machine: Machine on which local network interfaces are inspected.
+    :param machine: QemuMachine on which local network interfaces are inspected.
     :param ip: Target IPv4 address expected to be reachable via a local /24
                192.168.x.0 network.
     :return: Whether the host shares a local IPv4 network with the given IP.
@@ -960,7 +966,7 @@ def ip_in_local_192_168_net24(machine: Machine, ip: str) -> bool:
     return False
 
 
-def parse_devices_from_dom_def(machine: Machine, path: str) -> dict[str, str]:
+def parse_devices_from_dom_def(machine: QemuMachine, path: str) -> dict[str, str]:
     """
     Parses `devices` from a domain XML given by `path` on `machine` and returns them in a dict.
 
@@ -1018,7 +1024,7 @@ def parse_devices_from_dom_def(machine: Machine, path: str) -> dict[str, str]:
     return result
 
 
-def vm_unresponsive(machine: Machine) -> bool:
+def vm_unresponsive(machine: QemuMachine) -> bool:
     """
     Tells whether the VM is unresponsive.
     """
@@ -1029,7 +1035,7 @@ def vm_unresponsive(machine: Machine) -> bool:
         return True
 
 
-def tid_of(machine: Machine, thread_name: str) -> int:
+def tid_of(machine: QemuMachine, thread_name: str) -> int:
     """
     Returns the tid of a given thread name of the first Cloud Hypervisor
     process found.
@@ -1046,13 +1052,13 @@ def tid_of(machine: Machine, thread_name: str) -> int:
     return tid
 
 
-def taskset_of(machine: Machine, tid: int) -> str:
+def taskset_of(machine: QemuMachine, tid: int) -> str:
     taskset = machine.succeed(f"taskset -p {tid} | awk '{{print $6}}'").rstrip()
 
     return taskset
 
 
-def validate_pinning(machine: Machine, expected_pinning: dict[str, str]):
+def validate_pinning(machine: QemuMachine, expected_pinning: dict[str, str]):
     """
     Check that the pinning of the Cloud Hypervisor threads are as expected.
 
@@ -1075,7 +1081,7 @@ def validate_pinning(machine: Machine, expected_pinning: dict[str, str]):
             )
 
 
-def vcpu_affinity_checks(testcase: TestCase, machine: Machine, context: str = ""):
+def vcpu_affinity_checks(testcase: TestCase, machine: QemuMachine, context: str = ""):
     """
     Asserts that vCPU thread CPU affinity matches the pinning defined in
     /etc/domain-chv-numa.xml.
@@ -1121,7 +1127,7 @@ NESTED_CIRROS_MAC = "52:54:00:e5:b9:01"
 NESTED_CIRROS_DNSMASQ_LEASEFILE = "/run/nested-cirros-dnsmasq.leases"
 
 
-def setup_nested_cirros(machine: Machine) -> None:
+def setup_nested_cirros(machine: QemuMachine) -> None:
     """
     Setup a nested cirros VM inside of a already active guest VM running on the
     given 'machine'.
@@ -1193,7 +1199,7 @@ def setup_nested_cirros(machine: Machine) -> None:
         ) from e
 
 
-def assert_nested_cirros_connectivity(machine: Machine) -> None:
+def assert_nested_cirros_connectivity(machine: QemuMachine) -> None:
     """
     Test if the nested guest is alive and reachable over its DHCP-backed
     network. As the Cirros image takes very long to reach a state where SSH
@@ -1215,12 +1221,12 @@ def assert_nested_cirros_connectivity(machine: Machine) -> None:
     wait_until_succeed(login)
 
 
-def start_stress_in_vm(machine: Machine):
+def start_stress_in_vm(machine: QemuMachine):
     """
     Starts a memory-intensive stress instance in the VM in background, which
     increases the dirty rate and slows down the migration.
 
-    :param machine: Machine to run SSH on
+    :param machine: QemuMachine to run SSH on
     :return:
     """
 
@@ -1229,11 +1235,11 @@ def start_stress_in_vm(machine: Machine):
     time.sleep(1)
 
 
-def stop_stress_in_vm(machine: Machine, extra_ssh_params: str = ""):
+def stop_stress_in_vm(machine: QemuMachine, extra_ssh_params: str = ""):
     """
     Counterpart to `start_stress_in_vm`.
 
-    :param machine: Machine to run SSH on
+    :param machine: QemuMachine to run SSH on
     :param extra_ssh_params: extra SSH params
     :return:
     """

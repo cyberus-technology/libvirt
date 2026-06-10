@@ -6,7 +6,7 @@ This file should be in the same directory as your test script.
 from typing import Any, Optional, Dict
 
 
-class Machine:
+class QemuMachine:
     """Stub for NixOS test machine object."""
 
     name: str
@@ -87,7 +87,7 @@ class Machine:
         """Copy file from host to machine."""
         pass
 
-    def copy_from_vm(self, source: str, target: str) -> None:
+    def copy_from_machine(self, source: str, target: str) -> None:
         """Copy file from machine to host."""
         pass
 
@@ -102,8 +102,8 @@ class Machine:
 
 # Global machine instances that will be available in test scripts
 # Add your machine names here based on your test configuration
-controllerVM: Machine = Machine()
-computeVM: Machine = Machine()
+controllerVM: QemuMachine = QemuMachine()
+computeVM: QemuMachine = QemuMachine()
 
 
 # Additional NixOS test utilities
@@ -112,6 +112,6 @@ def start_all() -> None:
     pass
 
 
-def create_machine(config: Dict[str, Any]) -> Machine:
+def create_machine(config: Dict[str, Any]) -> QemuMachine:
     """Create a new machine."""
-    return Machine()
+    return QemuMachine()

@@ -31,7 +31,7 @@ except Exception:
 # in order to allow the IDE to lint the python code successfully.
 if "start_all" not in globals():
     from ..test_helper.test_helper.nixos_test_stubs import (  # type: ignore
-        Machine,
+        QemuMachine,
         computeVM,
         controllerVM,
         start_all,
@@ -51,7 +51,7 @@ class Tls(Enum):
 
 
 def test_migration(
-    sender: Machine, receiver: Machine, connections: Connections, tls: Tls
+    sender: QemuMachine, receiver: QemuMachine, connections: Connections, tls: Tls
 ):
     """
     The test implementation itself. This test
