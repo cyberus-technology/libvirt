@@ -72,7 +72,7 @@ pkgs.testers.nixosTest {
           );
         qemu.networkingOptions = lib.mkAfter [
           "-device virtio-net-pci,netdev=hostvm,mac=52:54:00:12:01:02,host_mtu=${toString hostVMNetworkMtu}"
-          ''-netdev stream,id=hostvm,server=off,addr.type=unix,addr.path="$SHARED_DIR"/hostvm-net.sock''
+          ''-netdev stream,id=hostvm,server=off,reconnect-ms=1000,addr.type=unix,addr.path="$SHARED_DIR"/hostvm-net.sock''
         ];
       };
 
@@ -142,8 +142,6 @@ pkgs.testers.nixosTest {
           );
         qemu.networkingOptions = lib.mkAfter [
           "-device virtio-net-pci,netdev=hostvm,mac=52:54:00:12:01:01,host_mtu=${toString hostVMNetworkMtu}"
-          # The test driver starts computeVM before controllerVM, so computeVM
-          # owns the listening end of the host-VM socket.
           ''-netdev stream,id=hostvm,server=on,addr.type=unix,addr.path="$SHARED_DIR"/hostvm-net.sock''
         ];
       };
