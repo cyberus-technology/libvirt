@@ -126,6 +126,18 @@ virCHProcessEvent(virCHMonitor *mon,
     case VIR_CH_EVENT_VM_RESUMED /* also after live migration */:
     case VIR_CH_EVENT_VM_RESTORED:
         virObjectLock(vm);
+
+        // Prevent race against VIR_CH_EVENT_VM_SHUTDOWN.
+        // This can happen, for example, when the guest triple
+        // faults during shutdown handling. In that case, we see
+        // VIR_CH_EVENT_VM_REBOOTED after we have processed
+        // VIR_CH_EVENT_VM_SHUTDOWN but the domain is already gone.
+        if (!virDomainObjIsActive(vm)) {
+            DBG("Unable to resume VM, domain is no longer active");
+            virObjectUnlock(vm);
+            ret = -1;
+            break;
+        }
         /*
          * There is a race condition in the virCHProcessSetup that in rare
          * timing conditions we detect threads in Cloud Hypervisor that are not
