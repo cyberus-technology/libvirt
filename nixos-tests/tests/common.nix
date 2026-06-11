@@ -685,6 +685,16 @@ in
             })}";
           };
         };
+        # This image is not supposed to boot as 16MiB is not even enough to successfully
+        # run the firmware.
+        "/etc/domain-chv-cirros-16MiB-memory.xml" = {
+          "C+" = {
+            argument = "${pkgs.writeText "domain-cirros.xml" (virsh_ch_xml {
+              image = "/var/lib/libvirt/storage-pools/nfs-share/cirros.img";
+              memoryMiB = 16;
+            })}";
+          };
+        };
         "/etc/domain-chv-cirros.xml" = {
           "C+" = {
             argument = "${pkgs.writeText "domain-cirros.xml" (virsh_ch_xml {

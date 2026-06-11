@@ -1440,6 +1440,23 @@ class LibvirtTests(LibvirtTestsBase):  # type: ignore
         )
         wait_for_ssh(controllerVM, ip="192.168.2.2")
 
+    def test_boot_not_enough_memory(self):
+        """
+        This tests replicates a scenario that we hit in production. We boot a VM
+        with only 16MiB of memory, which is not even enough for the firmware (OVMF)
+        to successfully boot. Instead, the firmware triple faults and the VM reboots
+        afterwards.
+        We expect that both cloud-hypervisor and libvirt survive such a scenario
+        """
+        controllerVM.succeed("virsh define /etc/domain-chv-cirros-16MiB-memory.xml")
+        controllerVM.succeed("virsh start testvm")
+
+        controllerVM.wait_until_succeeds(
+            "grep -qF 'Guest likely triple-faulted' /var/log/libvirt/ch/testvm.log", 60
+        )
+
+        controllerVM.succeed("virsh destroy testvm")
+
 
 def suite():
     # Test cases sorted in alphabetical order.
@@ -1450,6 +1467,7 @@ def suite():
         LibvirtTests.test_bdf_invalid_device_id,
         LibvirtTests.test_bdf_valid_device_id_with_function_id,
         LibvirtTests.test_bdfs_implicitly_assigned_same_after_recreate,
+        LibvirtTests.test_boot_not_enough_memory,
         LibvirtTests.test_cirros_image,
         LibvirtTests.test_disk_is_locked,
         LibvirtTests.test_disk_resize_qcow2,
