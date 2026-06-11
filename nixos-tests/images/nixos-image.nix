@@ -37,7 +37,6 @@ nixpkgs.lib.nixosSystem {
         boot.initrd.kernelModules = [
           "virtio_net"
         ];
-        boot.initrd.systemd.enable = false;
         boot.kernelModules = [
           "msr"
         ];
