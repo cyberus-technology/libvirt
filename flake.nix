@@ -4,7 +4,7 @@
   inputs = {
     # A local path can be used for developing or testing local changes.
     # cloud-hypervisor.url = "git+file:<path/to/cloud-hypervisor>";
-    cloud-hypervisor.url = "github:cyberus-technology/cloud-hypervisor?ref=gardenlinux";
+    cloud-hypervisor.url = "github:scholzp/cloud-hypervisor?ref=fw_config_v52";
     cloud-hypervisor.inputs.nixpkgs.follows = "nixpkgs";
     # Previous release of cloud-hypervisor for migration testing with different versions.
     cloud-hypervisor-prev.url = "github:cyberus-technology/cloud-hypervisor?ref=gardenlinux-release-26-04-20";
@@ -20,7 +20,7 @@
     # We follow the latest stable release of nixpkgs
     nixpkgs.url = "github:nixos/nixpkgs/nixos-26.05";
     # We use our custom firmware
-    edk2-src.url = "git+https://github.com/cyberus-technology/edk2?ref=gardenlinux&submodules=1";
+    edk2-src.url = "git+https://github.com/scholzp/edk2?ref=activate_fw_cfg&submodules=1";
     edk2-src.flake = false;
     fcntl-tool.url = "github:phip1611/fcntl-tool";
     fcntl-tool.inputs.nixpkgs.follows = "nixpkgs";
