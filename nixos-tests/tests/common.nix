@@ -86,6 +86,8 @@ let
         oemStrings = [ ];
       },
       cpuModel ? "",
+      # Whether to add an additional disk with boot index set to 1.
+      boot_index ? false,
     }:
     let
       defaultSmbios = {
@@ -226,7 +228,9 @@ let
           <type arch='x86_64'>hvm</type>
           ${smbiosModeXml}
           <kernel>/etc/CLOUDHV.fd</kernel>
-          <boot dev='hd'/>
+          ${if boot_index then "" else "
+            <boot dev='hd'/>
+            "}
         </os>
         ${sysinfoBlockXml}
         <clock offset='utc'/>
@@ -304,6 +308,20 @@ let
                   <log file="/var/log/libvirt/ch/testvm.log" append="off"/>
                 </serial>
               ''
+            else
+              ""
+          }
+          ${
+            # Assign a fixed BDF that would normally be acquired by the implicit RNG device
+            if boot_index then
+              "
+              <disk type='file' device='disk'>
+                <source file='/var/lib/libvirt/storage-pools/nfs-share/nixos.img'/>
+                <target dev='vdc' bus='virtio'/>
+                <address type='pci' domain='0x0000' bus='0x00' slot='0x1f' function='0x0'/>
+                <boot order='1'/>
+              </disk>
+            "
             else
               ""
           }
@@ -824,6 +842,14 @@ in
           "C+" = {
             argument = "${pkgs.writeText "cirros-sapphire-rapids.xml" (virsh_ch_xml {
               cpuModel = "sapphire-rapids";
+            })}";
+          };
+        };
+        "/etc/domain-chv-boot-index.xml" = {
+          "C+" = {
+            argument = "${pkgs.writeText "domain-chv-boot-index.xml" (virsh_ch_xml {
+              image = "/var/lib/libvirt/storage-pools/nfs-share/cirros.img";
+              boot_index = true;
             })}";
           };
         };

@@ -1457,6 +1457,78 @@ class LibvirtTests(LibvirtTestsBase):  # type: ignore
 
         controllerVM.succeed("virsh destroy testvm")
 
+    def test_boot_index(self):
+        """
+        Test that libvirt `bootindex` settings are applied correctly.
+
+        This tests more or less tests the whole stack down to the guest. The
+        `bootindex` option is passed to CH, from which CH creates a `fw_cfg`
+        device and populates it with a `bootorder` entry. Next in the chain is
+        OVMF, which is responsible to read the `bootorder` entry and respect the
+        hints. Last in the chain is the guest which we use to read from the
+        `fw_cfg` device in this test.
+
+        NixOS brings a driver for the `fw_cfg` device. We utilize it to read
+        it's entries and ensure that:
+            1) The correct image was booted
+            2) `fw_cfg` is accessible
+            3) It has a `bootorder` entry
+            4) The `bootorder` entry contains the expected devices
+
+        Important!
+        The last check relies on the configurable BDF feature to work
+        correctly. While strictly speaking we don't depend on it, it allows us
+        to place the disk we want to actually boot behind the first disk
+        explicitly in the PCI device tree. By using the last possible PCI device
+        ID we can ensure that the disk we don't want to boot from doesn't
+        accidentally receive an implicit PCI ID greater than that of the disk
+        we want to boot from. If this would ever happen than the disk we don't
+        want to boot from would be the one we wont boot by default and the
+        test would yield a false positive. With the device ID set to `1f` (see
+        the domain XML) the default behavior, unless overridden by respecting
+        the `bootorder` entry, is to boot the disk we don't want to boot.
+        """
+
+        controllerVM.succeed("virsh define /etc/domain-chv-boot-index.xml")
+        controllerVM.succeed("virsh start testvm")
+
+        # While the first disk contains the Cirros image, we actually want to
+        # boot NixOS. In case the boot order override doesn't work, the guest
+        # will run Cirros. The result is that the ssh connection below fails.
+        wait_for_ssh(controllerVM)
+        # Assert NixOs runs. As the Cirros image uses different credentials we
+        # actually might see a time out here if the wrong image was booted
+        ssh_result: str = ssh(controllerVM, "cat /etc/os-release | grep VENDOR_NAME")
+        self.assertEqual(
+            ssh_result,
+            "VENDOR_NAME=NixOS\n",
+            f"Should have booted NixOS, got {ssh_result}",
+        )
+        # Assert the correct boot order entry
+        ssh_result: str = ssh(
+            controllerVM, "cat /sys/firmware/qemu_fw_cfg/by_name/bootorder/raw"
+        )
+        self.assertIn(
+            "/pci@i0cf8/scsi@1f/disk@0,0",
+            ssh_result,
+            f"bootorder should contain the correct disk path, got {ssh_result}",
+        )
+        # Assert we booted from the second disk. The NixOs image is an ISO, so
+        # we do not query / but /iso instead.
+        ssh_result: str = ssh(controllerVM, "findmnt /iso")
+        self.assertIn(
+            "/dev/vdb",
+            ssh_result,
+            f"Should boot from second disk (vdb); Got {ssh_result}",
+        )
+        # Assert that vdb is the last PCI device
+        ssh_result: str = ssh(controllerVM, "readlink -f /sys/class/block/vdb")
+        self.assertIn(
+            "0000:00:1f.0",
+            ssh_result,
+            f"vdb should originate from the last PCI device; got {ssh_result}",
+        )
+
 
 def suite():
     # Test cases sorted in alphabetical order.
@@ -1468,6 +1540,7 @@ def suite():
         LibvirtTests.test_bdf_valid_device_id_with_function_id,
         LibvirtTests.test_bdfs_implicitly_assigned_same_after_recreate,
         LibvirtTests.test_boot_not_enough_memory,
+        LibvirtTests.test_boot_index,
         LibvirtTests.test_cirros_image,
         LibvirtTests.test_disk_is_locked,
         LibvirtTests.test_disk_resize_qcow2,
