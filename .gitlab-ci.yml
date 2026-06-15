@@ -291,6 +291,31 @@ test:bm:live-migration:
         ./local_tests/run_chv_profile_test.sh ${CI_JOB_ID} ${CI_PROJECT_NAME} "tap15"
       '
 
+test:bm:live-migration-different-versions:
+  stage: test
+  resource_group: ferona-hardware-tap16
+  timeout: "10 minutes"
+  extends:
+    - .hardware_build_template
+  script:
+    - rm -rf logs && mkdir logs
+    - |
+      nix shell nixpkgs#openssh --command bash -c '
+        set -euo pipefail
+        # checkout repo on each host
+        ./local_tests/checkout_repo_remote.sh ferona-turin
+        ./local_tests/checkout_repo_remote.sh ferona-granite-rapids
+        ./local_tests/checkout_repo_remote.sh ferona-sapphire-rapids
+        # prepare image on nfs server host
+        ssh -F ~/.ssh/config ferona-turin "./tmp-${CI_JOB_ID}/${CI_PROJECT_NAME}/local_tests/run_chv_profile_prepare_images.sh ${CI_JOB_ID}" 2>&1 | tee -a logs/ferona-turin.log
+        # build previous version on this host
+        ssh -F ~/.ssh/config ferona-granite-rapids "./tmp-${CI_JOB_ID}/${CI_PROJECT_NAME}/local_tests/run_chv_profile_prepare_chv.sh ${CI_JOB_ID} ${CI_PROJECT_NAME} prev"
+        # build current version on this host
+        ssh -F ~/.ssh/config ferona-sapphire-rapids "./tmp-${CI_JOB_ID}/${CI_PROJECT_NAME}/local_tests/run_chv_profile_prepare_chv.sh ${CI_JOB_ID} ${CI_PROJECT_NAME}"
+        # build vm and run live migration
+        ./local_tests/run_chv_profile_test.sh ${CI_JOB_ID} ${CI_PROJECT_NAME} "tap16"
+      '
+
 test:bm:live-migration-windows:
   stage: test
   resource_group: ferona-hardware-tap10
