@@ -18,7 +18,10 @@ start_sync() {
     logging "add pid: $pid to list of child processes"
     children+=("$pid")
     wait $pid
-    return $?
+    local ec="$?"
+    logging "end sync process: $@"
+    logging "end sync process with exit code: $ec"
+    return $ec
 }
 
 # Start a process and remember its PID
