@@ -47,7 +47,8 @@ start_async ssh -F ~/.ssh/config ${HOST1} \
   --console off \
   --no-shutdown \
   --log-file /home/benchmark/tmp-${CI_JOB_ID}/${HOST1}.chv.log \
-  --api-socket /tmp/chv.${CI_JOB_ID}.sock"
+  --api-socket /tmp/chv.${CI_JOB_ID}.sock \
+  -v"
 
 # if the check fails collect all logs for further debugging
 check_vm ${HOST1} ${VM_IP} 15
@@ -57,7 +58,8 @@ start_async ssh -F ~/.ssh/config ${HOST2} \
   "/home/benchmark/tmp-${CI_JOB_ID}/${CI_PROJECT_NAME}/result/bin/cloud-hypervisor \
   --log-file /home/benchmark/tmp-${CI_JOB_ID}/${HOST2}.chv.log \
   --no-shutdown \
-  --api-socket /tmp/chv.${CI_JOB_ID}.sock"
+  --api-socket /tmp/chv.${CI_JOB_ID}.sock \
+  -v"
 
 sleep 2
 
