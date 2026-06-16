@@ -19,8 +19,10 @@ collect_logs() {
   logging "Start collect_logs: copy files from bare metal hosts into local ./logs directory"
   ssh -F ~/.ssh/config ${HOST1} sync
   ssh -F ~/.ssh/config ${HOST2} sync
+  ssh -F ~/.ssh/config ferona-turin sync
   scp -F ~/.ssh/config "${HOST1}:/home/benchmark/tmp-${CI_JOB_ID}/*.log" ./logs || true
   scp -F ~/.ssh/config "${HOST2}:/home/benchmark/tmp-${CI_JOB_ID}/*.log" ./logs || true
+  scp -F ~/.ssh/config "ferona-turin:/shared/ferona-turin/gitlab/${CI_JOB_ID}/serial.log" ./logs || true
   ls -la ./logs/*
   logging "Finished collect_logs"
 }

@@ -43,7 +43,7 @@ start_async ssh -F ~/.ssh/config ${HOST1} \
   --disk path=${NFS_ROOT}/jammy-server-cloudimg-amd64.raw,image_type=raw,sparse=off \
     path=${NFS_ROOT}/cloud-init.raw,image_type=raw,sparse=off \
   --memory size=2G --cpus boot=2,profile=sapphire-rapids \
-  --serial file=/home/benchmark/tmp-${CI_JOB_ID}/${HOST1}.serial.log \
+  --serial file=/shared/ferona-turin/gitlab/${CI_JOB_ID}/serial.log \
   --console off \
   --no-shutdown \
   --log-file /home/benchmark/tmp-${CI_JOB_ID}/${HOST1}.chv.log \
