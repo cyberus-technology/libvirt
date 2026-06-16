@@ -79,12 +79,17 @@ cleanup_processes() {
     local BASE_DIR="/home/benchmark/tmp-${CI_JOB_ID}/${CI_PROJECT_NAME}"
 
     local targets=()
-    targets+=("$(realpath "${BASE_DIR}")")
+    targets+=("${BASE_DIR}")
 
     # if run on real hardware with nixos test driver
+    # in run_cpu_profile_test.sh XDG_RUNTIME_DIR will be set to a temporary directory in: /tmp
+    # XDG_RUNTIME_DIR=$(mktemp -d)
+    # all processes in this directory must be removed
     if [ "${XDG_RUNTIME_DIR:-}" != "" ]; then
-        logging "XDG_RUNTIME_DIR is set - add this directory into process check list"
-        targets+=("$(realpath "${XDG_RUNTIME_DIR}")")
+        if [[ "${XDG_RUNTIME_DIR}" != "/run/user/"* ]]; then
+            logging "XDG_RUNTIME_DIR is set to a non default directory - add this directory into process check list"
+            targets+=("${XDG_RUNTIME_DIR}")
+        fi
     fi
 
     logging "Cleanup all processes with current working directory in: ${targets[*]}"
@@ -100,12 +105,14 @@ cleanup_processes() {
         [ -e "$proc/cwd" ] || continue
 
         cwd=$(readlink -f "$proc/cwd" 2>/dev/null) || continue
+        exe=$(readlink -f "$proc/exe" 2>/dev/null) || exe="can-not-read-executeable-path-from-proc"
 
         for target in "${targets[@]}"; do
             case "$cwd" in
-                "$target"|"$target"/*)
+                "$target")
                     if kill -0 "$pid" 2>/dev/null; then
-                        logging "Send ${sig} to pid: $pid (cwd: $cwd)"
+                        logging "Send ${sig} to pid: $pid (cwd: $cwd - exe: $exe)"
+                        logging "DEBUG: target: $target"
                         kill "-${sig}" "$pid" 2>/dev/null || true
                     fi
                     break
