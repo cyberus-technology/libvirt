@@ -36,7 +36,7 @@ forward_signal_local() {
 logging "Start test-vm on host1: ${HOST1}"
 start_async ssh -F ~/.ssh/config ${HOST1} \
   "/home/benchmark/tmp-${CI_JOB_ID}/${CI_PROJECT_NAME}/result/bin/cloud-hypervisor \
-  --net tap=${TAPDEV},mac=${VM_MAC},offload_tso=off,offload_ufo=off,offload_csum=off \
+  --net tap=${TAPDEV},mac=${VM_MAC} \
   --firmware ${NFS_ROOT}/CLOUDHV.fd \
   --disk path=${NFS_ROOT}/windows-root.raw,image_type=raw,sparse=off \
   --memory size=8G --cpus boot=2,kvm_hyperv=on,profile=sapphire-rapids \
