@@ -347,7 +347,7 @@ test:bm:live-migration-windows-different-versions:
 # then this job removes all leftovers from the previos stage
 post:bm:live-migration-cleanup:
   stage: post
-  timeout: "2 minutes"
+  timeout: "5 minutes"
   extends:
     - .hardware_build_template
   script:
