@@ -313,7 +313,8 @@ test:bm:live-migration-different-versions:
         # build current version on this host
         ssh -F ~/.ssh/config ferona-sapphire-rapids "./tmp-${CI_JOB_ID}/${CI_PROJECT_NAME}/local_tests/run_chv_profile_prepare_chv.sh ${CI_JOB_ID} ${CI_PROJECT_NAME}"
         # build vm and run live migration
-        ./local_tests/run_chv_profile_test.sh ${CI_JOB_ID} ${CI_PROJECT_NAME} "tap16"
+        # remove the v51 paramter if the previous version of CHV >= v52
+        ./local_tests/run_chv_profile_test.sh ${CI_JOB_ID} ${CI_PROJECT_NAME} "tap16" "v51"
       '
 
 test:bm:live-migration-windows:
