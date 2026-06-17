@@ -20,7 +20,7 @@ fi
 PID=$(cat tmp-${CI_JOB_ID}/${CI_PROJECT_NAME}/.main.pid)
 export XDG_RUNTIME_DIR=$(cat tmp-${CI_JOB_ID}/${CI_PROJECT_NAME}/.xdg_runtime_dir)
 cleanup_processes TERM
-kill $PID
+kill $PID || true
 
 # cleanup working directory
-rm -rf tmp-${CI_JOB_ID}
+rm -rf tmp-${CI_JOB_ID} || true
