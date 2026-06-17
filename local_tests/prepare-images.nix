@@ -25,12 +25,15 @@ let
       }
       ''
         password_hash="$(mkpasswd --method=SHA-512 ubuntu)"
+        mac_address="$(tr -d '\n' < ${./cloud-init/vm_mac})"
 
         substitute ${./cloud-init/user-data.yaml.in} user-data \
           --subst-var-by password_hash "$password_hash"
 
+        substitute ${./cloud-init/network-config.yaml.in} network-config \
+          --subst-var-by mac_address "$mac_address"
+
         cp ${./cloud-init/meta-data.yaml} meta-data
-        cp ${./cloud-init/network-config.yaml} network-config
 
         cloud-init schema --config-file user-data
         cloud-localds -N network-config "$out" user-data meta-data
