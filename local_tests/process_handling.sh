@@ -80,6 +80,8 @@ cleanup_processes() {
 
     local targets=()
     targets+=("${BASE_DIR}")
+    # add BASE_DIR also in case if the directory is already deleted by an other process
+    targets+=("${BASE_DIR} (deleted)")
 
     # if run on real hardware with nixos test driver
     # in run_cpu_profile_test.sh XDG_RUNTIME_DIR will be set to a temporary directory in: /tmp
@@ -89,6 +91,8 @@ cleanup_processes() {
         if [[ "${XDG_RUNTIME_DIR}" != "/run/user/"* ]]; then
             logging "XDG_RUNTIME_DIR is set to a non default directory - add this directory into process check list"
             targets+=("${XDG_RUNTIME_DIR}")
+            # add XDG_RUNTIME_DIR also in case if the directory is already deleted by an other process
+            targets+=("${XDG_RUNTIME_DIR} (deleted)")
         fi
     fi
 
