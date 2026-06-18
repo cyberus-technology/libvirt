@@ -22,5 +22,9 @@ export XDG_RUNTIME_DIR=$(cat tmp-${CI_JOB_ID}/${CI_PROJECT_NAME}/.xdg_runtime_di
 cleanup_processes TERM
 kill $PID || true
 
+logging "cleanup XDG_RUNTIME_DIR: ${XDG_RUNTIME_DIR}"
+rm -rf ${XDG_RUNTIME_DIR} || true
+
 # cleanup working directory
-rm -rf tmp-${CI_JOB_ID} || true
+logging "cleanup CI_JOB_ID directory: /home/benchmark/tmp-${CI_JOB_ID}"
+rm -rf /home/benchmark/tmp-${CI_JOB_ID} || true
