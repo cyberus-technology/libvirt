@@ -13,6 +13,7 @@ source ${SCRIPT_DIR}/helper_functions.sh
 CI_JOB_ID=$1
 CI_PROJECT_NAME=$2
 TAPDEV=$3
+MQ="${4:-false}" # network multi queue
 
 # please look into helper_functions.sh
 VM_IP=$(get_vm_ip_address $TAPDEV)
@@ -32,11 +33,17 @@ forward_signal_local() {
   collect_logs
 }
 
+NETPARAM="tap=${TAPDEV},mac=${VM_MAC}"
+if [ "$MQ" == "true" ]; then
+  # queue number = cpu * 2
+  NETPARAM="tap=${TAPDEV},mac=${VM_MAC},num_queues=4"
+fi
+
 # run vm on host1
 logging "Start test-vm on host1: ${HOST1}"
 start_async ssh -F ~/.ssh/config ${HOST1} \
   "/home/benchmark/tmp-${CI_JOB_ID}/${CI_PROJECT_NAME}/result/bin/cloud-hypervisor \
-  --net tap=${TAPDEV},mac=${VM_MAC} \
+  --net ${NETPARAM} \
   --firmware ${NFS_ROOT}/CLOUDHV.fd \
   --disk path=${NFS_ROOT}/windows-root.raw,image_type=raw,sparse=off \
   --memory size=8G --cpus boot=2,kvm_hyperv=on,profile=sapphire-rapids \
