@@ -36,6 +36,7 @@ from .test_helper import (
     wait_for_ssh,
     wait_until_fail,
     wait_until_succeed,
+    MAX_EXPECTED_WAIT_SEC,
 )
 
 from .msrs import (
@@ -85,4 +86,5 @@ __all__ = [
     "wait_for_ssh",
     "wait_until_fail",
     "wait_until_succeed",
+    "MAX_EXPECTED_WAIT_SEC",
 ]

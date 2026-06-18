@@ -11,6 +11,7 @@ try:
     from ..test_helper.test_helper import (  # type: ignore
         CommandGuard,
         LibvirtTestsBase,
+        MAX_EXPECTED_WAIT_SEC,
         MigrationThrottleGuard,
         VIRTIO_BLOCK_DEVICE,
         VIRTIO_ENTROPY_SOURCE,
@@ -37,6 +38,7 @@ except Exception:
     from test_helper import (
         CommandGuard,
         LibvirtTestsBase,
+        MAX_EXPECTED_WAIT_SEC,
         MigrationThrottleGuard,
         VIRTIO_BLOCK_DEVICE,
         VIRTIO_ENTROPY_SOURCE,
@@ -233,7 +235,9 @@ class LibvirtTests(LibvirtTestsBase):  # type: ignore
             machine.succeed(
                 "systemd-run --unit tcpdump-mig-l2 -- bash -lc 'tcpdump -i any -w /tmp/l2.pcap \"(arp or rarp)\" 2> /tmp/l2.log'"
             )
-            machine.wait_until_succeeds("grep -q 'listening on any' /tmp/l2.log")
+            machine.wait_until_succeeds(
+                "grep -q 'listening on any' /tmp/l2.log", timeout=MAX_EXPECTED_WAIT_SEC
+            )
 
         def stop_capture_and_assert_migration_announcements(
             machine, expect_announcements: bool
@@ -370,7 +374,9 @@ class LibvirtTests(LibvirtTestsBase):  # type: ignore
             # dst side: To prevent test errors, we gracefully wait for the
             # migration failure cleanup to finish before we start a new
             # migration.
-            computeVM.wait_until_fails("virsh list | grep testvm")
+            computeVM.wait_until_fails(
+                "virsh list | grep testvm", timeout=MAX_EXPECTED_WAIT_SEC
+            )
 
             ssh(controllerVM, "echo VM still usable")
 
@@ -425,7 +431,9 @@ class LibvirtTests(LibvirtTestsBase):  # type: ignore
             # dst side: To prevent test errors, we gracefully wait for the
             # migration failure cleanup to finish before we start a new
             # migration.
-            dst.wait_until_fails("virsh list | grep testvm")
+            dst.wait_until_fails(
+                "virsh list | grep testvm", timeout=MAX_EXPECTED_WAIT_SEC
+            )
 
             # Kill workload (migration will be faster)
             stop_stress_in_vm(src)
@@ -909,7 +917,10 @@ class LibvirtTests(LibvirtTestsBase):  # type: ignore
                 dst.succeed(
                     f"systemd-run --unit tcpdump-mig -- bash -lc 'tcpdump -i eth1 -w /tmp/tls.pcap \"{port_filter} and {tls_filter}\" 2> /tmp/tls.log'"
                 )
-                dst.wait_until_succeeds("grep -q 'listening on eth1' /tmp/tls.log")
+                dst.wait_until_succeeds(
+                    "grep -q 'listening on eth1' /tmp/tls.log",
+                    timeout=MAX_EXPECTED_WAIT_SEC,
+                )
 
                 src.succeed(
                     f"virsh migrate --domain testvm --desturi ch+tcp://{dst_host}/session --persistent --live --p2p --tls {parallel_string if parallel else ''}"
@@ -1005,7 +1016,9 @@ class LibvirtTests(LibvirtTestsBase):  # type: ignore
                 wait_for_ssh(controllerVM)
 
                 controllerVM.succeed("virsh list | grep 'testvm'")
-                computeVM.wait_until_fails("virsh list | grep 'testvm'")
+                computeVM.wait_until_fails(
+                    "virsh list | grep 'testvm'", timeout=MAX_EXPECTED_WAIT_SEC
+                )
 
             check_certificates(controllerVM)
             check_certificates(computeVM)
@@ -1019,7 +1032,9 @@ class LibvirtTests(LibvirtTestsBase):  # type: ignore
                 wait_for_ssh(controllerVM)
 
                 controllerVM.succeed("virsh list | grep 'testvm'")
-                computeVM.wait_until_fails("virsh list | grep 'testvm'")
+                computeVM.wait_until_fails(
+                    "virsh list | grep 'testvm'", timeout=MAX_EXPECTED_WAIT_SEC
+                )
 
             check_certificates(controllerVM)
 
@@ -1537,11 +1552,15 @@ class LibvirtTests(LibvirtTestsBase):  # type: ignore
             # Now we wait until the VM disappears on the receiver side, and appears as
             # `running` on the sender side.
             receiver.wait_until_fails("virsh list | grep testvm")
-            sender.wait_until_succeeds("virsh list | grep testvm")
+            sender.wait_until_succeeds(
+                "virsh list | grep testvm", timeout=MAX_EXPECTED_WAIT_SEC
+            )
             sender.succeed("virsh list | grep 'running'")
 
             # Wait until the send migration command terminates.
-            sender.wait_until_fails("screen -list | grep migrate")
+            sender.wait_until_fails(
+                "screen -list | grep migrate", timeout=MAX_EXPECTED_WAIT_SEC
+            )
 
             # Note: it is important not to interact with the VM here. Since we disabled the network,
             # we also disabled NFS. If we do something with the VM that causes disk-io, the VM will

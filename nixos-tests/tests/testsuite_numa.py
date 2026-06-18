@@ -8,6 +8,7 @@ import unittest
 try:
     from ..test_helper.test_helper import (  # type: ignore
         LibvirtTestsBase,
+        MAX_EXPECTED_WAIT_SEC,
         initialComputeVMSetup,
         initialControllerVMSetup,
         validate_pinning,
@@ -16,6 +17,7 @@ try:
 except Exception:
     from test_helper import (
         LibvirtTestsBase,
+        MAX_EXPECTED_WAIT_SEC,
         initialComputeVMSetup,
         initialControllerVMSetup,
         validate_pinning,
@@ -72,7 +74,9 @@ class LibvirtTests(LibvirtTestsBase):  # type: ignore
         )
         # Check that the VM is still running on the sender side and that there are no zombi VMs on the sender side
         controllerVM.succeed("virsh list | grep 'testvm' | grep 'running'")
-        computeVM.wait_until_fails("virsh list | grep 'testvm'")
+        computeVM.wait_until_fails(
+            "virsh list | grep 'testvm'", timeout=MAX_EXPECTED_WAIT_SEC
+        )
 
         # Mapping from thread names to expected tasksets
         expected_pinning_before_migration = {

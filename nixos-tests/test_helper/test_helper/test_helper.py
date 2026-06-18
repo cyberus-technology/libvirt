@@ -20,6 +20,7 @@ VIRTIO_ENTROPY_SOURCE = "1af4:1044"
 COMMAND_TIMEOUT_EXIT_CODES = {124, 125}
 VIRTCHD_RESTART_TIMEOUT_SEC = 15
 CLOUD_HYPERVISOR_EXIT_RETRIES = 50
+MAX_EXPECTED_WAIT_SEC = 60
 
 
 def testcase_start_marker(name: str) -> str:
@@ -158,7 +159,8 @@ def initialControllerVMSetup(
 
     controllerVM.wait_until_succeeds(
         "ssh -n -o BatchMode=yes -o UserKnownHostsFile=/dev/null "
-        "-o StrictHostKeyChecking=no computeVM true"
+        "-o StrictHostKeyChecking=no computeVM true",
+        timeout=MAX_EXPECTED_WAIT_SEC,
     )
 
     controllerVM.succeed(
@@ -186,7 +188,8 @@ def initialComputeVMSetup(computeVM: QemuMachine) -> None:
 
     computeVM.wait_until_succeeds(
         "ssh -n -o BatchMode=yes -o UserKnownHostsFile=/dev/null "
-        "-o StrictHostKeyChecking=no controllerVM true"
+        "-o StrictHostKeyChecking=no controllerVM true",
+        timeout=MAX_EXPECTED_WAIT_SEC,
     )
 
     computeVM.succeed(
