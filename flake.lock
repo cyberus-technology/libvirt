@@ -10,11 +10,11 @@
         "rust-overlay": "rust-overlay"
       },
       "locked": {
-        "lastModified": 1781163290,
-        "narHash": "sha256-naQvrgcb/8xlnpjFdW6oDO5zHrDbI20oQuauIT5jFq0=",
+        "lastModified": 1781792779,
+        "narHash": "sha256-OyjlLiMutY0+aczpZxFhC5YZjGKNirIrh0NJuaXc4tw=",
         "owner": "cyberus-technology",
         "repo": "cloud-hypervisor",
-        "rev": "4a117819d3d8c81cfa48d2f7cf9ba7c440ab5d30",
+        "rev": "079ed4dcb9bbc168405fe4462248ec3663da863a",
         "type": "github"
       },
       "original": {
