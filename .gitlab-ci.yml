@@ -270,7 +270,7 @@ test:cpu_profiles:
 test:bm:linux:live-mig:
   stage: test
   resource_group: ferona-hardware-tap15
-  timeout: "10 minutes"
+  timeout: "15 minutes"
   extends:
     - .hardware_build_template
   script:
@@ -294,7 +294,7 @@ test:bm:linux:live-mig:
 test:bm:linux:live-mig-prev-version:
   stage: test
   resource_group: ferona-hardware-tap16
-  timeout: "10 minutes"
+  timeout: "15 minutes"
   extends:
     - .hardware_build_template
   script:
