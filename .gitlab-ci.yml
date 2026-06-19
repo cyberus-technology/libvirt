@@ -267,7 +267,7 @@ test:cpu_profiles:
         # ssh -F ~/.ssh/config ${TARGETHOST} "rm -rf tmp-${CI_JOB_ID}" || true
       '
 
-test:bm:live-migration:
+test:bm:linux:live-mig:
   stage: test
   resource_group: ferona-hardware-tap15
   timeout: "10 minutes"
@@ -291,7 +291,7 @@ test:bm:live-migration:
         ./local_tests/run_chv_profile_test.sh ${CI_JOB_ID} ${CI_PROJECT_NAME} "tap15"
       '
 
-test:bm:live-migration-different-versions:
+test:bm:linux:live-mig-prev-version:
   stage: test
   resource_group: ferona-hardware-tap16
   timeout: "10 minutes"
@@ -317,7 +317,7 @@ test:bm:live-migration-different-versions:
         ./local_tests/run_chv_profile_test.sh ${CI_JOB_ID} ${CI_PROJECT_NAME} "tap16" "v51"
       '
 
-test:bm:live-migration-windows:
+test:bm:windows:live-mig:
   stage: test
   resource_group: ferona-hardware-tap10
   timeout: "15 minutes"
@@ -366,7 +366,7 @@ test:bm:windows:mq:
         ./local_tests/run_chv_profile_test_windows.sh ${CI_JOB_ID} ${CI_PROJECT_NAME} "tap20" "true"
       '
 
-test:bm:live-migration-windows-different-versions:
+test:bm:windows:live-mig-prev-version:
   stage: test
   resource_group: ferona-hardware-tap11
   timeout: "15 minutes"
