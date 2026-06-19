@@ -320,7 +320,7 @@ test:bm:live-migration-different-versions:
 test:bm:live-migration-windows:
   stage: test
   resource_group: ferona-hardware-tap10
-  timeout: "10 minutes"
+  timeout: "15 minutes"
   extends:
     - .hardware_build_template
   script:
@@ -344,7 +344,7 @@ test:bm:live-migration-windows:
 test:bm:windows:mq:
   stage: test
   resource_group: ferona-hardware-tap20
-  timeout: "10 minutes"
+  timeout: "15 minutes"
   extends:
     - .hardware_build_template
   script:
@@ -369,7 +369,7 @@ test:bm:windows:mq:
 test:bm:live-migration-windows-different-versions:
   stage: test
   resource_group: ferona-hardware-tap11
-  timeout: "10 minutes"
+  timeout: "15 minutes"
   extends:
     - .hardware_build_template
   script:

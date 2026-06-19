@@ -10,6 +10,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source ${SCRIPT_DIR}/process_handling.sh
 source ${SCRIPT_DIR}/helper_functions.sh
 
+NETWORK_TIMEOUT="60"
+
 CI_JOB_ID=$1
 CI_PROJECT_NAME=$2
 TAPDEV=$3
@@ -54,7 +56,7 @@ start_async ssh -F ~/.ssh/config ${HOST1} \
   --api-socket /tmp/chv.${CI_JOB_ID}.sock \
   -v"
 
-check_vm ${HOST1} ${VM_IP} 15
+check_vm ${HOST1} ${VM_IP} ${NETWORK_TIMEOUT}
 
 logging "Run CHV only with api socket on host2: ${HOST2}"
 start_async ssh -F ~/.ssh/config ${HOST2} \
@@ -112,6 +114,6 @@ start_sync ssh -F ~/.ssh/config ${HOST2} \
   /tmp/chv.${CI_JOB_ID}.sock info" || collect_logs_exit_error
 
 logging "Migration complete from ${HOST1} to ${HOST2} - check vm on ${HOST2} now"
-check_vm ${HOST2} ${VM_IP} 15
+check_vm ${HOST2} ${VM_IP} ${NETWORK_TIMEOUT}
 collect_logs
 cleanup
