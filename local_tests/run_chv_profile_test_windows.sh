@@ -10,6 +10,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source ${SCRIPT_DIR}/process_handling.sh
 source ${SCRIPT_DIR}/helper_functions.sh
 
+# seconds
 NETWORK_TIMEOUT="60"
 
 CI_JOB_ID=$1
