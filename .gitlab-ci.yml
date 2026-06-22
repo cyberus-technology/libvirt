@@ -112,6 +112,11 @@ lint:commit:
     - TARGET_BRANCH=${CI_MERGE_REQUEST_TARGET_BRANCH_NAME:-$CI_DEFAULT_BRANCH}
     - echo "TARGET_BRANCH=$TARGET_BRANCH"
     # Lint commit messages in the range from target branch to current HEAD
+    # We deliberately do a 'nix build' here before because it seems 'nix run'
+    # does not create a GC root entry which allows a nix garbage collection to
+    # remove depdendencies required for the test execution.
+    # See: https://github.com/cobaltcore-dev/cobaltcore/issues/594
+    - nix build nixpkgs#gitlint
     - nix run nixpkgs#gitlint -- --commits origin/$TARGET_BRANCH..
 
 lint:nix-fmt:
@@ -200,6 +205,11 @@ build:nixos_tests:
     - export TMPDIR
     - trap 'rm -rf "$TMPDIR"' EXIT
     - mkdir "${DBG_LOG_DIR}"
+    # We deliberately do a 'nix build' here before because it seems 'nix run'
+    # does not create a GC root entry which allows a nix garbage collection to
+    # remove depdendencies required for the test execution.
+    # See: https://github.com/cobaltcore-dev/cobaltcore/issues/594
+    - nix build -L .#tests.x86_64-linux.$TEST_ATTR.passthru.no_port_forwarding.driver
     - nix run -L .#tests.x86_64-linux.$TEST_ATTR.passthru.no_port_forwarding.driver 2>&1 | tee "${DBG_LOG_DIR}/nixos_driver.log"
 
 test:default-tests:
