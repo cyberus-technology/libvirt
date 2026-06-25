@@ -371,17 +371,24 @@ virCHMonitorBuildKernelRelatedJson(virJSONValue *content, virDomainDef *vmdef)
     return 0;
 }
 
-static void virCHMonitorBuildHugePageJson(virJSONValue *content, size_t size, bool prefault)
+static void virCHMonitorBuildHugePageJson(virJSONValue *content, size_t size)
 {
     DBG("hugepage: size=%ld", size);
 
     virJSONValueObjectAppendBoolean(content, "hugepages", true);
     virJSONValueObjectAppendNumberInt(content, "hugepage_size", size);
+}
 
-    if (prefault) {
-        DBG("hugepage: prefaulting has been requested");
-        virJSONValueObjectAppendBoolean(content, "prefault", true);
+static int
+virCHMonitorBuildPrefaultJson(virJSONValue *content, virDomainDef *def)
+{
+    if (def->mem.allocation == VIR_DOMAIN_MEMORY_ALLOCATION_IMMEDIATE) {
+        DBG("memory: prefaulting has been requested");
+        if (virJSONValueObjectAppendBoolean(content, "prefault", true) < 0)
+            return -1;
     }
+
+    return 0;
 }
 
 /**
@@ -434,19 +441,21 @@ virCHMonitorBuildMemoryZonesJson(virJSONValue *content, virDomainDef *def)
             DBG("hugepage: found %ld definitions", def->mem.nhugepages);
             for (unsigned j=0; j<def->mem.nhugepages; ++j) {
                 size_t size = def->mem.hugepages[j].size * 1024;
-                bool prefault = def->mem.allocation == VIR_DOMAIN_MEMORY_ALLOCATION_IMMEDIATE;
 
                 if (def->mem.hugepages[j].nodemask) {
                     if (virBitmapIsBitSet(def->mem.hugepages[j].nodemask, i)) {
-                        virCHMonitorBuildHugePageJson(zone, size, prefault);
+                        virCHMonitorBuildHugePageJson(zone, size);
                         break;
                     }
                 } else {
                     DBG("hugepage: applying default definition");
-                    virCHMonitorBuildHugePageJson(zone, size, prefault);
+                    virCHMonitorBuildHugePageJson(zone, size);
                 }
             }
         }
+
+        if (virCHMonitorBuildPrefaultJson(zone, def) < 0)
+            return -1;
 
         if (virJSONValueArrayAppend(zones, &zone) < 0)
             return -1;
@@ -481,10 +490,12 @@ virCHMonitorBuildMemoryJson(virJSONValue *content, virDomainDef *vmdef)
                 return -1;
             if (vmdef->mem.nhugepages) {
                 size_t size = vmdef->mem.hugepages[0].size * 1024;
-                bool prefault = vmdef->mem.allocation == VIR_DOMAIN_MEMORY_ALLOCATION_IMMEDIATE;
-                virCHMonitorBuildHugePageJson(memory, size, prefault);
+                virCHMonitorBuildHugePageJson(memory, size);
             }
         }
+
+        if (virCHMonitorBuildPrefaultJson(memory, vmdef) < 0)
+            return -1;
 
         if (virJSONValueObjectAppend(content, "memory", &memory) < 0)
             return -1;
