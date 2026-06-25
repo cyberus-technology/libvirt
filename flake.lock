@@ -10,11 +10,11 @@
         "rust-overlay": "rust-overlay"
       },
       "locked": {
-        "lastModified": 1781792779,
-        "narHash": "sha256-OyjlLiMutY0+aczpZxFhC5YZjGKNirIrh0NJuaXc4tw=",
+        "lastModified": 1782120604,
+        "narHash": "sha256-AuulXczVV6NkDQEbt6rTomoF9HNyS1d4iCQB9hcjwPY=",
         "owner": "cyberus-technology",
         "repo": "cloud-hypervisor",
-        "rev": "079ed4dcb9bbc168405fe4462248ec3663da863a",
+        "rev": "780b18edcd22f3d8b994f6afc5af9447b627dcf1",
         "type": "github"
       },
       "original": {
@@ -136,11 +136,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1777668013,
-        "narHash": "sha256-tR6ZHqqVEuokCy1mBULABIjbs9tlhZCsrhxUyNx0H2g=",
+        "lastModified": 1780448729,
+        "narHash": "sha256-+BUVKrxCJZoN5RX10UDTae7wu3NJJnaHBYWYw50bPZY=",
         "owner": "phip1611",
         "repo": "fcntl-tool",
-        "rev": "eea3d9fbd927bc72aed75716e14e472333ab526a",
+        "rev": "457fa6aaf53a26668fff7df13051e9a06f354d3c",
         "type": "github"
       },
       "original": {
@@ -186,11 +186,11 @@
     },
     "nixpkgs": {
       "locked": {
-        "lastModified": 1780902259,
-        "narHash": "sha256-q8yYEC5f1mFlQO9RGna4LTc9QrcvWunX6FYp83munkQ=",
+        "lastModified": 1782233679,
+        "narHash": "sha256-QyuGP5+QOtmXpy4i2X4DhBVBaySBdDKQEhqKcphcp34=",
         "owner": "nixos",
         "repo": "nixpkgs",
-        "rev": "bd0ff2d3eac24699c3664d5966b9ef36f388e2ca",
+        "rev": "667d5cf1c59585031d743c78b394b0a647537c35",
         "type": "github"
       },
       "original": {
