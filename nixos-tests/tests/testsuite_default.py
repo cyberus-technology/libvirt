@@ -312,6 +312,18 @@ class LibvirtTests(LibvirtTestsBase):  # type: ignore
         controllerVM.succeed("systemctl restart virtchd")
         controllerVM.succeed("virsh list | grep 'running'")
 
+    def test_memory_prefault(self):
+        """
+        Test that immediate memory allocation is passed to Cloud Hypervisor as
+        memory pre-faulting.
+        """
+        controllerVM.succeed("virsh define /etc/domain-chv-prefault.xml")
+        controllerVM.succeed("virsh start testvm")
+
+        controllerVM.succeed(
+            "ch-remote --api-socket /run/libvirt/ch/testvm-socket info | jq -e '.config.memory.prefault == true' > /dev/null"
+        )
+
     def test_numa_topology(self):
         """
         We test that a NUMA topology and NUMA tunings are correctly passed to
@@ -1483,6 +1495,7 @@ def suite():
         LibvirtTests.test_list_smbios_oem_strings,
         LibvirtTests.test_list_smbios_sysinfo,
         LibvirtTests.test_managedsave,
+        LibvirtTests.test_memory_prefault,
         LibvirtTests.test_nested_chv_guest,
         LibvirtTests.test_network_hotplug_attach_detach_persistent,
         LibvirtTests.test_network_hotplug_attach_detach_transient,

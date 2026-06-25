@@ -171,13 +171,20 @@ let
                 <memnode cellid='1' mode='strict' nodeset='0'/>
               </numatune>
               ${
-                if hugepages then
+                if hugepages || prefault then
                   ''
                     <memoryBacking>
-                      <hugepages>
-                        <page size="2" unit="M" nodeset="0"/>
-                        <page size="2" unit="M" nodeset="1"/>
-                      </hugepages>
+                      ${
+                        if hugepages then
+                          ''
+                            <hugepages>
+                              <page size="2" unit="M" nodeset="0"/>
+                              <page size="2" unit="M" nodeset="1"/>
+                            </hugepages>
+                          ''
+                        else
+                          ""
+                      }
                       ${
                         if prefault then
                           ''
@@ -201,12 +208,19 @@ let
               ''}
               <vcpu placement='static'>${toString vcpuCount}</vcpu>
               ${
-                if hugepages then
+                if hugepages || prefault then
                   ''
                     <memoryBacking>
-                      <hugepages>
-                        <page size="2" unit="M"/>
-                      </hugepages>
+                      ${
+                        if hugepages then
+                          ''
+                            <hugepages>
+                              <page size="2" unit="M"/>
+                            </hugepages>
+                          ''
+                        else
+                          ""
+                      }
                       ${
                         if prefault then
                           ''
@@ -652,6 +666,13 @@ in
         "/etc/domain-chv.xml" = {
           "C+" = {
             argument = "${pkgs.writeText "domain.xml" (virsh_ch_xml { })}";
+          };
+        };
+        "/etc/domain-chv-prefault.xml" = {
+          "C+" = {
+            argument = "${pkgs.writeText "domain-prefault.xml" (virsh_ch_xml {
+              prefault = true;
+            })}";
           };
         };
         "/etc/domain-chv-no-serial.xml" = {
