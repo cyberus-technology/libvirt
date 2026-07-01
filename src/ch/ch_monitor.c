@@ -2243,6 +2243,13 @@ G_GNUC_UNUSED static int chMigrationParseProgress(virJSONValue * json, chMigrati
     }
     else if (jsonStateFailed != NULL) {
         progress->state = VIR_CH_MIGRATION_PROGRESS_STATE_FAILED;
+        tmp_str = virJSONValueObjectGetString(jsonStateFailed, "error_msg");
+        if (tmp_str) {
+            virStrcpyStatic(
+                progress->error_msg,
+                tmp_str
+            );
+        }
     }
 
     jsonTransportationMode = virJSONValueObjectGetObject(

@@ -3647,7 +3647,7 @@ static int virCHMonitorWaitForMigrationCompletion(virDomainObj *vm)
             rc = -1;
             goto out;
         case VIR_CH_MIGRATION_PROGRESS_STATE_FAILED:
-            DBG("Migration failed! (VM: %s)", vm->def->name);
+            DBG("Migration failed! (VM: %s) reason: %s", vm->def->name, priv->migrationStats.error_msg);
             rc = -1;
             goto out;
         case VIR_CH_MIGRATION_PROGRESS_STATE_INVALID:

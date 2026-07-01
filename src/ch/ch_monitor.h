@@ -178,6 +178,7 @@ struct _chMigrationProgress {
         uint64_t memory_pages_constant_count;
         uint64_t memory_dirty_rate_pps;
     } memory_transmission_info;
+    char error_msg[1024];
 };
 
 
