@@ -56,6 +56,7 @@ VIR_ENUM_IMPL(virCHMigrationProgressOngoingPhase,
               "none",
               /* naming corresponds to serde JSON deserialization from Rust */
               "Starting",
+              "Started",
               "MemoryFds",
               "MemoryPrecopy",
               "Completing");
@@ -1686,6 +1687,177 @@ int virCHMonitorRemoveDevice(virCHMonitor *mon,
     return (http_response.code == 200 || http_response.code == 204) ? 0 : -1;
 }
 
+#define VIR_CH_SEND_MIGRATION_ATTEMPTS 3
+#define VIR_CH_SEND_MIGRATION_RETRY_DELAY_MS 1000
+#define VIR_CH_MIGRATION_START_WAIT_ATTEMPTS 30
+#define VIR_CH_MIGRATION_START_WAIT_MS 100
+
+typedef enum {
+    VIR_CH_MIGRATION_START_WAIT_STARTED = 0,
+    VIR_CH_MIGRATION_START_WAIT_RETRY,
+    VIR_CH_MIGRATION_START_WAIT_ERROR,
+} virCHMonitorMigrationStartWaitResult;
+
+/**
+ * Issue a send-migration request, which dispatches a migration asynchronously.
+ * A successful response only means Cloud Hypervisor accepted the request.
+ *
+ * Please poll vm.migration-progress to determine if the migration actually
+ * started or if a retry is necessary.
+ *
+ * Returns 0 on success, -1 on error.
+ */
+static int
+virCHMonitorMigrationSendRequest(virCHMonitor *mon,
+                                     const char *payload)
+{
+    HttpResponse http_response = { 0 };
+
+    http_response = virCHMonitorRequest(mon,
+                                        URL_VM_SEND_MIGRATION,
+                                        payload,
+                                        "PUT",
+                                        false,
+                                        true);
+
+    return (http_response.code == 200 || http_response.code == 204) ? 0 : -1;
+}
+
+/**
+ * Wait until Cloud Hypervisor reports that the migration has successfully,
+ * started (connection established, handshake succeeded).
+ *
+ * Returns STARTED once CH has successfully reported that the migration has
+ * started, RETRY if a new send-migration request may be necessary or ERROR
+ * for unrecoverable failures.
+ */
+static virCHMonitorMigrationStartWaitResult
+virCHMonitorMigrationWaitForStart(virCHMonitor *mon)
+{
+    for (unsigned int attempt = 0; attempt < VIR_CH_MIGRATION_START_WAIT_ATTEMPTS; attempt++) {
+        chMigrationProgress progress = { 0 };
+
+        /*
+         * send-migrations API contract promises that the migration-progress
+         * endpoint is populated. This check is only for extra fail-safety.
+         */
+        if (chMonitorJSONGetMigrationStatsReply(mon, &progress) < 0) {
+            virReportError(VIR_ERR_INTERNAL_ERROR, "%s",
+                           _("Migration progress unavailable after successful send-migration request"));
+            return VIR_CH_MIGRATION_START_WAIT_ERROR;
+        }
+
+        switch (progress.state) {
+            case VIR_CH_MIGRATION_PROGRESS_STATE_ONGOING:
+                break;
+            case VIR_CH_MIGRATION_PROGRESS_STATE_FAILED:
+                DBG("Migration of VM %s failed: %s", mon->vm->def->name, progress.error_msg);
+                return VIR_CH_MIGRATION_START_WAIT_RETRY;
+            case VIR_CH_MIGRATION_PROGRESS_STATE_CANCELLED:
+                virReportError(VIR_ERR_INTERNAL_ERROR, "%s",
+                               _("Migration was unexpectedly cancelled"));
+                return VIR_CH_MIGRATION_START_WAIT_ERROR;
+            case VIR_CH_MIGRATION_PROGRESS_STATE_FINISHED:
+                /* unlikely but could happen for fast internet and tiny VMs */
+                DBG("Migration of VM %s already finished", mon->vm->def->name);
+                return VIR_CH_MIGRATION_START_WAIT_STARTED;
+            case VIR_CH_MIGRATION_PROGRESS_STATE_INVALID:
+            case VIR_CH_MIGRATION_PROGRESS_STATE_LAST:
+            default:
+                virReportError(VIR_ERR_INTERNAL_ERROR, "%s",
+                               _("Migration has unexpected state"));
+                return VIR_CH_MIGRATION_START_WAIT_ERROR;
+        }
+
+        /*
+         * Accept STARTED and later phases. The migration may advance to memory
+         * transfer between two polls, but every later phase implies the
+         * handshake completed and migration startup succeeded.
+         */
+        if (progress.ongoing_phase >= VIR_CH_MIGRATION_PROGRESS_ONGOING_PHASE_STARTED) {
+            DBG("Migration of VM %s is successfully started", mon->vm->def->name);
+            return VIR_CH_MIGRATION_START_WAIT_STARTED;
+        }
+
+        if (attempt + 1 < VIR_CH_MIGRATION_START_WAIT_ATTEMPTS) {
+            DBG("Migration startup of VM %s still pending, current phase is '%s'",
+                mon->vm->def->name,
+                virCHMigrationProgressOngoingPhaseTypeToString(progress.ongoing_phase));
+            g_usleep(VIR_CH_MIGRATION_START_WAIT_MS * 1000);
+            continue;
+        }
+
+        virReportError(VIR_ERR_INTERNAL_ERROR,
+                       _("Migration did not reach started phase, current phase is '%1$s'"),
+                       virCHMigrationProgressOngoingPhaseTypeToString(progress.ongoing_phase));
+        return VIR_CH_MIGRATION_START_WAIT_ERROR;
+    }
+
+    return VIR_CH_MIGRATION_START_WAIT_ERROR;
+}
+
+/**
+ * Dispatches a migration via the send-migration call and gracefully waits
+ * until the migration has actually started (connection established,
+ * handshake succeeded).
+ *
+ * If the worker reports FAILED before startup, it retries up to
+ * VIR_CH_SEND_MIGRATION_ATTEMPTS times to work around the most-likely
+ * error case of "connection refused" (receiver was not listening yet).
+ *
+ * Returns 0 on success, -1 on error.
+ */
+static int
+virCHMonitorMigrationStart(virCHMonitor *mon,
+                           const char *payload)
+{
+    for (unsigned int attempt = 0; attempt < VIR_CH_SEND_MIGRATION_ATTEMPTS; attempt++) {
+        virCHMonitorMigrationStartWaitResult waitResult;
+
+        if (virCHMonitorMigrationSendRequest(mon, payload) < 0) {
+            if (attempt + 1 < VIR_CH_SEND_MIGRATION_ATTEMPTS) {
+                DBG("Send VM %s attempt %u/%u failed - retrying",
+                     mon->vm->def->name, attempt + 1, VIR_CH_SEND_MIGRATION_ATTEMPTS);
+                g_usleep(VIR_CH_SEND_MIGRATION_RETRY_DELAY_MS * 1000);
+                continue;
+            }
+
+            /*
+             * virCHMonitorRequest() already logs the HTTP status and response.
+             */
+            virReportError(VIR_ERR_INTERNAL_ERROR, "%s", _("Error sending VM"));
+            return -1;
+        }
+
+        // We may only permit libvirt to continue into the long completion wait
+        // for the live-migration after receiving STARTED.
+        waitResult = virCHMonitorMigrationWaitForStart(mon);
+
+        switch (waitResult) {
+            case VIR_CH_MIGRATION_START_WAIT_STARTED:
+                return 0;
+            case VIR_CH_MIGRATION_START_WAIT_RETRY:
+                if (attempt + 1 < VIR_CH_SEND_MIGRATION_ATTEMPTS) {
+                    DBG("Migration startup attempt %u/%u of VM %s failed - retrying send-migration",
+                        attempt + 1, VIR_CH_SEND_MIGRATION_ATTEMPTS, mon->vm->def->name);
+                    g_usleep(VIR_CH_SEND_MIGRATION_RETRY_DELAY_MS * 1000);
+                    continue;
+                }
+
+                virReportError(VIR_ERR_INTERNAL_ERROR, "%s",
+                               _("Migration failed"));
+                return -1;
+            case VIR_CH_MIGRATION_START_WAIT_ERROR:
+            default:
+                virReportError(VIR_ERR_INTERNAL_ERROR, "%s",
+                               _("Error while waiting for migration to start"));
+                return -1;
+            }
+    }
+
+    return -1;
+}
+
 int virCHMonitorMigrationSend(virCHMonitor *mon,
                               const char *dst_uri,
                               unsigned parallel_connections,
@@ -1693,9 +1865,7 @@ int virCHMonitorMigrationSend(virCHMonitor *mon,
                               char *tls_dir)
 {
     int ret = -1;
-    int retries = 0;
     g_autoptr(virJSONValue) content = virJSONValueNewObject();
-    HttpResponse http_response = {0};
     g_autofree char *payload = NULL;
 
     if (virJSONValueObjectAppendString(content, "destination_url", dst_uri) < 0) {
@@ -1737,20 +1907,7 @@ int virCHMonitorMigrationSend(virCHMonitor *mon,
 
     DBG("Send VM to url %s json %s", dst_uri, payload);
 
-retry:
-    http_response = virCHMonitorRequest(mon, URL_VM_SEND_MIGRATION, payload, "PUT", false, true);
-
-    if (http_response.code == 200 || http_response.code == 204) {
-        ret = 0;
-    } else {
-        if (retries++ < 3) {
-            sleep(1);
-            goto retry;
-        }
-        // Logging of error code and response is done by virCHMonitorRequest() already
-        virReportError(VIR_ERR_INTERNAL_ERROR, _("Error sending VM"));
-        ret = -1;
-    }
+    ret = virCHMonitorMigrationStart(mon, payload);
 
 out:
     return ret;
