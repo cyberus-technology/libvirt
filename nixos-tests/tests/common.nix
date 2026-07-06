@@ -605,7 +605,6 @@ in
     curl
     dmidecode
     expect
-    fcntl-tool
     gdb
     htop
     iperf3

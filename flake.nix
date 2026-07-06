@@ -22,8 +22,6 @@
     # We use our custom firmware
     edk2-src.url = "git+https://github.com/cyberus-technology/edk2?ref=gardenlinux&submodules=1";
     edk2-src.flake = false;
-    fcntl-tool.url = "github:phip1611/fcntl-tool";
-    fcntl-tool.inputs.nixpkgs.follows = "nixpkgs";
   };
 
   outputs =
@@ -34,7 +32,6 @@
       edk2-src,
       cloud-hypervisor,
       cloud-hypervisor-prev,
-      fcntl-tool,
       libvirt-prev,
       ...
     }:
@@ -155,7 +152,6 @@
           cloud-hypervisor
           cloud-hypervisor-prev
           edk2-src
-          fcntl-tool
           ;
         libvirt = libvirtPackageSet.libvirt-debugoptimized;
         libvirt-prev = libvirtPrevPackageSet.libvirt-debugoptimized;

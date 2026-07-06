@@ -129,26 +129,6 @@
         "url": "https://github.com/cyberus-technology/edk2"
       }
     },
-    "fcntl-tool": {
-      "inputs": {
-        "nixpkgs": [
-          "nixpkgs"
-        ]
-      },
-      "locked": {
-        "lastModified": 1780448729,
-        "narHash": "sha256-+BUVKrxCJZoN5RX10UDTae7wu3NJJnaHBYWYw50bPZY=",
-        "owner": "phip1611",
-        "repo": "fcntl-tool",
-        "rev": "457fa6aaf53a26668fff7df13051e9a06f354d3c",
-        "type": "github"
-      },
-      "original": {
-        "owner": "phip1611",
-        "repo": "fcntl-tool",
-        "type": "github"
-      }
-    },
     "keycodemapdb": {
       "flake": false,
       "locked": {
@@ -205,7 +185,6 @@
         "cloud-hypervisor": "cloud-hypervisor",
         "cloud-hypervisor-prev": "cloud-hypervisor-prev",
         "edk2-src": "edk2-src",
-        "fcntl-tool": "fcntl-tool",
         "keycodemapdb": "keycodemapdb",
         "libvirt-prev": "libvirt-prev",
         "nixpkgs": "nixpkgs"

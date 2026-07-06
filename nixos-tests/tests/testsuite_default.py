@@ -785,7 +785,12 @@ class LibvirtTests(LibvirtTestsBase):  # type: ignore
 
         controllerVM.succeed("qemu-img create -f raw /tmp/disk.img 100M")
 
-        controllerVM.succeed("fcntl-tool test-lock /tmp/disk.img | grep Unlocked")
+        # Check that the disk isn't locked yet.
+        # Grepping only for "cloud-hyperviso OFDLCK", since `lslocks` truncates the output.
+        # We expect `grep` to fail since the file isn't locked yet.
+        controllerVM.fail(
+            "lslocks --bytes --notruncate -o COMMAND,TYPE,MODE,M,START,END,PATH | grep 'cloud-hyperviso OFDLCK'"
+        )
 
         hotplug(
             controllerVM,
@@ -793,15 +798,27 @@ class LibvirtTests(LibvirtTestsBase):  # type: ignore
         )
 
         # Check for shared read lock
-        controllerVM.succeed("fcntl-tool test-lock /tmp/disk.img | grep SharedRead")
+        out = controllerVM.succeed(
+            "lslocks --bytes --notruncate -o COMMAND,TYPE,MODE,M,START,END,PATH | grep 'cloud-hyperviso OFDLCK'"
+        )
+        self.assertIn("cloud-hyperviso OFDLCK READ  0   100 100 /tmp/disk.img", out)
+        self.assertIn("cloud-hyperviso OFDLCK READ  0   201 201 /tmp/disk.img", out)
+        self.assertEqual(len(out.splitlines()), 2, "expected exactly 2 lines")
+
         hotplug(controllerVM, "virsh detach-disk --domain testvm --target vdb")
 
         hotplug(
             controllerVM,
             "virsh attach-disk --domain testvm --target vdb --source /tmp/disk.img",
         )
+
         # Check for exclusive write lock
-        controllerVM.succeed("fcntl-tool test-lock /tmp/disk.img | grep ExclusiveWrite")
+        out = controllerVM.succeed(
+            "lslocks --bytes --notruncate -o COMMAND,TYPE,MODE,M,START,END,PATH | grep 'cloud-hyperviso OFDLCK'"
+        )
+        self.assertIn("cloud-hyperviso OFDLCK READ  0   100 101 /tmp/disk.img", out)
+        self.assertIn("cloud-hyperviso OFDLCK READ  0   201 201 /tmp/disk.img", out)
+        self.assertEqual(len(out.splitlines()), 2, "expected exactly 2 lines")
 
         hotplug(controllerVM, "virsh detach-disk --domain testvm --target vdb")
 

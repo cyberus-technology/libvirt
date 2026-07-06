@@ -4,7 +4,6 @@
   cloud-hypervisor,
   cloud-hypervisor-prev,
   edk2-src,
-  fcntl-tool,
   libvirt,
   libvirt-prev,
 }:
@@ -58,7 +57,6 @@ let
 
   testPkgs = pkgs.appendOverlays [
     (_: prev: {
-      fcntl-tool = fcntl-tool.packages."x86_64-linux".default;
       cloud-hypervisor = toDebugOptimizedChv cloud-hypervisor.packages."x86_64-linux".default;
       cloud-hypervisor-prev = toDebugOptimizedChv cloud-hypervisor-prev.packages."x86_64-linux".default;
       inherit libvirt libvirt-prev test-helper;
