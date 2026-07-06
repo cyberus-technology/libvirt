@@ -248,8 +248,8 @@ class LibvirtTests(LibvirtTestsBase):  # type: ignore
 
             wait_for_ssh(computeVM)
 
-            stop_net_capture_and_assert_migration_announcements(controllerVM, False)
-            stop_net_capture_and_assert_migration_announcements(computeVM, True)
+            stop_net_capture_and_assert_migration_announcements(controllerVM, 0)
+            stop_net_capture_and_assert_migration_announcements(computeVM, 2)
 
             # Test we cannot migrate a VM that is already migrated
             controllerVM.fail(
@@ -265,8 +265,8 @@ class LibvirtTests(LibvirtTestsBase):  # type: ignore
 
             wait_for_ssh(controllerVM)
 
-            stop_net_capture_and_assert_migration_announcements(controllerVM, True)
-            stop_net_capture_and_assert_migration_announcements(computeVM, False)
+            stop_net_capture_and_assert_migration_announcements(controllerVM, 2)
+            stop_net_capture_and_assert_migration_announcements(computeVM, 0)
 
             # Test we cannot migrate a VM that is already migrated
             computeVM.fail(

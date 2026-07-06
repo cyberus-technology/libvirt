@@ -1266,8 +1266,11 @@ def stop_stress_in_vm(machine: QemuMachine, extra_ssh_params: str = ""):
     ssh(machine, "pkill -9 -x stress || true", extra_ssh_params=extra_ssh_params)
 
 
-# We use tcpdump and tshark to check for the RARP packets.
-def start_net_capture(machine):
+def start_net_capture(machine: QemuMachine):
+    """
+    Starts capturing ARP and RARP traffic on all interfaces of the machine and
+    stores the captured packets in /tmp/l2.pcap.
+    """
     machine.succeed(
         "systemd-run --unit tcpdump-mig-l2 -- bash -lc 'tcpdump -i any -w /tmp/l2.pcap \"(arp or rarp)\" 2> /tmp/l2.log'"
     )
@@ -1277,7 +1280,7 @@ def start_net_capture(machine):
 
 
 def stop_net_capture_and_assert_migration_announcements(
-    machine, expect_announcements: bool
+    machine: QemuMachine, expected_announcements: int = 2
 ):
     machine.succeed("systemctl stop tcpdump-mig-l2")
 
@@ -1309,12 +1312,10 @@ def stop_net_capture_and_assert_migration_announcements(
 
     # We only check whether we got rarp packets for both NICs, by
     # looking at the source MAC addresses.
-    expected = 2 if expect_announcements else 0
-    if not (rarps == garps == expected):
-        print(
-            f"Error: Unexpected amount of RARP ({rarps}/{expected}) or GARP ({garps}/{expected}) packets"
-        )
+    if not (rarps == garps == expected_announcements):
+        msg = f"Error: Unexpected amount of RARP ({rarps}/{expected_announcements}) or GARP ({garps}/{expected_announcements}) packets"
+        print(msg)
         print(f"Packets:\n{lines}")
 
         print(machine.succeed("journalctl -u systemd-networkd -b"))
-        raise RuntimeError()
+        raise RuntimeError(msg)
