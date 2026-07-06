@@ -1264,3 +1264,57 @@ def stop_stress_in_vm(machine: QemuMachine, extra_ssh_params: str = ""):
     # did not terminate its child. Match the exact process name so unrelated
     # processes are left alone.
     ssh(machine, "pkill -9 -x stress || true", extra_ssh_params=extra_ssh_params)
+
+
+# We use tcpdump and tshark to check for the RARP packets.
+def start_net_capture(machine):
+    machine.succeed(
+        "systemd-run --unit tcpdump-mig-l2 -- bash -lc 'tcpdump -i any -w /tmp/l2.pcap \"(arp or rarp)\" 2> /tmp/l2.log'"
+    )
+    machine.wait_until_succeeds(
+        "grep -q 'listening on any' /tmp/l2.log", timeout=MAX_EXPECTED_WAIT_SEC
+    )
+
+
+def stop_net_capture_and_assert_migration_announcements(
+    machine, expect_announcements: bool
+):
+    machine.succeed("systemctl stop tcpdump-mig-l2")
+
+    ethertype_rarp = "0x8035"
+    rarps = len(
+        set(
+            machine.succeed(
+                f'tshark -r /tmp/l2.pcap -Y "sll.etype == {ethertype_rarp}" -T fields -e sll.src.eth'
+            )
+            .strip()
+            .splitlines()
+        )
+    )
+
+    # GARP has ethertype ARP
+    ethertype_arp = "0x0806"
+    garps = len(
+        set(
+            machine.succeed(
+                f'tshark -r /tmp/l2.pcap -Y "sll.etype == {ethertype_arp} && arp.src.proto_ipv4 == arp.dst.proto_ipv4" -T fields -e sll.src.eth'
+            )
+            .strip()
+            .splitlines()
+        )
+    )
+
+    lines = machine.succeed("tshark -r /tmp/l2.pcap").strip().splitlines()
+    lines = "\n".join(lines)
+
+    # We only check whether we got rarp packets for both NICs, by
+    # looking at the source MAC addresses.
+    expected = 2 if expect_announcements else 0
+    if not (rarps == garps == expected):
+        print(
+            f"Error: Unexpected amount of RARP ({rarps}/{expected}) or GARP ({garps}/{expected}) packets"
+        )
+        print(f"Packets:\n{lines}")
+
+        print(machine.succeed("journalctl -u systemd-networkd -b"))
+        raise RuntimeError()
