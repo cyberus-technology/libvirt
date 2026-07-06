@@ -1,6 +1,7 @@
 from .test_helper import (
     CommandGuard,
     LibvirtTestsBase,
+    MAX_EXPECTED_WAIT_SEC,
     MigrationThrottleGuard,
     VIRTIO_BLOCK_DEVICE,
     VIRTIO_ENTROPY_SOURCE,
@@ -38,7 +39,6 @@ from .test_helper import (
     wait_for_ssh,
     wait_until_fail,
     wait_until_succeed,
-    MAX_EXPECTED_WAIT_SEC,
 )
 
 from .msrs import (
@@ -53,6 +53,7 @@ __all__ = [
     "FORBIDDEN_ARCHITECTURAL_MSRS",
     "FORBIDDEN_NON_ARCHITECTURAL_MSRS",
     "LibvirtTestsBase",
+    "MAX_EXPECTED_WAIT_SEC",
     "MigrationThrottleGuard",
     "VIRTIO_BLOCK_DEVICE",
     "VIRTIO_ENTROPY_SOURCE",
@@ -90,5 +91,4 @@ __all__ = [
     "wait_for_ssh",
     "wait_until_fail",
     "wait_until_succeed",
-    "MAX_EXPECTED_WAIT_SEC",
 ]
