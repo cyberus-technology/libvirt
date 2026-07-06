@@ -1,3 +1,4 @@
+import shlex
 import string
 import textwrap
 import time
@@ -23,6 +24,8 @@ try:
         pci_devices_by_bdf,
         setup_nested_cirros,
         ssh,
+        start_net_capture,
+        stop_net_capture_and_assert_migration_announcements,
         vcpu_affinity_checks,
         vm_unresponsive,
         wait_for_guest_pci_device_enumeration,
@@ -44,6 +47,8 @@ except Exception:
         pci_devices_by_bdf,
         setup_nested_cirros,
         ssh,
+        start_net_capture,
+        stop_net_capture_and_assert_migration_announcements,
         vcpu_affinity_checks,
         vm_unresponsive,
         wait_for_guest_pci_device_enumeration,
@@ -613,6 +618,59 @@ class LibvirtTests(LibvirtTestsBase):  # type: ignore
         wait_for_ssh(controllerVM)
 
         controllerVM.succeed("expect /tmp/console.expect")
+
+    def test_ch_endpoint_network_announcements(self):
+        """
+        Tests the network announcements endpoint, typically invoked after a
+        migration by the management layer.
+        """
+
+        controllerVM.succeed("virsh define /etc/domain-chv.xml")
+        controllerVM.succeed("virsh start testvm")
+
+        wait_for_ssh(controllerVM)
+
+        # The downstream API endpoint is not (yet) available in ch-remote,
+        # so we use curl:
+        send_announcement_cmd = [
+            "curl",
+            "--fail-with-body",
+            "--http1.1",
+            "--unix-socket",
+            "/run/libvirt/ch/testvm-socket",
+            "-X",
+            "PUT",
+            "-H",
+            "Accept: application/json",
+            "http://localhost/api/v1/vm.post-migration-announce",
+        ]
+        send_announcement_cmd = shlex.join(send_announcement_cmd)
+
+        def capture_and_check(net_devices: int):
+            """
+            On each invocation, we check that exactly one RARP and one GARP
+            packet are sent per virtio-net device in the VM.
+            :return:
+            """
+            print(f"Testing with {net_devices} devices")
+            rounds = 3
+            for _ in range(rounds):
+                start_net_capture(controllerVM)
+                controllerVM.succeed(send_announcement_cmd)
+                time.sleep(1)
+                stop_net_capture_and_assert_migration_announcements(
+                    controllerVM, expected_announcements=net_devices
+                )
+
+        capture_and_check(1)
+
+        # We now hotplugged a NIC: next we expect two announcements per invocation
+        hotplug(
+            controllerVM,
+            "virsh attach-device --persistent testvm /etc/new_interface.xml",
+        )
+
+        capture_and_check(2)
 
     def test_disk_resize_raw(self):
         """
@@ -1480,6 +1538,7 @@ def suite():
         LibvirtTests.test_bdf_valid_device_id_with_function_id,
         LibvirtTests.test_bdfs_implicitly_assigned_same_after_recreate,
         LibvirtTests.test_boot_not_enough_memory,
+        LibvirtTests.test_ch_endpoint_network_announcements,
         LibvirtTests.test_cirros_image,
         LibvirtTests.test_disk_is_locked,
         LibvirtTests.test_disk_resize_qcow2,
