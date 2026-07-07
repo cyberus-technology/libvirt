@@ -71,7 +71,7 @@ start_async ssh -F ~/.ssh/config ${HOST2} \
 sleep 2
 
 logging "Debug Host2 socket"
-ssh -F ~/.ssh/config ${HOST2} 'ls -l /tmp/chv*'
+ssh -F ~/.ssh/config ${HOST2} 'ls -l /tmp/chv* || true'
 
 logging "Run ch-remote info on host: ${HOST1}"
 start_sync ssh -F ~/.ssh/config ${HOST1} \
