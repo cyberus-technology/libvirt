@@ -602,6 +602,7 @@ in
     bridge-utils
     btop
     cloud-hypervisor
+    curl
     dmidecode
     expect
     fcntl-tool
