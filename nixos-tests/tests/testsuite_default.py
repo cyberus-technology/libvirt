@@ -824,8 +824,10 @@ class LibvirtTests(LibvirtTestsBase):  # type: ignore
             "lslocks --bytes --notruncate -o COMMAND,TYPE,MODE,M,START,END,PATH | grep 'cloud-hyperviso OFDLCK'"
         )
         self.assertIn("cloud-hyperviso OFDLCK READ  0   100 101 /tmp/disk.img", out)
+        self.assertIn("cloud-hyperviso OFDLCK READ  0   103 103 /tmp/disk.img", out)
         self.assertIn("cloud-hyperviso OFDLCK READ  0   201 201 /tmp/disk.img", out)
-        self.assertEqual(len(out.splitlines()), 2, "expected exactly 2 lines")
+        self.assertIn("cloud-hyperviso OFDLCK READ  0   203 203 /tmp/disk.img", out)
+        self.assertEqual(len(out.splitlines()), 4, "expected exactly 4 lines")
 
         hotplug(controllerVM, "virsh detach-disk --domain testvm --target vdb")
 
