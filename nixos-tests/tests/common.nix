@@ -615,7 +615,6 @@ in
     python3
     qemu_kvm
     screen
-    screen
     socat
     sshpass
     tcpdump
