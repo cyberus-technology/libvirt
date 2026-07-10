@@ -610,7 +610,6 @@ in
     iperf3
     jq
     lsof
-    mount
     numactl
     numatop
     python3
@@ -622,6 +621,8 @@ in
     tcpdump
     tshark
     tunctl
+    # Provides `lslocks` and `mount`.
+    util-linux
   ];
 
   systemd.tmpfiles.settings =
