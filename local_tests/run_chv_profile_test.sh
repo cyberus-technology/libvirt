@@ -52,7 +52,7 @@ start_async ssh -F ~/.ssh/config ${HOST1} \
   --no-shutdown \
   --log-file /home/benchmark/tmp-${CI_JOB_ID}/${HOST1}.chv.log \
   --api-socket /tmp/chv.${CI_JOB_ID}.sock \
-  -v"
+  -v 2> /home/benchmark/tmp-${CI_JOB_ID}/${HOST1}.chv.stderr.log"
 
 # if the check fails collect all logs for further debugging
 check_vm ${HOST1} ${VM_IP} ${NETWORK_TIMEOUT}
@@ -63,7 +63,7 @@ start_async ssh -F ~/.ssh/config ${HOST2} \
   --log-file /home/benchmark/tmp-${CI_JOB_ID}/${HOST2}.chv.log \
   --no-shutdown \
   --api-socket /tmp/chv.${CI_JOB_ID}.sock \
-  -v"
+  -v 2> /home/benchmark/tmp-${CI_JOB_ID}/${HOST2}.chv.stderr.log"
 
 sleep 2
 
@@ -93,7 +93,8 @@ logging "Run ch-remote receive-migration on host2: ${HOST2}"
 start_async ssh -F ~/.ssh/config ${HOST2} \
   "/home/benchmark/tmp-${CI_JOB_ID}/${CI_PROJECT_NAME}/result/bin/ch-remote \
   --api-socket \
-  /tmp/chv.${CI_JOB_ID}.sock receive-migration tcp:0.0.0.0:${VMM_PORT}"
+  /tmp/chv.${CI_JOB_ID}.sock receive-migration tcp:0.0.0.0:${VMM_PORT} \
+  > /home/benchmark/tmp-${CI_JOB_ID}/${HOST2}.receive-migration.log 2>&1"
 
 wait_for_migration_receiver ${HOST2} ${VMM_PORT} ${NETWORK_TIMEOUT} || collect_logs_exit_error
 
