@@ -71,7 +71,7 @@ cleanup_processes() {
     logging "start cleanup_processes"
     local HOSTNAME=$(hostname)
     if [[ ! "$HOSTNAME" =~ ^ferona-.* ]]; then
-      logging "I don't run on real hardware. No further process cleanup."
+      logging "Hostname is $HOSTNAME. I don't run on real hardware. No further process cleanup."
       logging "stop cleanup_processes"
       return
     fi
