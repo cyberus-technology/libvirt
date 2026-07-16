@@ -17,13 +17,27 @@ shutdown_vm() {
 
 collect_logs() {
   logging "Start collect_logs: copy files from bare metal hosts into local ./logs directory"
-  ssh -F ~/.ssh/config ${HOST1} sync
-  ssh -F ~/.ssh/config ${HOST2} sync
-  ssh -F ~/.ssh/config ferona-turin sync
-  scp -F ~/.ssh/config "${HOST1}:/home/benchmark/tmp-${CI_JOB_ID}/*.log" ./logs || true
-  scp -F ~/.ssh/config "${HOST2}:/home/benchmark/tmp-${CI_JOB_ID}/*.log" ./logs || true
-  scp -F ~/.ssh/config "ferona-turin:/shared/ferona-turin/gitlab/${CI_JOB_ID}/serial.log" ./logs || true
-  ls -la ./logs/*
+  ssh -F ~/.ssh/config ${HOST1} sync || logging "Unable to sync logs on ${HOST1}"
+  ssh -F ~/.ssh/config ${HOST2} sync || logging "Unable to sync logs on ${HOST2}"
+  ssh -F ~/.ssh/config ferona-turin sync || logging "Unable to sync logs on ferona-turin"
+
+  for HOST in ${HOST1} ${HOST2}; do
+    ssh -F ~/.ssh/config ${HOST} \
+      "{
+        echo '=== processes ==='
+        ps axuww
+        echo '=== listening sockets ==='
+        ss -ltnp
+        echo '=== kernel journal from the last 30 minutes ==='
+        journalctl -k --since '-30 minutes' --no-pager -o short-iso || true
+      } > /home/benchmark/tmp-${CI_JOB_ID}/${HOST}.diagnostics.log 2>&1" \
+      || logging "Unable to collect diagnostics on ${HOST}"
+  done
+
+  scp -F ~/.ssh/config "${HOST1}:/home/benchmark/tmp-${CI_JOB_ID}/*.log" ./logs || logging "Unable to copy logs from ${HOST1}"
+  scp -F ~/.ssh/config "${HOST2}:/home/benchmark/tmp-${CI_JOB_ID}/*.log" ./logs || logging "Unable to copy logs from ${HOST2}"
+  scp -F ~/.ssh/config "ferona-turin:/shared/ferona-turin/gitlab/${CI_JOB_ID}/serial.log" ./logs || logging "Unable to copy logs from ferona-turin"
+  ls -la ./logs/* || true
   logging "Finished collect_logs"
 }
 
@@ -68,10 +82,14 @@ check_vm() {
   for i in $(seq 1 ${tries}); do
     set +e
     ssh -F ~/.ssh/config ${SSH_HOST} ping -c 1 ${TARGET}
-    if [ $? -eq 0 ]; then
+    local rc=$?
+    set -e
+    if [ ${rc} -eq 0 ]; then
       logging "Host: ${TARGET} are reachable from: ${SSH_HOST}"
-      set -e
       return 0
+    elif [ ${rc} -eq 255 ]; then
+      logging "Cannot reach test host ${SSH_HOST} via SSH; cannot check guest ${TARGET}"
+      collect_logs_exit_error
     else
       logging "Host: ${TARGET} are not reachable from: ${SSH_HOST} - iteration $i / ${tries}"
     fi
