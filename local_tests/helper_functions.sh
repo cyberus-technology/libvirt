@@ -33,6 +33,31 @@ collect_logs_exit_error() {
   exit 1
 }
 
+wait_for_migration_receiver() {
+  local SSH_HOST=$1
+  local PORT=$2
+  local tries=$3
+
+  logging "Wait for migration receiver on ${SSH_HOST}:${PORT}"
+
+  for i in $(seq 1 ${tries}); do
+    set +e
+    ssh -F ~/.ssh/config ${SSH_HOST} \
+      "ss -H -ltn 'sport = :${PORT}' | grep -q LISTEN"
+    if [ $? -eq 0 ]; then
+      logging "Migration receiver is ready on ${SSH_HOST}:${PORT}"
+      set -e
+      return 0
+    fi
+    set -e
+    logging "Migration receiver is not ready on ${SSH_HOST}:${PORT} - iteration $i / ${tries}"
+    sleep 1
+  done
+
+  logging "Migration receiver is not ready on ${SSH_HOST}:${PORT}"
+  return 1
+}
+
 check_vm() {
   local SSH_HOST=$1
   local TARGET=$2

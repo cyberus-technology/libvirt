@@ -98,6 +98,8 @@ start_async ssh -F ~/.ssh/config ${HOST2} \
   --api-socket \
   /tmp/chv.${CI_JOB_ID}.sock receive-migration tcp:0.0.0.0:${VMM_PORT}"
 
+wait_for_migration_receiver ${HOST2} ${VMM_PORT} ${NETWORK_TIMEOUT} || collect_logs_exit_error
+
 logging "Debug processes on host2"
 ssh -F ~/.ssh/config ${HOST2} "ps axu | grep tmp-${CI_JOB_ID}"
 
