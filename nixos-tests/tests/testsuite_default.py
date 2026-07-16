@@ -1544,6 +1544,24 @@ class LibvirtTests(LibvirtTestsBase):  # type: ignore
 
         controllerVM.succeed("virsh destroy testvm")
 
+    def test_configured_queues_exceed_253(self):
+        """
+        We test that exceeding the Linux kernel limit of 253 file descriptors
+        when sending them via SCM_RIGHTS mechanism results in a explicit error
+        message.
+        To hit the limit, we increase the number of virtio queues for the network device.
+        """
+
+        controllerVM.succeed(
+            "virsh define /etc/domain-chv-virtio-multiqueue-high-queue-count.xml"
+        )
+        controllerVM.fail("virsh start testvm")
+
+        controllerVM.wait_until_succeeds(
+            "grep -qF 'Cannot send 254 file descriptors to Cloud Hypervisor' /var/log/libvirt/libvirtd.log",
+            20,
+        )
+
 
 def suite():
     # Test cases sorted in alphabetical order.
@@ -1557,6 +1575,7 @@ def suite():
         LibvirtTests.test_boot_not_enough_memory,
         LibvirtTests.test_ch_endpoint_network_announcements,
         LibvirtTests.test_cirros_image,
+        LibvirtTests.test_configured_queues_exceed_253,
         LibvirtTests.test_disk_is_locked,
         LibvirtTests.test_disk_resize_qcow2,
         LibvirtTests.test_disk_resize_raw,

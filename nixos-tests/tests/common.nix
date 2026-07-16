@@ -706,6 +706,13 @@ in
             })}";
           };
         };
+        "/etc/domain-chv-virtio-multiqueue-high-queue-count.xml" = {
+          "C+" = {
+            argument = "${pkgs.writeText "domain-chv-virtio-multiqueue-high-queue-count" (virsh_ch_xml {
+              netQueues = 254;
+            })}";
+          };
+        };
         # This image is not supposed to boot as 16MiB is not even enough to successfully
         # run the firmware.
         "/etc/domain-chv-cirros-16MiB-memory.xml" = {
