@@ -2134,22 +2134,20 @@ int virCHMonitorMigrationReceive(virCHMonitor *mon,
     // that the migration protocol can continue.
     virCondSignal(cond);
 
-    if (virSocketSendMsgWithFDs(mon_sockfd, payload, payload_len, tapfds, ntapfds) < 0) {
-        virReportSystemError(errno, "%s",
-                             _("Failed to send migrate receive request to CH"));
+    if (chSocketSendMsgWithFDs(mon_sockfd, payload, payload_len, tapfds, ntapfds) < 0) {
         rc = -1;
         goto out_close_fds;
     }
 
     // This is a tricky piece of code because a lot can happen behind the curtons.
     //
-    // We need to close the FDs as soon as virSocketSendMsgWithFDs is done. Otherwise,
+    // We need to close the FDs as soon as chSocketSendMsgWithFDs is done. Otherwise,
     // the will never be closed if an error happens during live migration on the sender
     // side which causes this thread to be cancelled during chSocketProcessHttpResponse.
     //
     // This cancellation is necessary because otherwise we would block indefinitely in
     // a recv() system call during chSocketProcessHttpResponse. Closing the FDs here
-    // it totally fine because they have already been transmitted during virSocketSendMsgWithFDs,
+    // it totally fine because they have already been transmitted during chSocketSendMsgWithFDs,
     // but makes the code a little bit ugly.
     //
     // See chDomainMigrateFinish3 for more details.

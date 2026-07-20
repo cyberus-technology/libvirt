@@ -33,4 +33,11 @@ int
 chSocketProcessHttpResponse(int sock, bool use_poll_timeout);
 
 int
+chSocketSendMsgWithFDs(int sock,
+                       const char *payload,
+                       size_t payload_len,
+                       int *fds,
+                       size_t fds_len);
+
+int
 chCloseFDs(int *fds, size_t nfds);

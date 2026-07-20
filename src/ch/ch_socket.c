@@ -26,6 +26,7 @@
 #define VIR_FROM_THIS VIR_FROM_CH
 
 #define PKT_TIMEOUT_MS 500 /* ms */
+#define CH_SOCKET_MAX_FDS 253
 
 static char *
 chSocketRecv(int sock, bool use_timeout)
@@ -94,6 +95,34 @@ chSocketProcessHttpResponse(int sock, bool use_poll_timeout)
     }
 
     return 0;
+}
+
+int
+chSocketSendMsgWithFDs(int sock,
+                       const char *payload,
+                       size_t payload_len,
+                       int *fds,
+                       size_t fds_len)
+{
+    int rc = -1;
+
+    if (fds_len > CH_SOCKET_MAX_FDS) {
+        virReportSystemError(E2BIG,
+                             _("Cannot send %1$zu file descriptors to Cloud Hypervisor: "
+                                 "SCM_RIGHTS supports at most %2$d"),
+                             fds_len, CH_SOCKET_MAX_FDS);
+        errno = E2BIG;
+        return -1;
+    }
+
+    rc = virSocketSendMsgWithFDs(sock, payload, payload_len, fds, fds_len);
+
+    if (rc < 0) {
+        virReportSystemError(errno, _("Failed to send request to CH: %s"),
+                             payload);
+    }
+
+    return rc;
 }
 
 int

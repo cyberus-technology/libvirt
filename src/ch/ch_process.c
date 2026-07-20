@@ -606,7 +606,6 @@ chProcessAddNetworkDevice(virCHDriver *driver,
     size_t nnicindexes = 0;
     size_t tapfd_len = 0;
     size_t payload_len;
-    int saved_errno = 0;
     int rc = 0;
     int ret = -1;
 
@@ -671,13 +670,9 @@ chProcessAddNetworkDevice(virCHDriver *driver,
     payload_len = virBufferUse(&buf);
     payload = virBufferContentAndReset(&buf);
 
-    rc = virSocketSendMsgWithFDs(mon_sockfd, payload, payload_len,
-                                 tapfds, tapfd_len);
-    saved_errno = errno;
-
+    rc = chSocketSendMsgWithFDs(mon_sockfd, payload, payload_len,
+                                tapfds, tapfd_len);
     if (rc < 0) {
-        virReportSystemError(saved_errno, "%s",
-                             _("Failed to send net-add request to CH"));
         ret = -1;
         goto cleanup;
     }
@@ -744,7 +739,6 @@ chProcessAddNetworkDevices(virCHDriver *driver,
         g_autofree char *response = NULL;
         size_t tapfd_len;
         size_t payload_len;
-        int saved_errno;
         int rc;
 
         // This is set to 0 in domain_conf.c always. Figure out how to
@@ -792,16 +786,13 @@ chProcessAddNetworkDevices(virCHDriver *driver,
         payload_len = virBufferUse(&buf);
         payload = virBufferContentAndReset(&buf);
 
-        rc = virSocketSendMsgWithFDs(mon_sockfd, payload, payload_len,
-                                     tapfds, tapfd_len);
-        saved_errno = errno;
+        rc = chSocketSendMsgWithFDs(mon_sockfd, payload, payload_len,
+                                    tapfds, tapfd_len);
 
         /* Close sent tap fds in Libvirt, as they have been dup()ed in CH */
         chCloseFDs(tapfds, tapfd_len);
 
         if (rc < 0) {
-            virReportSystemError(saved_errno, "%s",
-                                 _("Failed to send net-add request to CH"));
             return -1;
         }
 
@@ -1419,9 +1410,7 @@ virCHProcessStartRestore(virCHDriver *driver, virDomainObj *vm, const char *from
     if (virDomainInterfaceStartDevices(vm->def) < 0)
         goto cleanup;
 
-    if (virSocketSendMsgWithFDs(mon_sockfd, payload, payload_len, tapfds, ntapfds) < 0) {
-        virReportSystemError(errno, "%s",
-                             _("Failed to send restore request to CH"));
+    if (chSocketSendMsgWithFDs(mon_sockfd, payload, payload_len, tapfds, ntapfds) < 0) {
         goto cleanup;
     }
 
