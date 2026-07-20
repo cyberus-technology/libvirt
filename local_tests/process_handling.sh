@@ -96,7 +96,7 @@ cleanup_processes() {
         fi
     fi
 
-    logging "Cleanup all processes with current working directory in: ${targets[*]}"
+    logging "Cleanup all processes with current working directory in or below: ${targets[*]}"
 
     for proc in /proc/[0-9]*; do
         local pid=${proc#/proc/}
@@ -112,8 +112,10 @@ cleanup_processes() {
         exe=$(readlink -f "$proc/exe" 2>/dev/null) || exe="can-not-read-executeable-path-from-proc"
 
         for target in "${targets[@]}"; do
+            # The NixOS test driver starts QEMU in vm-state-* below
+            # XDG_RUNTIME_DIR, rather than in XDG_RUNTIME_DIR itself.
             case "$cwd" in
-                "$target")
+                "$target"|"$target"/*)
                     if kill -0 "$pid" 2>/dev/null; then
                         logging "Send ${sig} to pid: $pid (cwd: $cwd - exe: $exe)"
                         logging "DEBUG: target: $target"
