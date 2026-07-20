@@ -373,6 +373,10 @@ chDomainCreateWithFlags(virDomainPtr dom, unsigned int flags)
         ret = virCHProcessStart(driver, vm, VIR_DOMAIN_RUNNING_BOOTED);
     }
 
+    if (ret != 0) {
+        goto endjob;
+    }
+
     if (ret == 0) {
         virObjectEvent *event;
 
