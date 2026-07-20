@@ -20,6 +20,10 @@ fi
 PID=$(cat tmp-${CI_JOB_ID}/${CI_PROJECT_NAME}/.main.pid)
 export XDG_RUNTIME_DIR=$(cat tmp-${CI_JOB_ID}/${CI_PROJECT_NAME}/.xdg_runtime_dir)
 cleanup_processes TERM
+
+# Kill any process that does not react to our first attempt shutting it down.
+sleep 5
+cleanup_processes KILL
 kill $PID || true
 
 logging "cleanup XDG_RUNTIME_DIR: ${XDG_RUNTIME_DIR}"
