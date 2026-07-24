@@ -1562,6 +1562,22 @@ class LibvirtTests(LibvirtTestsBase):  # type: ignore
             20,
         )
 
+    def test_log_format(self):
+        """
+        Test that Cloud Hypervisor uses the expected log format.
+        """
+        controllerVM.succeed("virsh define /etc/domain-chv.xml")
+        controllerVM.succeed("virsh start testvm")
+
+        wait_for_ssh(controllerVM)
+
+        # The regex matches the expected timestamp and line number values.
+        controllerVM.wait_until_succeeds(
+            r"grep -Eq 'cloud-hypervisor: [0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]+Z: <main> INFO:cloud-hypervisor/src/main\.rs:[0-9]+ -- Cloud Hypervisor starting: build version:' "
+            r"/var/log/libvirt/ch/testvm.log",
+            60,
+        )
+
 
 def suite():
     # Test cases sorted in alphabetical order.
@@ -1589,6 +1605,7 @@ def suite():
         LibvirtTests.test_list_smbios_host,
         LibvirtTests.test_list_smbios_oem_strings,
         LibvirtTests.test_list_smbios_sysinfo,
+        LibvirtTests.test_log_format,
         LibvirtTests.test_managedsave,
         LibvirtTests.test_memory_prefault,
         LibvirtTests.test_nested_chv_guest,
