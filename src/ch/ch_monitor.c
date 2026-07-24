@@ -1244,6 +1244,8 @@ virCHMonitorNew(virDomainObj *vm, virCHDriverConfig *cfg, int logfile)
         virCommandAddArg(cmd, "--api-socket");
         virCommandAddArgFormat(cmd, "fd=%d", socket_fd);
         virCommandPassFD(cmd, socket_fd, VIR_COMMAND_PASS_FD_CLOSE_PARENT);
+        virCommandAddArg(cmd, "--log-format");
+        virCommandAddArg(cmd, "\"cloud-hypervisor: {wallclock}: <{thread}> {level}:{location} -- {msg}\"");
         virCommandAddArg(cmd, "--no-shutdown");
         virCommandAddArg(cmd, "-v");
         virCommandAddArg(cmd, "--seccomp");
