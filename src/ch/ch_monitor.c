@@ -548,6 +548,11 @@ virCHMonitorBuildDiskJson(virJSONValue *disks, virDomainDiskDef *diskdef)
             if (virJSONValueObjectAppendBoolean(disk, "readonly", true) < 0)
                 return -1;
         }
+        if (diskdef->queues > 1) {
+            if (virJSONValueObjectAppendNumberInt(disk, "num_queues",
+                                                  diskdef->queues) < 0)
+                return -1;
+        }
 
         if (diskdef->info.type == VIR_DOMAIN_DEVICE_ADDRESS_TYPE_PCI) {
             if (virJSONValueObjectAppendNumberInt(disk, "bdf_device", diskdef->info.addr.pci.slot) < 0) {
