@@ -1578,6 +1578,45 @@ class LibvirtTests(LibvirtTestsBase):  # type: ignore
             60,
         )
 
+    def test_disk_multi_queue(self):
+        """
+        Test that multi-queue configuration for disks is supported.
+        """
+        source = "/tmp/disk.img"
+
+        try:
+            controllerVM.succeed(f"qemu-img create -f raw {source} 10M")
+
+            controllerVM.succeed("virsh define /etc/domain-chv.xml")
+            controllerVM.succeed("virsh start testvm")
+
+            wait_for_ssh(controllerVM)
+            controllerVM.succeed(
+                textwrap.dedent(f"""
+                cat >> multiqueue.xml << EOF
+                <disk type='file' device='disk'>
+                    <source file='{source}'/>
+                    <target dev='vdb' bus='virtio'/>
+                    <driver queues='2'/>
+                </disk>
+                EOF
+                """).strip()
+            )
+            hotplug(
+                controllerVM,
+                "virsh attach-device testvm multiqueue.xml --persistent",
+            )
+            self.assertEqual(
+                ssh(
+                    controllerVM,
+                    "find /sys/block/vdb/mq -mindepth 1 -maxdepth 1 -type d | wc -l",
+                ).strip(),
+                "2",
+                "vdb should expose all configured virtio-blk queues",
+            )
+        finally:
+            controllerVM.succeed(f"rm -f {source}")
+
 
 def suite():
     # Test cases sorted in alphabetical order.
@@ -1593,6 +1632,7 @@ def suite():
         LibvirtTests.test_cirros_image,
         LibvirtTests.test_configured_queues_exceed_253,
         LibvirtTests.test_disk_is_locked,
+        LibvirtTests.test_disk_multi_queue,
         LibvirtTests.test_disk_resize_qcow2,
         LibvirtTests.test_disk_resize_raw,
         LibvirtTests.test_domain_with_many_devices_without_explicit_bdf,
