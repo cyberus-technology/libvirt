@@ -1806,6 +1806,49 @@ chDomainGetStatsCpu(virDomainObj *vm,
 }
 
 
+static void
+chDomainGetStatsVcpu(virDomainObj *vm,
+                     virTypedParamList *params)
+{
+    unsigned int maxvcpus = virDomainDefGetVcpusMax(vm->def);
+    unsigned int i;
+
+    virTypedParamListAddUInt(params, virDomainDefGetVcpus(vm->def),
+                             VIR_DOMAIN_STATS_VCPU_CURRENT);
+    virTypedParamListAddUInt(params, maxvcpus,
+                             VIR_DOMAIN_STATS_VCPU_MAXIMUM);
+
+    if (!virDomainObjIsActive(vm) || !virCHDomainHasVcpuPids(vm)) {
+        return;
+    }
+
+    for (i = 0; i < maxvcpus; i++) {
+        virDomainVcpuDef *vcpu = virDomainDefGetVcpu(vm->def, i);
+        pid_t vcpupid;
+        unsigned long long cpuwait;
+
+        if (!vcpu->online) {
+            continue;
+        }
+
+        vcpupid = virCHDomainGetVcpuPid(vm, i);
+        if (vcpupid <= 0) {
+            continue;
+        }
+
+        if (virProcessGetSchedInfo(&cpuwait, vm->pid, vcpupid) < 0) {
+            /* Statistics are best-effort. */
+            virResetLastError();
+            continue;
+        }
+
+        virTypedParamListAddULLong(params, cpuwait,
+                                   VIR_DOMAIN_STATS_VCPU_PREFIX "%u" VIR_DOMAIN_STATS_VCPU_SUFFIX_WAIT,
+                                   i);
+    }
+}
+
+
 static int
 chDomainGetStats(virConnectPtr conn,
                  virDomainObj *vm,
@@ -1817,6 +1860,10 @@ chDomainGetStats(virConnectPtr conn,
 
     if (stats & VIR_DOMAIN_STATS_CPU_TOTAL) {
         chDomainGetStatsCpu(vm, params);
+    }
+
+    if (stats & VIR_DOMAIN_STATS_VCPU) {
+        chDomainGetStatsVcpu(vm, params);
     }
 
     tmp = g_new0(virDomainStatsRecord, 1);
@@ -1844,7 +1891,8 @@ chConnectGetAllDomainStats(virConnectPtr conn,
                            unsigned int flags)
 {
     virCHDriver *driver = conn->privateData;
-    const unsigned int supported = VIR_DOMAIN_STATS_CPU_TOTAL;
+    const unsigned int supported = VIR_DOMAIN_STATS_CPU_TOTAL |
+                                   VIR_DOMAIN_STATS_VCPU;
     virDomainObj **vms = NULL;
     virDomainStatsRecordPtr *tmpstats = NULL;
     size_t nvms;
