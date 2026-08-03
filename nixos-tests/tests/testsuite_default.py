@@ -1,10 +1,11 @@
-from typing import TYPE_CHECKING
 import json
+import re
 import shlex
 import string
 import textwrap
 import time
 import unittest
+from typing import TYPE_CHECKING
 
 # Following import statement allows for proper python IDE support and proper
 # nix build support. The duplicate listing of imported functions is a bit
@@ -13,12 +14,31 @@ import unittest
 # additional IDE configuration.
 try:
     from ..test_helper.test_helper import (  # type: ignore
+        DOMMEMSTAT_FIELDS,
+        DOMSTATS_FIELDS,
+        NET_HOST_COUNTERS,
+        VALUE_BLOCK_FIELDS,
+        VALUE_CPU_FIELDS,
+        VALUE_DOMMEMSTAT_FIELDS,
+        VALUE_INTERFACE_FIELDS,
         LibvirtTestsBase,
         PciBdf,
         assert_domain_domstate,
         assert_nested_cirros_connectivity,
+        assert_reported_unsigned_values,
         capture_libvirt_events,
         get_attached_labeled_disks,
+        get_ch_memory_actual,
+        get_disk_sizes,
+        get_domain_pid,
+        get_domain_tap_name,
+        get_host_tap_statistics,
+        get_process_statistics,
+        get_required_statistics,
+        get_statistics,
+        get_vcpu_affinity,
+        get_vcpu_tid,
+        get_vcpu_wait,
         hotplug,
         hotplug_fail,
         initialControllerVMSetup,
@@ -31,6 +51,7 @@ try:
         ssh,
         start_net_capture,
         stop_net_capture_and_assert_migration_announcements,
+        unsigned_value_in_interval,
         vcpu_affinity_checks,
         vm_unresponsive,
         wait_for_guest_pci_device_enumeration,
@@ -40,12 +61,31 @@ try:
 except Exception:
     if not TYPE_CHECKING:
         from test_helper import (
+            DOMMEMSTAT_FIELDS,
+            DOMSTATS_FIELDS,
+            NET_HOST_COUNTERS,
+            VALUE_BLOCK_FIELDS,
+            VALUE_CPU_FIELDS,
+            VALUE_DOMMEMSTAT_FIELDS,
+            VALUE_INTERFACE_FIELDS,
             LibvirtTestsBase,
             PciBdf,
             assert_domain_domstate,
             assert_nested_cirros_connectivity,
+            assert_reported_unsigned_values,
             capture_libvirt_events,
             get_attached_labeled_disks,
+            get_ch_memory_actual,
+            get_disk_sizes,
+            get_domain_pid,
+            get_domain_tap_name,
+            get_host_tap_statistics,
+            get_process_statistics,
+            get_required_statistics,
+            get_statistics,
+            get_vcpu_affinity,
+            get_vcpu_tid,
+            get_vcpu_wait,
             hotplug,
             hotplug_fail,
             initialControllerVMSetup,
@@ -58,6 +98,7 @@ except Exception:
             ssh,
             start_net_capture,
             stop_net_capture_and_assert_migration_announcements,
+            unsigned_value_in_interval,
             vcpu_affinity_checks,
             vm_unresponsive,
             wait_for_guest_pci_device_enumeration,
@@ -90,6 +131,284 @@ class LibvirtTests(LibvirtTestsBase):  # type: ignore
     def setUpClass(cls):
         controllerVM.start()
         initialControllerVMSetup(controllerVM, with_compute_vm=False)
+
+    def test_statistics(self):
+        """
+        Check that required domain and memory statistics are available and
+        well-formed, and that vCPU affinity is reported. The required fields
+        are listed in test_helper.py:DOMSTATS_FIELDS and
+        test_helper.py:DOMMEMSTAT_FIELDS; they cover customer requirements,
+        rather than all statistics supported by Libvirt.
+
+        For both explicit-domain and all-domains requests, verify that
+        --enforce accepts supported statistics and rejects unsupported groups.
+        Without --enforce, unsupported groups must be ignored.
+
+        TODO: To let this test pass, there are commented fields in
+        DOMSTATS_FIELDS and DOMMEMSTAT_FIELDS. These should be enabled as soon
+        as we support them.
+        """
+        controllerVM.succeed("virsh define /etc/domain-chv.xml")
+        controllerVM.succeed("virsh start testvm")
+        self.addCleanup(controllerVM.execute, "virsh destroy testvm")
+        wait_for_ssh(controllerVM)
+
+        invalid = []
+        for command, expected in (
+            (
+                "virsh domstats testvm --cpu-total --vcpu --block --interface",
+                DOMSTATS_FIELDS,
+            ),
+            ("virsh dommemstat testvm", DOMMEMSTAT_FIELDS),
+        ):
+            values, unavailable = get_statistics(controllerVM, command, expected)
+            invalid.extend(unavailable)
+            if not unavailable:
+                invalid.extend(assert_reported_unsigned_values(values, expected))
+
+        status, vcpuinfo = controllerVM.execute("virsh vcpuinfo testvm")
+        if status != 0:
+            error = " ".join(vcpuinfo.split()) or f"exit status {status}"
+            invalid.append(f"virsh vcpuinfo: cpuAffinity: unavailable ({error})")
+        else:
+            affinity = re.search(r"^CPU Affinity:\s*(\S.*)$", vcpuinfo, re.MULTILINE)
+            if affinity is None or not set(affinity.group(1)) <= {"y", "-"}:
+                invalid.append("virsh vcpuinfo: cpuAffinity: not reported")
+
+        if invalid:
+            self.fail("Statistics not properly reported:\n" + "\n".join(invalid))
+
+        # Exercise both the explicit-domain and all-domains API paths.
+        for domain in ("testvm", ""):
+            command = f"virsh domstats {domain}"
+            for options in ("--cpu-total --enforce", "--enforce"):
+                output = controllerVM.succeed(f"{command} {options}")
+                self.assertIn("Domain: 'testvm'", output)
+                self.assertRegex(output, r"(?m)^\s+cpu.time=\d+$")
+
+            # State statistics are unsupported by CH. Without enforcement,
+            # they must be ignored while supported CPU statistics are returned.
+            output = controllerVM.succeed(f"{command} --cpu-total --state")
+            self.assertRegex(output, r"(?m)^\s+cpu.time=\d+$")
+            self.assertNotRegex(output, r"(?m)^\s+state\.")
+
+            # With enforcement, we expect an error message for unimplemented
+            # statistics
+            status, output = controllerVM.execute(
+                f"{command} --cpu-total --state --enforce 2>&1"
+            )
+            self.assertNotEqual(status, 0, output)
+            self.assertIn(
+                "Stats types bits 0x1 are not supported by this daemon", output
+            )
+
+    def test_statistics_multiple_domains(self):
+        """domstats must return statistics for every running domain without hanging."""
+        # Give the second domain its own disk and UUID. It does not need a
+        # network interface, which would otherwise reuse testvm's TAP device.
+        second_disk = "/var/lib/libvirt/storage-pools/nfs-share/nixos-second.img"
+        self.addCleanup(controllerVM.succeed, f"rm -f {second_disk} /tmp/second.xml")
+        controllerVM.succeed(f"cp /etc/nixos.img {second_disk}")
+        controllerVM.succeed(f"chmod 0666 {second_disk}")
+        # Use 512 MiB for the second guest to leave room in the 4 GiB host.
+        controllerVM.succeed(
+            "sed -e 's|<name>testvm</name>|<name>second</name>|' "
+            "-e '/<uuid>/d' "
+            "-e 's/nixos.img/nixos-second.img/' "
+            "-e '/<memory /s/>.*</>524288</' "
+            "-e '/<currentMemory /s/>.*</>524288</' "
+            r"-e '/<interface /,/<\/interface>/d' "
+            "/etc/domain-chv.xml > /tmp/second.xml"
+        )
+        controllerVM.succeed("virsh define /etc/domain-chv.xml")
+        controllerVM.succeed("virsh define /tmp/second.xml")
+        for domain in ("testvm", "second"):
+            controllerVM.succeed(f"virsh start {domain}")
+            assert_domain_domstate(controllerVM, "running", domain)
+
+        for command in ("virsh domstats", "virsh domstats testvm second"):
+            output = controllerVM.succeed(command, timeout=15)
+            records = output.strip().split("\n\n")
+            self.assertCountEqual(
+                [record.splitlines()[0] for record in records],
+                ["Domain: 'testvm'", "Domain: 'second'"],
+            )
+            for record in records:
+                self.assertRegex(record, r"(?m)^\s+cpu.time=\d+$")
+
+    def test_statistics_values_cpu(self):
+        """
+        Check CPU, vCPU wait, and vCPU affinity source values.
+        """
+        controllerVM.succeed("virsh define /etc/domain-chv.xml")
+        controllerVM.succeed("virsh start testvm")
+        wait_for_ssh(controllerVM)
+
+        pid = get_domain_pid(controllerVM)
+
+        vcpu_tid = get_vcpu_tid(controllerVM, pid, 0)
+
+        process_before = get_process_statistics(controllerVM, pid)
+        vcpu_wait_before = get_vcpu_wait(controllerVM, pid, vcpu_tid)
+
+        domstats = get_required_statistics(
+            controllerVM,
+            "virsh domstats testvm --cpu-total --vcpu",
+            VALUE_CPU_FIELDS,
+        )
+
+        process_after = get_process_statistics(controllerVM, pid)
+        vcpu_wait_after = get_vcpu_wait(controllerVM, pid, vcpu_tid)
+
+        clock_ticks = int(process_before["clock_ticks"])
+        tick_ns = 1_000_000_000 // clock_ticks
+        expected = {
+            "cpu.user": (
+                int(process_before["user_ticks"]) * tick_ns,
+                int(process_after["user_ticks"]) * tick_ns,
+            ),
+            "cpu.system": (
+                int(process_before["system_ticks"]) * tick_ns,
+                int(process_after["system_ticks"]) * tick_ns,
+            ),
+        }
+        expected["cpu.time"] = (
+            expected["cpu.user"][0] + expected["cpu.system"][0],
+            expected["cpu.user"][1] + expected["cpu.system"][1],
+        )
+        for field, (before, after) in expected.items():
+            self.assertTrue(
+                unsigned_value_in_interval(domstats[field], before, after),
+                f"{field} is outside host process interval [{before}, {after}]",
+            )
+        self.assertEqual(
+            int(domstats["cpu.time"]),
+            int(domstats["cpu.user"]) + int(domstats["cpu.system"]),
+        )
+        self.assertTrue(
+            unsigned_value_in_interval(
+                domstats["vcpu.0.wait"], vcpu_wait_before, vcpu_wait_after
+            ),
+            "vcpu.0.wait is outside the vCPU schedstat interval",
+        )
+
+        for field, command in (
+            ("vcpu.current", "virsh vcpucount testvm --live"),
+            ("vcpu.maximum", "virsh vcpucount testvm --maximum"),
+        ):
+            count = controllerVM.succeed(command).strip()
+            self.assertEqual(domstats[field], count, f"{field} differs from {command}")
+
+        vcpuinfo = controllerVM.succeed("virsh vcpuinfo testvm")
+        affinity = re.search(r"^CPU Affinity:\s*(\S.*)$", vcpuinfo, re.MULTILINE)
+        assert affinity is not None
+        host_affinity = get_vcpu_affinity(controllerVM, pid, vcpu_tid)
+        reported_affinity = {
+            # Libvirt reports a y for every allowed pCPU where the vCPU can run
+            # on, e.g. yyyy for a 4 core system and the vcpu is allowed to run
+            # on all
+            cpu
+            for cpu, allowed in enumerate(affinity.group(1))
+            if allowed == "y"
+        }
+        self.assertEqual(reported_affinity, host_affinity)
+
+    def test_statistics_values_block(self):
+        """Check block storage size statistics against the host backing file."""
+        controllerVM.succeed("virsh define /etc/domain-chv.xml")
+        controllerVM.succeed("virsh start testvm")
+        wait_for_ssh(controllerVM)
+
+        ssh(
+            controllerVM,
+            "dd if=/dev/zero of=/tmp/libvirt-statistics bs=1M count=8 conv=fsync status=none",
+        )
+        disk_before = get_disk_sizes(controllerVM)
+
+        domstats = get_required_statistics(
+            controllerVM,
+            "virsh domstats testvm --block",
+            VALUE_BLOCK_FIELDS,
+        )
+        disk_after = get_disk_sizes(controllerVM)
+
+        # Compare each statistic with its own backing-file value. In
+        # particular, allocation is based on st_blocks and may be larger than
+        # the st_size-based physical size and capacity.
+        for field in VALUE_BLOCK_FIELDS:
+            source_field = field.rsplit(".", 1)[1]
+            before, after = sorted(
+                (disk_before[source_field], disk_after[source_field])
+            )
+            self.assertTrue(
+                unsigned_value_in_interval(domstats[field], before, after),
+                f"{field} is outside host disk interval [{before}, {after}]",
+            )
+
+    def test_statistics_values_interface(self):
+        """
+        Check interface statistics against the host TAP device.
+        We check if the values returned by calling Libvirt are in the range of
+        what we retrieve from the host before and after asking Libvirt.
+        """
+        controllerVM.succeed("virsh define /etc/domain-chv.xml")
+        controllerVM.succeed("virsh start testvm")
+        wait_for_ssh(controllerVM)
+
+        tap_name = get_domain_tap_name(controllerVM)
+        tap_before = get_host_tap_statistics(controllerVM, tap_name)
+
+        domstats = get_required_statistics(
+            controllerVM,
+            "virsh domstats testvm --interface",
+            VALUE_INTERFACE_FIELDS,
+        )
+        tap_after = get_host_tap_statistics(controllerVM, tap_name)
+
+        for field, host_counter in NET_HOST_COUNTERS.items():
+            before = int(tap_before[host_counter])
+            after = int(tap_after[host_counter])
+            self.assertTrue(
+                unsigned_value_in_interval(domstats[field], before, after),
+                f"{field} is outside host TAP {tap_name} interval [{before}, {after}]",
+            )
+
+    def test_statistics_values_memory(self):
+        """
+        Check actual memory and RSS against CH and host process values.
+        """
+        controllerVM.succeed("virsh define /etc/domain-chv.xml")
+        controllerVM.succeed("virsh start testvm")
+        wait_for_ssh(controllerVM)
+
+        pid = get_domain_pid(controllerVM)
+
+        dommemstat = get_required_statistics(
+            controllerVM,
+            "virsh dommemstat testvm",
+            VALUE_DOMMEMSTAT_FIELDS,
+        )
+        process_stats = get_process_statistics(controllerVM, pid)
+
+        actual = get_ch_memory_actual(controllerVM)
+
+        self.assertEqual(int(dommemstat["actual"]), actual)
+
+        reference = (
+            int(process_stats["rss_pages"]) * int(process_stats["page_size"]) // 1024
+        )
+        reported = int(dommemstat["rss"])
+
+        # RSS can change between the libvirt query and the /proc sample.
+        # We apply some tolerance to account for that. We should still uncover
+        # errors like a complete unit mismatch and similar.
+        tolerance_kib = max(4 * 1024, reference // 20)
+        self.assertLessEqual(
+            abs(reported - reference),
+            tolerance_kib,
+            f"RSS mismatch for PID {pid}: libvirt={reported} KiB, "
+            f"/proc={reference} KiB, tolerance={tolerance_kib} KiB",
+        )
 
     def test_network_hotplug_transient_vm_restart(self):
         """
@@ -2137,6 +2456,12 @@ def suite():
         LibvirtTests.test_serial_file_output,
         LibvirtTests.test_serial_tcp,
         LibvirtTests.test_shutdown,
+        LibvirtTests.test_statistics,
+        LibvirtTests.test_statistics_multiple_domains,
+        LibvirtTests.test_statistics_values_block,
+        LibvirtTests.test_statistics_values_cpu,
+        LibvirtTests.test_statistics_values_interface,
+        LibvirtTests.test_statistics_values_memory,
         LibvirtTests.test_suspend_resume,
         LibvirtTests.test_virsh_console_works_with_pty,
     ]
