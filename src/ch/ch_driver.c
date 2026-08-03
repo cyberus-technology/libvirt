@@ -61,6 +61,7 @@
 #include "viruuid.h"
 #include "virnuma.h"
 #include "virhostmem.h"
+#include "virprocess.h"
 
 #include "util/virportallocator.h"
 
@@ -1776,6 +1777,143 @@ static int chDomainGetInfo(virDomainPtr dom,
 
  cleanup:
     virDomainObjEndAPI(&vm);
+    return ret;
+}
+
+
+static void
+chDomainGetStatsCpu(virDomainObj *vm,
+                    virTypedParamList *params)
+{
+    unsigned long long cpuTime = 0;
+    unsigned long long userTime = 0;
+    unsigned long long sysTime = 0;
+
+    if (!virDomainObjIsActive(vm)) {
+        return;
+    }
+
+    if (virProcessGetStatInfo(&cpuTime, &userTime, &sysTime,
+                              NULL, NULL, vm->pid, 0) < 0) {
+        /* Statistics are best-effort. */
+        virResetLastError();
+        return;
+    }
+
+    virTypedParamListAddULLong(params, cpuTime, VIR_DOMAIN_STATS_CPU_TIME);
+    virTypedParamListAddULLong(params, userTime, VIR_DOMAIN_STATS_CPU_USER);
+    virTypedParamListAddULLong(params, sysTime, VIR_DOMAIN_STATS_CPU_SYSTEM);
+}
+
+
+static int
+chDomainGetStats(virConnectPtr conn,
+                 virDomainObj *vm,
+                 unsigned int stats,
+                 virDomainStatsRecordPtr *record)
+{
+    g_autoptr(virTypedParamList) params = virTypedParamListNew();
+    g_autofree virDomainStatsRecordPtr tmp = NULL;
+
+    if (stats & VIR_DOMAIN_STATS_CPU_TOTAL) {
+        chDomainGetStatsCpu(vm, params);
+    }
+
+    tmp = g_new0(virDomainStatsRecord, 1);
+
+    if (!(tmp->dom = virGetDomain(conn, vm->def->name,
+                                  vm->def->uuid, vm->def->id))) {
+        return -1;
+    }
+
+    if (virTypedParamListSteal(params, &tmp->params, &tmp->nparams) < 0) {
+        return -1;
+    }
+
+    *record = g_steal_pointer(&tmp);
+    return 0;
+}
+
+
+static int
+chConnectGetAllDomainStats(virConnectPtr conn,
+                           virDomainPtr *doms,
+                           unsigned int ndoms,
+                           unsigned int stats,
+                           virDomainStatsRecordPtr **retStats,
+                           unsigned int flags)
+{
+    virCHDriver *driver = conn->privateData;
+    const unsigned int supported = VIR_DOMAIN_STATS_CPU_TOTAL;
+    virDomainObj **vms = NULL;
+    virDomainStatsRecordPtr *tmpstats = NULL;
+    size_t nvms;
+    size_t i;
+    int nstats = 0;
+    int ret = -1;
+    unsigned int lflags = flags & (VIR_CONNECT_LIST_DOMAINS_FILTERS_ACTIVE |
+                                   VIR_CONNECT_LIST_DOMAINS_FILTERS_PERSISTENT |
+                                   VIR_CONNECT_LIST_DOMAINS_FILTERS_STATE);
+
+    virCheckFlags(VIR_CONNECT_LIST_DOMAINS_FILTERS_ACTIVE |
+                  VIR_CONNECT_LIST_DOMAINS_FILTERS_PERSISTENT |
+                  VIR_CONNECT_LIST_DOMAINS_FILTERS_STATE |
+                  VIR_CONNECT_GET_ALL_DOMAINS_STATS_ENFORCE_STATS, -1);
+
+    if (virConnectGetAllDomainStatsEnsureACL(conn) < 0) {
+        return -1;
+    }
+
+    if (stats == 0) {
+        stats = supported;
+    } else if ((flags & VIR_CONNECT_GET_ALL_DOMAINS_STATS_ENFORCE_STATS) &&
+               (stats & ~supported)) {
+        virReportError(VIR_ERR_ARGUMENT_UNSUPPORTED,
+                       _("Stats types bits 0x%1$x are not supported by this daemon"),
+                       stats & ~supported);
+        return -1;
+    } else {
+        stats &= supported;
+    }
+
+    if (ndoms) {
+        if (virDomainObjListConvert(driver->domains, conn, doms, ndoms, &vms,
+                                    &nvms, virConnectGetAllDomainStatsCheckACL,
+                                    lflags, true) < 0) {
+            return -1;
+        }
+    } else {
+        virDomainObjListCollect(driver->domains, conn, &vms, &nvms,
+                                virConnectGetAllDomainStatsCheckACL,
+                                lflags);
+    }
+
+    tmpstats = g_new0(virDomainStatsRecordPtr, nvms + 1);
+
+    for (i = 0; i < nvms; i++) {
+        virDomainStatsRecordPtr tmp = NULL;
+
+        VIR_WITH_OBJECT_LOCK_GUARD(vms[i]) {
+            if (chDomainGetStats(conn, vms[i], stats, &tmp) < 0) {
+                goto cleanup;
+            }
+        }
+
+        if (!tmp) {
+            virReportError(VIR_ERR_INTERNAL_ERROR, "%s",
+                           _("cannot create domain statistics record"));
+            goto cleanup;
+        }
+
+        tmpstats[nstats++] = tmp;
+    }
+
+    *retStats = g_steal_pointer(&tmpstats);
+    ret = nstats;
+
+ cleanup:
+    virDomainStatsRecordListFree(tmpstats);
+    virObjectListFreeCount(vms, nvms);
     return ret;
 }
 
@@ -6300,6 +6438,7 @@ static virHypervisorDriver chHypervisorDriver = {
     .domainBlockCopy = chDomainBlockCopy, /* 12.2.0 */
     .domainBlockJobAbort = chDomainBlockJobAbort, /* 12.2.0 */
     .domainGetBlockJobInfo = chDomainGetBlockJobInfo, /* 12.2.0 */
+    .connectGetAllDomainStats = chConnectGetAllDomainStats, /* 12.7.0 */
 };
 
 static virConnectDriver chConnectDriver = {
