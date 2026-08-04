@@ -42,6 +42,8 @@
 #include "driver.h"
 #include "libvirt/libvirt.h"
 #include "numa_conf.h"
+#include "storage_file/storage_file_probe.h"
+#include "storage_file/storage_source.h"
 #include "storage_source.h"
 #include "viralloc.h"
 #include "viraccessapicheck.h"
@@ -1849,12 +1851,101 @@ chDomainGetStatsVcpu(virDomainObj *vm,
 }
 
 
+/*
+ * Report host storage sizes for the disk's top-level local source. For
+ * regular files, allocation comes from st_blocks and physical size from
+ * st_size, so these values describe the host file rather than the guest's
+ * filesystem usage.
+ *
+ * Collection is best-effort: unsupported or inaccessible sources omit size
+ * fields and the capacity is only reported for raw disk types.
+ */
+static void
+chDomainGetStatsOneBlock(virCHDriverConfig *cfg,
+                         virDomainDiskDef *disk,
+                         virTypedParamList *params,
+                         size_t block_idx)
+{
+    virStorageSource *src = disk->src;
+    VIR_AUTOCLOSE fd = -1;
+    struct stat sb;
+    g_autofree char *header = NULL;
+    ssize_t headerLen = 0;
+
+    if (!src || virStorageSourceIsEmpty(src) ||
+        !virStorageSourceIsLocalStorage(src) ||
+        !src->path) {
+        return;
+    }
+
+    if ((fd = virFileOpenAs(src->path, O_RDONLY, 0,
+                            cfg->user, cfg->group, 0)) < 0) {
+        return;
+    }
+
+    if (fstat(fd, &sb) < 0) {
+        return;
+    }
+
+    if (src->format != VIR_STORAGE_FILE_RAW &&
+        (headerLen = virFileReadHeaderFD(fd, VIR_STORAGE_MAX_HEADER,
+                                         &header)) < 0) {
+        return;
+    }
+
+    if (virStorageSourceUpdateBackingSizes(src, fd, &sb) < 0) {
+        virResetLastError();
+        return;
+    }
+
+    virTypedParamListAddULLong(params, src->allocation,
+                               VIR_DOMAIN_STATS_BLOCK_PREFIX "%zu" VIR_DOMAIN_STATS_BLOCK_SUFFIX_ALLOCATION,
+                               block_idx);
+    virTypedParamListAddULLong(params, src->physical,
+                               VIR_DOMAIN_STATS_BLOCK_PREFIX "%zu" VIR_DOMAIN_STATS_BLOCK_SUFFIX_PHYSICAL,
+                               block_idx);
+
+    if (src->format != VIR_STORAGE_FILE_RAW &&
+        virStorageSourceUpdateCapacity(src, header, headerLen) < 0) {
+        virResetLastError();
+        return;
+    }
+
+    virTypedParamListAddULLong(params, src->capacity,
+                               VIR_DOMAIN_STATS_BLOCK_PREFIX "%zu" VIR_DOMAIN_STATS_BLOCK_SUFFIX_CAPACITY,
+                               block_idx);
+}
+
+
+static void
+chDomainGetStatsBlock(virCHDriverConfig *cfg,
+                      virDomainObj *vm,
+                      virTypedParamList *params)
+{
+    size_t i;
+
+    virTypedParamListAddUInt(params, vm->def->ndisks,
+                             VIR_DOMAIN_STATS_BLOCK_COUNT);
+
+    for (i = 0; i < vm->def->ndisks; i++) {
+        virDomainDiskDef *disk = vm->def->disks[i];
+
+        virTypedParamListAddString(params, disk->dst,
+                                   VIR_DOMAIN_STATS_BLOCK_PREFIX "%zu" VIR_DOMAIN_STATS_BLOCK_SUFFIX_NAME,
+                                   i);
+        chDomainGetStatsOneBlock(cfg, disk, params, i);
+    }
+}
+
+
 static int
 chDomainGetStats(virConnectPtr conn,
                  virDomainObj *vm,
                  unsigned int stats,
                  virDomainStatsRecordPtr *record)
 {
+    virCHDriver *driver = conn->privateData;
+    g_autoptr(virCHDriverConfig) cfg = virCHDriverGetConfig(driver);
     g_autoptr(virTypedParamList) params = virTypedParamListNew();
     g_autofree virDomainStatsRecordPtr tmp = NULL;
 
@@ -1864,6 +1955,10 @@ chDomainGetStats(virConnectPtr conn,
 
     if (stats & VIR_DOMAIN_STATS_VCPU) {
         chDomainGetStatsVcpu(vm, params);
+    }
+
+    if (stats & VIR_DOMAIN_STATS_BLOCK) {
+        chDomainGetStatsBlock(cfg, vm, params);
     }
 
     tmp = g_new0(virDomainStatsRecord, 1);
@@ -1892,7 +1987,8 @@ chConnectGetAllDomainStats(virConnectPtr conn,
 {
     virCHDriver *driver = conn->privateData;
     const unsigned int supported = VIR_DOMAIN_STATS_CPU_TOTAL |
-                                   VIR_DOMAIN_STATS_VCPU;
+                                   VIR_DOMAIN_STATS_VCPU |
+                                   VIR_DOMAIN_STATS_BLOCK;
     virDomainObj **vms = NULL;
     virDomainStatsRecordPtr *tmpstats = NULL;
     size_t nvms;
