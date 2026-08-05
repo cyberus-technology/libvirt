@@ -1784,6 +1784,83 @@ static int chDomainGetInfo(virDomainPtr dom,
 }
 
 
+static int
+chDomainMemoryStats(virDomainPtr dom,
+                    virDomainMemoryStatPtr stats,
+                    unsigned int nr_stats,
+                    unsigned int flags)
+{
+    virDomainObj *vm = NULL;
+    g_autoptr(virJSONValue) info = NULL;
+    unsigned long long actual;
+    unsigned long long rss;
+    size_t nstats = 0;
+    int ret = -1;
+
+    virCheckFlags(0, -1);
+
+    if (!(vm = virCHDomainObjFromDomain(dom))) {
+        goto cleanup;
+    }
+
+    if (virDomainMemoryStatsEnsureACL(dom->conn, vm->def) < 0) {
+        goto cleanup;
+    }
+
+    if (virDomainObjBeginJob(vm, VIR_JOB_QUERY) < 0) {
+        goto cleanup;
+    }
+
+    if (virDomainObjCheckActive(vm) < 0) {
+        goto endjob;
+    }
+
+    /*
+     * Do not retrieve statistics that require queries from CH when currently
+     * receiving a migration. There are no meaningful values during an incoming
+     * migration anyway and we avoid potential problems of CH handling API
+     * requests during incoming migrations.
+     * A caller should query the statistics during migration on the sender
+     * side.
+     */
+    if (vm->job->asyncJob != VIR_ASYNC_JOB_MIGRATION_IN) {
+        if (virCHMonitorGetInfo(virCHDomainGetMonitor(vm), &info) < 0) {
+            goto endjob;
+        }
+
+        if (virJSONValueObjectGetNumberUlong(info, "memory_actual_size", &actual) < 0) {
+            virReportError(VIR_ERR_INTERNAL_ERROR, "%s",
+                        _("missing or invalid 'memory_actual_size' in info query result from cloud-hypervisor"));
+            goto endjob;
+        }
+
+        if (nstats < nr_stats) {
+            stats[nstats].tag = VIR_DOMAIN_MEMORY_STAT_ACTUAL_BALLOON;
+            stats[nstats].val = actual / 1024;
+            nstats++;
+        }
+    }
+
+    if (virProcessGetStatInfo(NULL, NULL, NULL, NULL, &rss, vm->pid, 0) < 0) {
+        virReportError(VIR_ERR_OPERATION_FAILED, "%s",
+                       _("cannot get RSS for domain"));
+    } else if (nstats < nr_stats) {
+        stats[nstats].tag = VIR_DOMAIN_MEMORY_STAT_RSS;
+        stats[nstats].val = rss;
+        nstats++;
+    }
+
+    ret = nstats;
+
+ endjob:
+    virDomainObjEndJob(vm);
+
+ cleanup:
+    virDomainObjEndAPI(&vm);
+    return ret;
+}
+
+
 static void
 chDomainGetStatsCpu(virDomainObj *vm,
                     virTypedParamList *params)
@@ -6642,6 +6719,7 @@ static virHypervisorDriver chHypervisorDriver = {
     .domainBlockJobAbort = chDomainBlockJobAbort, /* 12.2.0 */
     .domainGetBlockJobInfo = chDomainGetBlockJobInfo, /* 12.2.0 */
     .connectGetAllDomainStats = chConnectGetAllDomainStats, /* 12.7.0 */
+    .domainMemoryStats = chDomainMemoryStats,               /* 12.7.0 */
 };
 
 static virConnectDriver chConnectDriver = {
