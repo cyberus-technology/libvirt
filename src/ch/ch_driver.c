@@ -54,6 +54,7 @@
 #include "virjson.h"
 #include "virinhibitor.h"
 #include "virlog.h"
+#include "virnetdevtap.h"
 #include "virobject.h"
 #include "virfile.h"
 #include "virpidfile.h"
@@ -1938,6 +1939,59 @@ chDomainGetStatsBlock(virCHDriverConfig *cfg,
 }
 
 
+static void
+chDomainGetStatsInterface(virDomainObj *vm,
+                          virTypedParamList *params)
+{
+    size_t i;
+
+    if (!virDomainObjIsActive(vm)) {
+        return;
+    }
+
+    virTypedParamListAddUInt(params, vm->def->nnets,
+                             VIR_DOMAIN_STATS_NET_COUNT);
+
+    for (i = 0; i < vm->def->nnets; i++) {
+        virDomainNetDef *net = vm->def->nets[i];
+        struct _virDomainInterfaceStats stats = { 0 };
+
+        if (!net->ifname) {
+            continue;
+        }
+
+        virTypedParamListAddString(params, net->ifname,
+                                   VIR_DOMAIN_STATS_NET_PREFIX "%zu" VIR_DOMAIN_STATS_NET_SUFFIX_NAME,
+                                   i);
+
+        if (virNetDevTapInterfaceStats(net->ifname, &stats,
+                                       !virDomainNetTypeSharesHostView(net)) < 0) {
+            /* Statistics are best-effort. */
+            virResetLastError();
+            continue;
+        }
+
+#define CH_ADD_NET_PARAM(name, value) \
+        if (value >= 0) { \
+            virTypedParamListAddULLong(params, value, \
+                                       VIR_DOMAIN_STATS_NET_PREFIX "%zu" VIR_DOMAIN_STATS_NET_SUFFIX_ ## name, \
+                                       i); \
+        }
+
+        CH_ADD_NET_PARAM(RX_BYTES, stats.rx_bytes);
+        CH_ADD_NET_PARAM(RX_PKTS, stats.rx_packets);
+        CH_ADD_NET_PARAM(RX_ERRS, stats.rx_errs);
+        CH_ADD_NET_PARAM(RX_DROP, stats.rx_drop);
+        CH_ADD_NET_PARAM(TX_BYTES, stats.tx_bytes);
+        CH_ADD_NET_PARAM(TX_PKTS, stats.tx_packets);
+        CH_ADD_NET_PARAM(TX_ERRS, stats.tx_errs);
+        CH_ADD_NET_PARAM(TX_DROP, stats.tx_drop);
+
+#undef CH_ADD_NET_PARAM
+    }
+}
+
+
 static int
 chDomainGetStats(virConnectPtr conn,
                  virDomainObj *vm,
@@ -1959,6 +2013,10 @@ chDomainGetStats(virConnectPtr conn,
 
     if (stats & VIR_DOMAIN_STATS_BLOCK) {
         chDomainGetStatsBlock(cfg, vm, params);
+    }
+
+    if (stats & VIR_DOMAIN_STATS_INTERFACE) {
+        chDomainGetStatsInterface(vm, params);
     }
 
     tmp = g_new0(virDomainStatsRecord, 1);
@@ -1988,7 +2046,8 @@ chConnectGetAllDomainStats(virConnectPtr conn,
     virCHDriver *driver = conn->privateData;
     const unsigned int supported = VIR_DOMAIN_STATS_CPU_TOTAL |
                                    VIR_DOMAIN_STATS_VCPU |
-                                   VIR_DOMAIN_STATS_BLOCK;
+                                   VIR_DOMAIN_STATS_BLOCK |
+                                   VIR_DOMAIN_STATS_INTERFACE;
     virDomainObj **vms = NULL;
     virDomainStatsRecordPtr *tmpstats = NULL;
     size_t nvms;
