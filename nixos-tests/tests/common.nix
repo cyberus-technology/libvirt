@@ -278,7 +278,7 @@ let
           <disk type='file' device='disk'>
             <source file='${image}'/>
             <target dev='vda' bus='virtio'/>
-            <driver queues='${toString diskQueues}'/>
+            <driver queues='${toString diskQueues}' type='raw'/>
             ${
               # Assign a fixed BDF that would normally be acquired by the implicit RNG device
               if all_static_bdf then

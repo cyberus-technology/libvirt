@@ -695,11 +695,7 @@ class LibvirtTests(LibvirtTestsBase):  # type: ignore
         destination = "/tmp/nixos-root-copy.img"
         hidden_source = f"{source}.hidden"
 
-        controllerVM.succeed(
-            "sed \"/<disk /,/<\\/disk>/s/<driver /<driver type='raw' /\" "
-            "/etc/domain-chv.xml > /tmp/domain-root-raw.xml"
-        )
-        self.startAndWaitForVM("/tmp/domain-root-raw.xml")
+        self.startAndWaitForVM()
         controllerVM.succeed(
             f"qemu-img create -f raw {destination} $(stat --format=%s {source})"
         )
