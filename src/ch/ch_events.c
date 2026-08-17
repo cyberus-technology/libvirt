@@ -41,6 +41,7 @@ VIR_ENUM_IMPL(virCHEvent,
               "vm:booting",
               "vm:deleted",
               "vm:migration-memory-iteration",
+              "vm:migration-receive-started",
               "vm:paused",
               "vm:pausing",
               "vm:rebooted",
@@ -194,6 +195,12 @@ virCHProcessEvent(virCHMonitor *mon,
         VIR_WITH_OBJECT_LOCK_GUARD(vm) {
             CH_DOMAIN_PRIVATE(vm)->shutdownInitiatedByHost = false;
         }
+        break;
+
+    case VIR_CH_EVENT_VM_MIGRATION_RECEIVE_STARTED:
+        virCHEventEmitLifecycle(vm,
+                                VIR_DOMAIN_EVENT_STARTED,
+                                VIR_DOMAIN_EVENT_STARTED_MIGRATED);
         break;
 
     case VIR_CH_EVENT_VM_PAUSED: {
