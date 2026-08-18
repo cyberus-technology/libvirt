@@ -17,6 +17,7 @@ try:
         VIRTIO_ENTROPY_SOURCE,
         VIRTIO_NETWORK_DEVICE,
         assert_domain_domstate,
+        capture_libvirt_events,
         hotplug,
         hotplug_fail,
         initialComputeVMSetup,
@@ -46,6 +47,7 @@ except Exception:
         VIRTIO_ENTROPY_SOURCE,
         VIRTIO_NETWORK_DEVICE,
         assert_domain_domstate,
+        capture_libvirt_events,
         hotplug,
         hotplug_fail,
         initialComputeVMSetup,
@@ -239,14 +241,34 @@ class LibvirtTests(LibvirtTestsBase):  # type: ignore
         wait_for_ssh(controllerVM, ip="192.168.2.2")
 
         for _ in range(2):
-            start_net_capture(controllerVM)
-            start_net_capture(computeVM)
-            # Explicitly use IP in desturi as this was already a problem in the past
-            controllerVM.succeed(
-                "virsh migrate --domain testvm --desturi ch+tcp://192.168.100.2/session --persistent --live --p2p"
-            )
+            with (
+                capture_libvirt_events(controllerVM) as source_events,
+                capture_libvirt_events(computeVM) as destination_events,
+            ):
+                start_net_capture(controllerVM)
+                start_net_capture(computeVM)
 
-            wait_for_ssh(computeVM)
+                # Explicitly use IP in desturi as this was already a problem in the past
+                controllerVM.succeed(
+                    "virsh migrate --domain testvm --desturi ch+tcp://192.168.100.2/session --persistent --live --p2p"
+                )
+
+                wait_for_ssh(computeVM)
+
+                for event in [
+                    "event 'lifecycle' for domain 'testvm': Suspended Migrated",
+                    "event 'migration-iteration' for domain 'testvm': iteration: '0'",
+                    "event 'lifecycle' for domain 'testvm': Stopped Migrated",
+                    "event 'job-completed' for domain 'testvm':",
+                    "operation: 5",  # VIR_DOMAIN_JOB_OPERATION_MIGRATION_OUT
+                ]:
+                    source_events.wait_for_event(event)
+
+                for event in [
+                    "event 'lifecycle' for domain 'testvm': Started Migrated",
+                    "event 'lifecycle' for domain 'testvm': Resumed Migrated",
+                ]:
+                    destination_events.wait_for_event(event)
 
             stop_net_capture_and_assert_migration_announcements(controllerVM, 0)
             stop_net_capture_and_assert_migration_announcements(computeVM, 2)
@@ -307,30 +329,32 @@ class LibvirtTests(LibvirtTestsBase):  # type: ignore
         def migrate_and_cancel(parallel: int = 1):
             print(f"Testing with {parallel} connections:")
 
-            controllerVM.succeed(
-                f"screen -dmS migrate virsh migrate --domain testvm --desturi ch+tcp://computeVM/session --persistent --live --p2p --parallel --parallel-connections {parallel}"
-            )
-            # We wait for the first iteration of sending memory
-            controllerVM.wait_until_succeeds(
-                "grep -qF 'iter=0' /var/log/libvirt/ch/testvm.log", 60
-            )
+            with capture_libvirt_events(controllerVM) as events:
+                controllerVM.succeed(
+                    f"screen -dmS migrate virsh migrate --domain testvm --desturi ch+tcp://computeVM/session --persistent --live --p2p --parallel --parallel-connections {parallel}"
+                )
+                # We wait for the first iteration of sending memory
+                controllerVM.wait_until_succeeds(
+                    "grep -qF 'iter=0' /var/log/libvirt/ch/testvm.log", 60
+                )
 
-            # Can only abort outgoing live-migrations, not incoming
-            computeVM.fail("virsh domjobabort testvm")
-            controllerVM.succeed("virsh domjobabort testvm")  # blocking
-            controllerVM.wait_until_fails(
-                "screen -ls | grep migrate", timeout=10
-            )  # assert migration is dead
+                # Can only abort outgoing live-migrations, not incoming
+                computeVM.fail("virsh domjobabort testvm")
+                controllerVM.succeed("virsh domjobabort testvm")  # blocking
+                controllerVM.wait_until_fails(
+                    "screen -ls | grep migrate", timeout=10
+                )  # assert migration is dead
 
-            # virsh domjobabort on the src side is not synchronized with the
-            # dst side: To prevent test errors, we gracefully wait for the
-            # migration failure cleanup to finish before we start a new
-            # migration.
-            computeVM.wait_until_fails(
-                "virsh list | grep testvm", timeout=MAX_EXPECTED_WAIT_SEC
-            )
+                # virsh domjobabort on the src side is not synchronized with the
+                # dst side: To prevent test errors, we gracefully wait for the
+                # migration failure cleanup to finish before we start a new
+                # migration.
+                computeVM.wait_until_fails(
+                    "virsh list | grep testvm", timeout=MAX_EXPECTED_WAIT_SEC
+                )
 
-            ssh(controllerVM, "echo VM still usable")
+                ssh(controllerVM, "echo VM still usable")
+                events.assert_no_event("event 'job-completed' for domain 'testvm':")
 
         with MigrationThrottleGuard(controllerVM, computeVM):
             migrate_and_cancel(1)  # single connection

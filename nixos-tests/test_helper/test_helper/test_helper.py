@@ -1,8 +1,10 @@
 import ipaddress
 import json
 import os
+import shlex
 import time
 import unittest
+from contextlib import contextmanager
 from unittest import TestCase
 
 try:
@@ -11,7 +13,7 @@ except ImportError:
     pass
 
 from test_driver.machine import QemuMachine  # type: ignore
-from typing import Any, Callable, List, Literal, Self
+from typing import Any, Callable, Iterator, List, Literal, Self
 
 # VIRTIO PCI constants
 VIRTIO_NETWORK_DEVICE = "1af4:1041"
@@ -1264,6 +1266,48 @@ def stop_stress_in_vm(machine: QemuMachine, extra_ssh_params: str = ""):
     # did not terminate its child. Match the exact process name so unrelated
     # processes are left alone.
     ssh(machine, "pkill -9 -x stress || true", extra_ssh_params=extra_ssh_params)
+
+
+class _LibvirtEventCapture:
+    """Provides helpers for querying captured libvirt events."""
+
+    def __init__(self, machine: QemuMachine, event_log_path: str):
+        self.machine = machine
+        self.event_log_path = event_log_path
+
+    def wait_for_event(self, event: str) -> None:
+        """Waits until the specified event appears in the capture log."""
+        self.machine.wait_until_succeeds(
+            f"grep -F {shlex.quote(event)} {shlex.quote(self.event_log_path)}",
+            timeout=MAX_EXPECTED_WAIT_SEC,
+        )
+
+    def assert_no_event(self, event: str) -> None:
+        """Fails if the specified event appears in the capture log."""
+        self.machine.fail(
+            f"grep -F {shlex.quote(event)} {shlex.quote(self.event_log_path)}"
+        )
+
+
+@contextmanager
+def capture_libvirt_events(
+    machine: QemuMachine,
+    event_log_path: str = "/tmp/libvirt-events.log",
+) -> Iterator[_LibvirtEventCapture]:
+    """Captures libvirt events for the duration of a context."""
+    machine.execute("screen -S libvirt-events -X quit")
+    machine.succeed(f"rm -f {shlex.quote(event_log_path)}")
+    machine.succeed(
+        f'screen -dmS libvirt-events bash -c "exec virsh event --all --loop > {shlex.quote(event_log_path)} 2>&1"'
+    )
+
+    # virsh does not report when it has finished registering event callbacks.
+    time.sleep(1)
+
+    try:
+        yield _LibvirtEventCapture(machine, event_log_path)
+    finally:
+        machine.execute("screen -S libvirt-events -X quit")
 
 
 def start_net_capture(machine: QemuMachine):

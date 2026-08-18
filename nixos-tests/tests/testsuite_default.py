@@ -14,6 +14,7 @@ try:
         LibvirtTestsBase,
         assert_domain_domstate,
         assert_nested_cirros_connectivity,
+        capture_libvirt_events,
         hotplug,
         hotplug_fail,
         initialComputeVMSetup,
@@ -37,6 +38,7 @@ except Exception:
         LibvirtTestsBase,
         assert_domain_domstate,
         assert_nested_cirros_connectivity,
+        capture_libvirt_events,
         hotplug,
         hotplug_fail,
         initialComputeVMSetup,
@@ -510,25 +512,43 @@ class LibvirtTests(LibvirtTestsBase):  # type: ignore
 
         wait_for_ssh(controllerVM)
 
-        # Do some extra magic to not end in a hanging SSH session if the
-        # shutdown happens too fast.
-        ssh(controllerVM, "\"nohup sh -c 'sleep 5 && shutdown now' >/dev/null 2>&1 &\"")
-
         def is_shutoff():
             return (
                 controllerVM.execute('virsh domstate testvm | grep "shut off"')[0] == 0
             )
 
-        wait_until_succeed(is_shutoff)
+        with capture_libvirt_events(controllerVM) as events:
+            # Do some extra magic to not end in a hanging SSH session if the
+            # shutdown happens too fast.
+            ssh(
+                controllerVM,
+                "\"nohup sh -c 'sleep 5 && shutdown now' >/dev/null 2>&1 &\"",
+            )
 
-        controllerVM.fail("find /run/libvirt/ch -name *.xml | grep .")
+            wait_until_succeed(is_shutoff)
+            events.wait_for_event(
+                "event 'lifecycle' for domain 'testvm': Shutdown Finished after guest request",
+            )
+            events.assert_no_event(
+                "event 'lifecycle' for domain 'testvm': Shutdown Finished after host request",
+            )
+
+            controllerVM.fail("find /run/libvirt/ch -name *.xml | grep .")
 
         controllerVM.succeed("virsh start testvm")
         wait_for_ssh(controllerVM)
 
-        controllerVM.succeed("virsh shutdown testvm")
-        wait_until_succeed(is_shutoff)
-        controllerVM.fail("find /run/libvirt/ch -name *.xml | grep .")
+        with capture_libvirt_events(controllerVM) as events:
+            controllerVM.succeed("virsh shutdown testvm")
+            wait_until_succeed(is_shutoff)
+            events.wait_for_event(
+                "event 'lifecycle' for domain 'testvm': Shutdown Finished after host request",
+            )
+            events.assert_no_event(
+                "event 'lifecycle' for domain 'testvm': Shutdown Finished after guest request",
+            )
+
+            controllerVM.fail("find /run/libvirt/ch -name *.xml | grep .")
 
         # Ensure VM is shut off, by failing to ssh into it.
         with self.assertRaises(RuntimeError):
@@ -548,14 +568,27 @@ class LibvirtTests(LibvirtTestsBase):  # type: ignore
         )
         ssh(controllerVM, "systemctl restart systemd-logind")
 
-        controllerVM.succeed("virsh shutdown testvm")
-        time.sleep(5)
-        assert_domain_domstate(controllerVM, "running")
-        ssh(controllerVM, "true")
+        with capture_libvirt_events(controllerVM) as events:
+            controllerVM.succeed("virsh shutdown testvm")
+            time.sleep(5)
 
-        controllerVM.succeed("virsh destroy testvm")
-        wait_until_succeed(is_shutoff)
-        controllerVM.fail("find /run/libvirt/ch -name *.xml | grep .")
+            assert_domain_domstate(controllerVM, "running")
+            ssh(controllerVM, "true")
+            events.assert_no_event(
+                "event 'lifecycle' for domain 'testvm': Shutdown",
+            )
+
+        with capture_libvirt_events(controllerVM) as events:
+            controllerVM.succeed("virsh destroy testvm")
+            wait_until_succeed(is_shutoff)
+            events.wait_for_event(
+                "event 'lifecycle' for domain 'testvm': Stopped Destroyed",
+            )
+            events.assert_no_event(
+                "event 'lifecycle' for domain 'testvm': Shutdown",
+            )
+
+            controllerVM.fail("find /run/libvirt/ch -name *.xml | grep .")
 
     def test_libvirt_event_stop_failed(self):
         """
@@ -567,21 +600,12 @@ class LibvirtTests(LibvirtTestsBase):  # type: ignore
 
         wait_for_ssh(controllerVM)
 
-        controllerVM.succeed(
-            'screen -dmS events bash -c "virsh event --all --loop testvm 2>&1 | tee /tmp/events.log"'
-        )
-
-        # Allow 'virsh event' some time to listen for events
-        time.sleep(1)
-
-        # Simulate crash of the VMM process
-        controllerVM.succeed("kill -9 $(pidof cloud-hypervisor)")
-
-        def stop_fail_detected():
-            status, _ = controllerVM.execute("grep -q 'Stopped Failed' /tmp/events.log")
-            return status == 0
-
-        wait_until_succeed(stop_fail_detected)
+        with capture_libvirt_events(controllerVM) as events:
+            # Simulate crash of the VMM process.
+            controllerVM.succeed("kill -9 $(pidof cloud-hypervisor)")
+            events.wait_for_event(
+                "event 'lifecycle' for domain 'testvm': Stopped Failed",
+            )
 
         # In case we would not detect the crash, Libvirt would still show the
         # domain as running.
@@ -590,9 +614,6 @@ class LibvirtTests(LibvirtTestsBase):  # type: ignore
         # Check that this case of shutting down a domain also leads to the
         # cleanup of the transient XML correctly.
         controllerVM.fail("find /run/libvirt/ch -name *.xml | grep .")
-
-        # Make sure screen is closed again
-        controllerVM.succeed("pkill screen")
 
     def test_serial_tcp(self):
         """
@@ -1402,12 +1423,20 @@ class LibvirtTests(LibvirtTestsBase):  # type: ignore
         controllerVM.succeed("virsh start testvm")
         wait_for_ssh(controllerVM)
 
-        controllerVM.succeed("virsh suspend testvm")
-        assert_domain_domstate(controllerVM, "paused")
+        with capture_libvirt_events(controllerVM) as events:
+            controllerVM.succeed("virsh suspend testvm")
+            assert_domain_domstate(controllerVM, "paused")
+            events.wait_for_event(
+                "event 'lifecycle' for domain 'testvm': Suspended Paused",
+            )
 
-        controllerVM.succeed("virsh resume testvm")
-        assert_domain_domstate(controllerVM, "running")
-        wait_for_ssh(controllerVM)
+            controllerVM.succeed("virsh resume testvm")
+            assert_domain_domstate(controllerVM, "running")
+            events.wait_for_event(
+                "event 'lifecycle' for domain 'testvm': Resumed Unpaused",
+            )
+
+            wait_for_ssh(controllerVM)
 
     def test_reboot_guestinduced(self):
         """
