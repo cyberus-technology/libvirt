@@ -5528,6 +5528,48 @@ chConnectGetCPUModelNames(virConnectPtr conn,
     return num_models;
 }
 
+static int
+chDomainBlockCopy(virDomainPtr dom G_GNUC_UNUSED,
+                  const char *disk G_GNUC_UNUSED,
+                  const char *destxml G_GNUC_UNUSED,
+                  virTypedParameterPtr params G_GNUC_UNUSED,
+                  int nparams G_GNUC_UNUSED,
+                  unsigned int flags G_GNUC_UNUSED)
+{
+    virReportError(VIR_ERR_NO_SUPPORT, "%s", _("block copy is not supported"));
+    return -1;
+}
+
+static int
+chDomainBlockRebase(virDomainPtr dom G_GNUC_UNUSED,
+                    const char *path G_GNUC_UNUSED,
+                    const char *base G_GNUC_UNUSED,
+                    unsigned long bandwidth G_GNUC_UNUSED,
+                    unsigned int flags G_GNUC_UNUSED)
+{
+    virReportError(VIR_ERR_NO_SUPPORT, "%s", _("block rebase is not supported"));
+    return -1;
+}
+
+static int
+chDomainBlockJobAbort(virDomainPtr dom G_GNUC_UNUSED,
+                      const char *path G_GNUC_UNUSED,
+                      unsigned int flags G_GNUC_UNUSED)
+{
+    virReportError(VIR_ERR_NO_SUPPORT, "%s", _("block job abort is not supported"));
+    return -1;
+}
+
+static int
+chDomainGetBlockJobInfo(virDomainPtr dom G_GNUC_UNUSED,
+                        const char *path G_GNUC_UNUSED,
+                        virDomainBlockJobInfoPtr info G_GNUC_UNUSED,
+                        unsigned int flags G_GNUC_UNUSED)
+{
+    virReportError(VIR_ERR_NO_SUPPORT, "%s", _("block job info is not supported"));
+    return -1;
+}
+
 /* Function Tables */
 static virHypervisorDriver chHypervisorDriver = {
     .name = "CH",
@@ -5610,6 +5652,10 @@ static virHypervisorDriver chHypervisorDriver = {
     .connectGetDomainCapabilities = chConnectGetDomainCapabilities, /* 11.4.0 */
     .domainBlockResize = chDomainBlockResize, /* 11.4.0 */
     .connectGetCPUModelNames = chConnectGetCPUModelNames, /* 11.4.0 */
+    .domainBlockRebase = chDomainBlockRebase, /* 12.2.0 */
+    .domainBlockCopy = chDomainBlockCopy, /* 12.2.0 */
+    .domainBlockJobAbort = chDomainBlockJobAbort, /* 12.2.0 */
+    .domainGetBlockJobInfo = chDomainGetBlockJobInfo, /* 12.2.0 */
 };
 
 static virConnectDriver chConnectDriver = {
