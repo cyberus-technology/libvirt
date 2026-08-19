@@ -108,6 +108,10 @@ class LibvirtTestsBase(unittest.TestCase):
         )
         self.save_machine_log(machine, "/tmp/journalctl.log", dst_path)
 
+    def get_journal_current_test(self, machine: QemuMachine, test):
+        marker = testcase_start_marker(test._testMethodName)
+        return machine.succeed(f"journalctl --quiet | sed -n '/{marker}/,$p'")
+
     def save_logs(self, test, message):
         print(f"{message}")
 

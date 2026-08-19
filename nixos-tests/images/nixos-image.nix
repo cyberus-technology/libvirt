@@ -99,6 +99,7 @@ nixpkgs.lib.nixosSystem {
           sshpass
           stress
           tunctl
+          fio
         ];
 
         isoImage.makeUsbBootable = true;

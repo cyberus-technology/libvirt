@@ -48,6 +48,11 @@ let
       testScriptFile = ./testsuite_default.py;
     };
 
+    blockdevice_mirror = createTestSuite {
+      inherit enablePortForwarding;
+      testScriptFile = ./testsuite_blockdevice_mirror.py;
+    };
+
     live_migration = createTestSuite {
       inherit enablePortForwarding;
       testScriptFile = ./testsuite_live_migration.py;
