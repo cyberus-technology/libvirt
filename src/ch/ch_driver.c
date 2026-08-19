@@ -41,6 +41,7 @@
 #include "driver.h"
 #include "libvirt/libvirt.h"
 #include "numa_conf.h"
+#include "storage_source.h"
 #include "viralloc.h"
 #include "viraccessapicheck.h"
 #include "virbitmap.h"
@@ -69,6 +70,9 @@ VIR_LOG_INIT("ch.ch_driver");
 virCHDriver *ch_driver = NULL;
 
 static int chDomainObjUnrefMonitor(virDomainObj *vm, void *opaque);
+static int chDomainBlockJobRefresh(virDomainObj *vm,
+                                   virDomainDiskDef *disk,
+                                   virDomainBlockJobInfoPtr info);
 
 /**
  * Cloud Hypervisor does not yet support to list all available CPU profiles. We
@@ -80,6 +84,27 @@ static const char *cpu_models[] = {
 };
 
 /* Functions */
+static bool
+chDomainDiskBlockJobIsActive(virDomainDiskDef *disk)
+{
+    return disk->mirror != NULL;
+}
+
+
+static bool
+chDomainHasBlockjob(virDomainObj *vm)
+{
+    size_t i;
+
+    for (i = 0; i < vm->def->ndisks; i++) {
+        if (vm->def->disks[i]->mirror)
+            return true;
+    }
+
+    return false;
+}
+
+
 static int
 chConnectURIProbe(char **uri)
 {
@@ -1145,6 +1170,12 @@ chDoDomainSave(virCHDriver *driver,
     if (chDomainSaveRestoreAdditionalValidation(driver, vm->def) < 0)
         goto end;
 
+    if (chDomainHasBlockjob(vm)) {
+        virReportError(VIR_ERR_OPERATION_INVALID, "%s",
+                       _("domain has active block job"));
+        goto end;
+    }
+
     domainState = virDomainObjGetState(vm, NULL);
     if (domainState == VIR_DOMAIN_RUNNING) {
         if (virCHMonitorSuspendVM(priv->monitor) < 0) {
@@ -1847,12 +1878,38 @@ static int chStateCleanup(void)
     return 0;
 }
 
+/* Caller holds the domain lock and has reattached the monitor. */
+static int
+chDomainReconcileBlockCopiesAfterReconnect(virDomainObj *vm)
+{
+    size_t i;
+
+    if (virDomainObjBeginJob(vm, VIR_JOB_MODIFY) < 0)
+        return -1;
+
+    for (i = 0; i < vm->def->ndisks; i++) {
+        virDomainDiskDef *disk = vm->def->disks[i];
+
+        if (disk->mirror &&
+            disk->mirrorJob == VIR_DOMAIN_BLOCK_JOB_TYPE_COPY &&
+            chDomainBlockJobRefresh(vm, disk, NULL) < 0) {
+            VIR_WARN("Unable to refresh block copy for disk '%s' of domain '%s'",
+                     disk->dst, vm->def->name);
+            virResetLastError();
+        }
+    }
+
+    virDomainObjEndJob(vm);
+    return 0;
+}
+
 static int
 chDomainReattach(virDomainObj *vm, void*data) {
     virCHDriver *driver = data;
     virCHDomainObjPrivate *priv = vm->privateData;
     // virCHMonitor *mon = priv->monitor;
     g_autoptr(virCHDriverConfig) cfg = virCHDriverGetConfig(ch_driver);
+    VIR_LOCK_GUARD lock = virObjectLockGuard(vm);
     virDomainState state = virDomainObjGetState(vm, NULL);
 
     DBG("Reattach to domain: %s", vm->def->name);
@@ -1875,6 +1932,9 @@ chDomainReattach(virDomainObj *vm, void*data) {
             priv->pidfile = virPidFileBuildPath(cfg->stateDir, vm->def->name);
 
         priv->monitor = virCHMonitorReattach(vm, cfg, driver);
+        if (priv->monitor &&
+            chDomainReconcileBlockCopiesAfterReconnect(vm) < 0)
+            return -1;
     }
 
     return 0;
@@ -3229,6 +3289,13 @@ static int chMigrationJobStart(virDomainObj *vm,
 {
     virDomainJobOperation op;
     unsigned long long mask;
+
+    if (chDomainHasBlockjob(vm)) {
+        virReportError(VIR_ERR_OPERATION_INVALID, "%s",
+                       _("domain has active block job"));
+        return -1;
+    }
+
     if (vm->job->asyncJob == VIR_ASYNC_JOB_MIGRATION_IN ||
         vm->job->asyncJob == VIR_ASYNC_JOB_MIGRATION_OUT) {
         virReportError(VIR_ERR_OPERATION_INVALID,
@@ -4828,6 +4895,13 @@ chDomainDetachDeviceLive(virDomainObj *vm,
             DBG("chDomainDetachPrepDisk failed");
             return -1;
         }
+
+        if (chDomainDiskBlockJobIsActive(detach.data.disk)) {
+            virReportError(VIR_ERR_BLOCK_COPY_ACTIVE,
+                           _("disk '%1$s' already has an active block copy job"),
+                           detach.data.disk->dst);
+            return -1;
+        }
     } else if (match->type == VIR_DOMAIN_DEVICE_NET) {
         if (chDomainDetachPrepNet(vm, match->data.net,
                                  &detach.data.net) < 0) {
@@ -5067,6 +5141,20 @@ chDomainDetachDeviceLiveAndConfig(virCHDriver *driver,
     dev_live = virDomainDeviceDefParse(xml, vm->def, driver->xmlopt,NULL, parse_flags);
 
     if (flags & VIR_DOMAIN_AFFECT_CONFIG) {
+        if (dev_config &&
+            dev_config->type == VIR_DOMAIN_DEVICE_DISK) {
+            virDomainDiskDef *disk = virDomainDiskByName(vm->def,
+                                                         dev_config->data.disk->dst,
+                                                         false);
+
+            if (disk && chDomainDiskBlockJobIsActive(disk)) {
+                virReportError(VIR_ERR_BLOCK_COPY_ACTIVE,
+                               _("disk '%1$s' already has an active block copy job"),
+                               disk->dst);
+                return -1;
+            }
+        }
+
          if (!vmdef)
              return -1;
 
@@ -5425,6 +5513,13 @@ chDomainBlockResize(virDomainPtr dom,
         goto endjob;
     }
 
+    if (chDomainDiskBlockJobIsActive(disk)) {
+        virReportError(VIR_ERR_BLOCK_COPY_ACTIVE,
+                       _("disk '%1$s' already has an active block copy job"),
+                       disk->dst);
+        goto endjob;
+    }
+
     if (virStorageSourceIsEmpty(disk->src) || disk->src->readonly) {
         virReportError(VIR_ERR_OPERATION_UNSUPPORTED,
                        _("can't resize empty or readonly disk '%1$s'"),
@@ -5528,46 +5623,589 @@ chConnectGetCPUModelNames(virConnectPtr conn,
     return num_models;
 }
 
-static int
-chDomainBlockCopy(virDomainPtr dom G_GNUC_UNUSED,
-                  const char *disk G_GNUC_UNUSED,
-                  const char *destxml G_GNUC_UNUSED,
-                  virTypedParameterPtr params G_GNUC_UNUSED,
-                  int nparams G_GNUC_UNUSED,
-                  unsigned int flags G_GNUC_UNUSED)
+/**
+ * We need to remember on-going mirror activities. To achieve that, we populate
+ * the mirror member of the virDomainDiskDef. The mirror element is created in
+ * this function and assigned to the original disk after successfully starting
+ * the mirroring mechanism at CH.
+ */
+static virStorageSource *
+chDomainBlockCopyPrepareMirror(virDomainDiskDef *disk,
+                               virStorageSource *mirror)
 {
-    virReportError(VIR_ERR_NO_SUPPORT, "%s", _("block copy is not supported"));
-    return -1;
+    g_autoptr(virStorageSource) mirrorCopy = NULL;
+
+    if (!mirror || !mirror->path || !*mirror->path) {
+        virReportError(VIR_ERR_INVALID_ARG, "%s",
+                       _("block copy target path is required"));
+        return NULL;
+    }
+
+    if (mirror->type != VIR_STORAGE_TYPE_FILE) {
+        virReportError(VIR_ERR_CONFIG_UNSUPPORTED, "%s",
+                       _("block copy destination must use file storage"));
+        return NULL;
+    }
+
+    /* Currently, CH only supports raw regarding the block mirror API. */
+    if (disk->src->type != VIR_STORAGE_TYPE_FILE ||
+        disk->src->format != VIR_STORAGE_FILE_RAW) {
+        virReportError(VIR_ERR_CONFIG_UNSUPPORTED, "%s",
+                       _("block copy requires a raw file source"));
+        return NULL;
+    }
+
+    if (mirror->format != VIR_STORAGE_FILE_NONE &&
+        mirror->format != VIR_STORAGE_FILE_RAW) {
+        virReportError(VIR_ERR_CONFIG_UNSUPPORTED, "%s",
+                       _("block copy destination must use raw format"));
+        return NULL;
+    }
+
+    /* The mirror API takes only a path. Reject source options which would
+     * otherwise be silently ignored and then adopted by the pivot. */
+    if (mirror->fdgroup || mirror->auth || mirror->encryption ||
+        mirror->pr || mirror->sliceStorage || mirror->nseclabels ||
+        mirror->backingStore || mirror->dataFileStore ||
+        mirror->metadataCacheMaxSize || mirror->readonly || mirror->shared) {
+        virReportError(VIR_ERR_CONFIG_UNSUPPORTED, "%s",
+                       _("unsupported block copy destination source options"));
+        return NULL;
+    }
+
+    if (!(mirrorCopy = virStorageSourceCopy(mirror, true)) ||
+        virStorageSourceInitChainElement(mirrorCopy, disk->src, true) < 0)
+        return NULL;
+
+    /* An omitted format must not become auto-detection after a pivot. */
+    mirrorCopy->format = VIR_STORAGE_FILE_RAW;
+
+    return g_steal_pointer(&mirrorCopy);
+}
+
+
+static void
+chDomainBlockJobRewriteConfigDiskSource(virDomainObj *vm,
+                                        virDomainDiskDef *disk,
+                                        virStorageSource *newsrc)
+{
+    virDomainDiskDef *persistDisk = NULL;
+    g_autoptr(virStorageSource) copy = NULL;
+
+    if (!vm->newDef) {
+        DBG("not updating disk '%s' in persistent definition: no persistent definition",
+            disk->dst);
+        return;
+    }
+
+    if (!(persistDisk = virDomainDiskByTarget(vm->newDef, disk->dst))) {
+        DBG("not updating disk '%s' in persistent definition: disk not present",
+            disk->dst);
+        return;
+    }
+
+    if (!virStorageSourceIsSameLocation(disk->src, persistDisk->src)) {
+        DBG("not updating disk '%s' in persistent definition: disk source doesn't match",
+            disk->dst);
+        return;
+    }
+
+    if (!(copy = virStorageSourceCopy(newsrc, true)) ||
+        virStorageSourceInitChainElement(copy, persistDisk->src, true) < 0) {
+        VIR_WARN("Unable to update persistent definition on vm %s after block job",
+                 vm->def->name);
+        return;
+    }
+
+    virObjectUnref(persistDisk->src);
+    persistDisk->src = g_steal_pointer(&copy);
+}
+
+
+G_GNUC_UNUSED static int
+chDomainBlockPullCommon(virDomainObj *vm,
+                        const char *path,
+                        virStorageSource *mirror)
+{
+    virCHDomainObjPrivate *priv = vm->privateData;
+    g_autoptr(virCHDriverConfig) cfg = virCHDriverGetConfig(priv->driver);
+    virDomainDiskDef *disk;
+    g_autofree char *backingPath = NULL;
+    g_autoptr(virJSONValue) disk_json = virJSONValueNewObject();
+    g_autoptr(virStorageSource) mirrorCopy = NULL;
+    int response = -1;
+    g_autofree char *payload = NULL;
+    int ret = -1;
+
+    if (virDomainObjBeginJob(vm, VIR_JOB_MODIFY) < 0)
+        goto cleanup;
+
+    if (virDomainObjCheckActive(vm) < 0) {
+        virReportError(VIR_ERR_INTERNAL_ERROR,
+                       "%s",
+                       _("Domain must be active but is not"));
+        goto endjob;
+    }
+
+    if (!(disk = virDomainDiskByName(vm->def, path, false))) {
+        virReportError(VIR_ERR_INTERNAL_ERROR,
+                       _("Could not find disk: %s"),
+                       path);
+        goto endjob;
+    }
+
+    if (chDomainDiskBlockJobIsActive(disk)) {
+        virReportError(VIR_ERR_BLOCK_COPY_ACTIVE,
+                       _("disk '%1$s' already has an active block copy job"),
+                       disk->dst);
+        goto endjob;
+    }
+
+    if (!(mirrorCopy = chDomainBlockCopyPrepareMirror(disk, mirror)))
+        goto endjob;
+
+    DBG("BlockPullCommon: CHV disk id: %s dest path for mirror: %s", disk->info.alias, mirror->path);
+
+    virJSONValueObjectAppendString(disk_json, "id", disk->info.alias);
+    virJSONValueObjectAppendString(disk_json, "destination_path", mirror->path);
+
+    payload = virJSONValueToString(disk_json, false);
+
+    response = virCHMonitorPutNoResponse(priv->monitor, URL_VM_DISK_MIRROR_START, payload);
+
+    if (response != 0) {
+        DBG("Failed to start disk mirroring. Invalid CH response.");
+        goto endjob;
+    }
+
+    disk->mirror = g_steal_pointer(&mirrorCopy);
+    disk->mirrorState = VIR_DOMAIN_DISK_MIRROR_STATE_NONE;
+    disk->mirrorJob = VIR_DOMAIN_BLOCK_JOB_TYPE_COPY;
+
+    if (virDomainObjSave(vm, priv->driver->xmlopt, cfg->stateDir) < 0)
+        DBG("Failed to save status on vm %s", vm->def->name);
+
+    ret = 0;
+
+    if (ret < 0)
+        goto endjob;
+
+ endjob:
+    virDomainObjEndJob(vm);
+
+ cleanup:
+    return ret;
 }
 
 static int
-chDomainBlockRebase(virDomainPtr dom G_GNUC_UNUSED,
-                    const char *path G_GNUC_UNUSED,
-                    const char *base G_GNUC_UNUSED,
-                    unsigned long bandwidth G_GNUC_UNUSED,
-                    unsigned int flags G_GNUC_UNUSED)
+chDomainBlockCopy(virDomainPtr dom,
+                  const char *disk,
+                  const char *destxml,
+                  virTypedParameterPtr params,
+                  int nparams,
+                  unsigned int flags)
 {
-    virReportError(VIR_ERR_NO_SUPPORT, "%s", _("block rebase is not supported"));
-    return -1;
+    virCHDriver *driver = dom->conn->privateData;
+    virDomainObj *vm;
+    int ret = -1;
+    g_autoptr(virStorageSource) dest = NULL;
+
+    virCheckFlags(VIR_DOMAIN_BLOCK_COPY_REUSE_EXT, -1);
+
+    if (virTypedParamsValidate(params, nparams,
+                               VIR_DOMAIN_BLOCK_COPY_BANDWIDTH,
+                               VIR_TYPED_PARAM_ULLONG,
+                               VIR_DOMAIN_BLOCK_COPY_GRANULARITY,
+                               VIR_TYPED_PARAM_UINT,
+                               VIR_DOMAIN_BLOCK_COPY_BUF_SIZE,
+                               VIR_TYPED_PARAM_ULLONG,
+                               NULL) < 0)
+        return -1;
+
+    if (!(flags & VIR_DOMAIN_BLOCK_COPY_REUSE_EXT)) {
+        virReportError(VIR_ERR_INVALID_ARG, "%s", _("VIR_DOMAIN_BLOCK_COPY_REUSE_EXT must be set."));
+        return -1;
+    }
+
+    if (nparams != 0) {
+        virReportError(VIR_ERR_INVALID_ARG, "%s", _("Unsupported block copy parameters are passed."));
+        return -1;
+    }
+
+    if (!(vm = virCHDomainObjFromDomain(dom)))
+        return -1;
+
+    if (virDomainBlockCopyEnsureACL(dom->conn, vm->def) < 0)
+        goto cleanup;
+
+    if (!(dest = virDomainDiskDefParseSource(destxml, driver->xmlopt,
+                                             VIR_DOMAIN_DEF_PARSE_INACTIVE)))
+        goto cleanup;
+
+    ret = chDomainBlockPullCommon(vm,
+                                  disk,
+                                  dest);
+
+
+ cleanup:
+    virDomainObjEndAPI(&vm);
+    return ret;
 }
 
 static int
-chDomainBlockJobAbort(virDomainPtr dom G_GNUC_UNUSED,
-                      const char *path G_GNUC_UNUSED,
-                      unsigned int flags G_GNUC_UNUSED)
+chDomainBlockRebase(virDomainPtr dom,
+                    const char *path,
+                    const char *base,
+                    unsigned long bandwidth,
+                    unsigned int flags)
 {
-    virReportError(VIR_ERR_NO_SUPPORT, "%s", _("block job abort is not supported"));
-    return -1;
+    virDomainObj *vm;
+    int ret = -1;
+    g_autoptr(virStorageSource) dest = NULL;
+
+    virCheckFlags(VIR_DOMAIN_BLOCK_REBASE_REUSE_EXT |
+                  VIR_DOMAIN_BLOCK_REBASE_COPY |
+                  VIR_DOMAIN_BLOCK_REBASE_COPY_RAW, -1);
+
+    if (!(vm = virCHDomainObjFromDomain(dom)))
+        return -1;
+
+    if (virDomainBlockRebaseEnsureACL(dom->conn, vm->def) < 0)
+        goto cleanup;
+
+    DBG("chDomainBlockRebase path:%s base:%s bandwitdth:%lu flags:%u", path, base, bandwidth, flags);
+
+    if (!(flags & VIR_DOMAIN_BLOCK_COPY_REUSE_EXT)) {
+        virReportError(VIR_ERR_INVALID_ARG, "%s", _("VIR_DOMAIN_BLOCK_COPY_REUSE_EXT must be set."));
+        goto cleanup;
+    }
+
+    if (bandwidth != 0) {
+        VIR_WARN("Setting bandwidth is not supported: %lu", bandwidth);
+        goto cleanup;
+    }
+
+    if (!(flags & VIR_DOMAIN_BLOCK_REBASE_COPY && flags & VIR_DOMAIN_BLOCK_REBASE_COPY_RAW)) {
+        virReportError(VIR_ERR_INVALID_ARG,
+                       "%s",
+                       _("Only raw copy supported"));
+        goto cleanup;
+    }
+
+    if (!(dest = virStorageSourceNew()))
+        goto cleanup;
+
+    dest->type = VIR_STORAGE_TYPE_FILE;
+    dest->path = g_strdup(base);
+    dest->format = VIR_STORAGE_FILE_RAW;
+
+    ret = chDomainBlockPullCommon(vm,
+                                  path,
+                                  dest);
+
+ cleanup:
+    virDomainObjEndAPI(&vm);
+    return ret;
+}
+
+typedef enum {
+    VIR_CH_BLOCKJOB_PHASE_RUNNING = 0,
+    VIR_CH_BLOCKJOB_PHASE_READY,
+    VIR_CH_BLOCKJOB_PHASE_COMPLETING,
+    VIR_CH_BLOCKJOB_PHASE_COMPLETED,
+    VIR_CH_BLOCKJOB_PHASE_CANCELLING,
+    VIR_CH_BLOCKJOB_PHASE_FAILED,
+
+    VIR_CH_BLOCKJOB_PHASE_LAST
+} virCHBlockJobPhase;
+
+VIR_ENUM_DECL(virCHBlockJobPhase);
+VIR_ENUM_IMPL(virCHBlockJobPhase,
+              VIR_CH_BLOCKJOB_PHASE_LAST,
+              "running",
+              "ready",
+              "completing",
+              "completed",
+              "cancelling",
+              "failed");
+
+typedef struct
+{
+    virCHBlockJobPhase phase;
+    long long unsigned int current_bytes;
+    long long unsigned int total_bytes;
+} chBlockJobInfo;
+
+static int chBlockJobParseProgress(virJSONValue *json,
+                                   chBlockJobInfo *progress)
+{
+    long long unsigned int tmp_ulong = 0;
+    const char *tmp_str = NULL;
+    int phase;
+
+    if (virJSONValueGetType(json) != VIR_JSON_TYPE_OBJECT) {
+        DBG("Response JSON is not an object");
+        return -1;
+    }
+    if (virJSONValueObjectGetNumberUlong(json, "copied_bytes", &tmp_ulong) < 0) {
+        DBG("Could not retrieve 'copied_bytes' from json object");
+        return -1;
+    }
+    progress->current_bytes = tmp_ulong;
+
+    if (virJSONValueObjectGetNumberUlong(json, "total_bytes", &tmp_ulong) < 0) {
+        DBG("Could not retrieve 'total_bytes' from json object");
+        return -1;
+    }
+    progress->total_bytes = tmp_ulong;
+
+    tmp_str = virJSONValueObjectGetString(json, "phase");
+
+    if (!tmp_str) {
+        DBG("Could not retrieve 'phase' from json object");
+        return -1;
+    }
+
+    if ((phase = virCHBlockJobPhaseTypeFromString(tmp_str)) < 0) {
+        virReportError(VIR_ERR_INTERNAL_ERROR,
+                       _("unknown block copy phase '%1$s'"), tmp_str);
+        return -1;
+    }
+
+    progress->phase = phase;
+
+    return 0;
+}
+
+/**
+ * chDomainBlockJobRefresh
+ *
+ * Query CH and synchronize mirror readiness with the current job phase.
+ * The caller must hold the domain lock and a VIR_JOB_MODIFY job. The monitor
+ * is authoritative, allowing recovery after a lost READY event or an
+ * unsuccessful runtime status save.
+ *
+ * Set mirrorState to READY only when CH reports ready, otherwise to NONE.
+ * On a state change, emit a block job READY event if entering READY and save
+ * the updated runtime status. A save failure is logged but is not fatal.
+ * This function does not cancel failed jobs or change the disk source.
+ *
+ * Returns 0 on success, or -1 if the query or response parsing fails.
+ * On failure, cached mirror state and @info remain unchanged.
+ */
+static int
+chDomainBlockJobRefresh(virDomainObj *vm,
+                        virDomainDiskDef *disk,
+                        virDomainBlockJobInfoPtr info)
+{
+    virCHDomainObjPrivate *priv = vm->privateData;
+    g_autoptr(virCHDriverConfig) cfg = virCHDriverGetConfig(priv->driver);
+    g_autoptr(virJSONValue) request = virJSONValueNewObject();
+    g_autoptr(virJSONValue) response = NULL;
+    g_autofree char *payload = NULL;
+    chBlockJobInfo progress = {0};
+    virDomainDiskMirrorState state;
+
+    if (virJSONValueObjectAppendString(request, "id", disk->info.alias) < 0)
+        return -1;
+
+    payload = virJSONValueToString(request, false);
+    if (!(response = virCHMonitorPut(priv->monitor,
+                                    URL_VM_DISK_MIRROR_STATUS, payload))) {
+        virReportError(VIR_ERR_OPERATION_FAILED,
+                       _("failed to query block copy state for disk '%1$s'"),
+                       disk->dst);
+        return -1;
+    }
+
+    if (chBlockJobParseProgress(response, &progress) < 0)
+        return -1;
+
+    state = progress.phase == VIR_CH_BLOCKJOB_PHASE_READY ?
+        VIR_DOMAIN_DISK_MIRROR_STATE_READY : VIR_DOMAIN_DISK_MIRROR_STATE_NONE;
+
+    if (disk->mirrorState != state) {
+        disk->mirrorState = state;
+
+        if (state == VIR_DOMAIN_DISK_MIRROR_STATE_READY)
+            virCHDomainBlockJobEmitEvents(priv->driver, vm, disk,
+                                          VIR_DOMAIN_BLOCK_JOB_READY);
+
+        if (virDomainObjSave(vm, priv->driver->xmlopt, cfg->stateDir) < 0)
+            VIR_WARN("Failed to save refreshed block copy state for domain '%s'",
+                     vm->def->name);
+    }
+
+    if (info) {
+        info->type = VIR_DOMAIN_BLOCK_JOB_TYPE_COPY;
+        info->cur = progress.current_bytes;
+        info->end = progress.total_bytes;
+        info->bandwidth = 0;
+    }
+
+    return 0;
 }
 
 static int
-chDomainGetBlockJobInfo(virDomainPtr dom G_GNUC_UNUSED,
-                        const char *path G_GNUC_UNUSED,
-                        virDomainBlockJobInfoPtr info G_GNUC_UNUSED,
-                        unsigned int flags G_GNUC_UNUSED)
+chDomainGetBlockJobInfo(virDomainPtr dom,
+                        const char *path,
+                        virDomainBlockJobInfoPtr info,
+                        unsigned int flags)
 {
-    virReportError(VIR_ERR_NO_SUPPORT, "%s", _("block job info is not supported"));
-    return -1;
+    virDomainObj *vm;
+    virDomainDiskDef *disk;
+    int ret = -1;
+
+    virCheckFlags(VIR_DOMAIN_BLOCK_JOB_INFO_BANDWIDTH_BYTES, -1);
+
+    if (!(vm = virCHDomainObjFromDomain(dom)))
+        return -1;
+
+    if (virDomainGetBlockJobInfoEnsureACL(dom->conn, vm->def) < 0)
+        goto cleanup;
+
+    if (virDomainObjBeginJob(vm, VIR_JOB_MODIFY) < 0)
+        goto cleanup;
+
+    if (virDomainObjCheckActive(vm) < 0)
+        goto endjob;
+
+    if (!(disk = virDomainDiskByName(vm->def, path, false))) {
+        virReportError(VIR_ERR_INVALID_ARG,
+                       _("disk '%1$s' not found in domain"), path);
+        goto endjob;
+    }
+
+    if (!chDomainDiskBlockJobIsActive(disk)) {
+        ret = 0;
+        goto endjob;
+    }
+
+    if (chDomainBlockJobRefresh(vm, disk, info) < 0)
+        goto endjob;
+
+    ret = 1;
+
+ endjob:
+    virDomainObjEndJob(vm);
+
+ cleanup:
+    virDomainObjEndAPI(&vm);
+    return ret;
+}
+
+static int
+chDomainBlockJobAbort(virDomainPtr dom,
+                      const char *path,
+                      unsigned int flags)
+{
+    virCHDriver *driver = dom->conn->privateData;
+    g_autoptr(virCHDriverConfig) cfg = virCHDriverGetConfig(driver);
+    virDomainDiskDef *disk = NULL;
+    bool pivot = !!(flags & VIR_DOMAIN_BLOCK_JOB_ABORT_PIVOT);
+    g_autofree char *payload = NULL;
+    virCHDomainObjPrivate *priv = NULL;
+    g_autoptr(virJSONValue) disk_json = virJSONValueNewObject();
+    g_autoptr(virJSONValue) response = NULL;
+    int ret = -1;
+    virDomainObj *vm;
+
+    virCheckFlags(VIR_DOMAIN_BLOCK_JOB_ABORT_PIVOT, -1);
+
+    if (!(vm = virCHDomainObjFromDomain(dom)))
+        return -1;
+
+    if (virDomainBlockJobAbortEnsureACL(dom->conn, vm->def) < 0)
+        goto cleanup;
+
+    priv = vm->privateData;
+
+    if (pivot) {
+        DBG("Pivot storage migration for target %s", path);
+    } else {
+        DBG("Cancel storage migration for target %s", path);
+    }
+
+    if (virDomainObjBeginJob(vm, VIR_JOB_MODIFY) < 0)
+        goto cleanup;
+
+    if (virDomainObjCheckActive(vm) < 0)
+        goto endjob;
+
+    if (!(disk = virDomainDiskByName(vm->def, path, false)))
+        goto endjob;
+
+    if (!disk->mirror ||
+        disk->mirrorJob != VIR_DOMAIN_BLOCK_JOB_TYPE_COPY) {
+        virReportError(VIR_ERR_INVALID_ARG,
+                       _("disk %1$s does not have an active block copy job"),
+                       disk->dst);
+        goto endjob;
+    }
+
+    virJSONValueObjectAppendString(disk_json, "id", disk->info.alias);
+
+    payload = virJSONValueToString(disk_json, false);
+
+    if (pivot) {
+        if (chDomainBlockJobRefresh(vm, disk, NULL) < 0)
+            goto endjob;
+
+        if (disk->mirrorState != VIR_DOMAIN_DISK_MIRROR_STATE_READY) {
+            virReportError(VIR_ERR_OPERATION_INVALID,
+                           _("block copy for disk '%1$s' is not ready to complete"),
+                           disk->dst);
+            goto endjob;
+        }
+
+        ret = virCHMonitorPutNoResponse(priv->monitor, URL_VM_DISK_MIRROR_COMPLETE, payload);
+    } else {
+        ret = virCHMonitorPutNoResponse(priv->monitor, URL_VM_DISK_MIRROR_CANCEL, payload);
+        if (ret != 0) {
+            /* Keep the mirror bookkeeping: CH still mirrors the disk. */
+            virReportError(VIR_ERR_OPERATION_FAILED,
+                           _("failed to cancel block copy for disk '%1$s'"),
+                           disk->dst);
+            goto endjob;
+        }
+        /* Clear the pointer together with the unref: the disk def stays
+         * live and the next XML format would otherwise read the freed
+         * mirror source. */
+        disk->mirrorState = VIR_DOMAIN_DISK_MIRROR_STATE_NONE;
+        disk->mirrorJob = VIR_DOMAIN_BLOCK_JOB_TYPE_UNKNOWN;
+        g_clear_pointer(&disk->mirror, virObjectUnref);
+
+        if (virDomainObjSave(vm, driver->xmlopt, cfg->stateDir) < 0)
+            DBG("Failed to save status on vm %s", vm->def->name);
+
+        goto endjob;
+    }
+
+    if (ret != 0) {
+        DBG("Failed to pivot to new disk source");
+        goto endjob;
+    }
+
+    chDomainBlockJobRewriteConfigDiskSource(vm, disk, disk->mirror);
+
+    virObjectUnref(disk->src);
+    disk->src = g_steal_pointer(&disk->mirror);
+    disk->mirrorState = VIR_DOMAIN_DISK_MIRROR_STATE_NONE;
+    disk->mirrorJob = VIR_DOMAIN_BLOCK_JOB_TYPE_UNKNOWN;
+
+    if (virDomainObjSave(vm, driver->xmlopt, cfg->stateDir) < 0)
+        DBG("Failed to save status on vm %s", vm->def->name);
+
+    if (vm->newDef &&
+        virDomainDefSave(vm->newDef, driver->xmlopt, cfg->configDir) < 0)
+        DBG("Failed to save config of vm %s", vm->def->name);
+
+ endjob:
+    virDomainObjEndJob(vm);
+
+ cleanup:
+    virDomainObjEndAPI(&vm);
+    return ret;
 }
 
 /* Function Tables */

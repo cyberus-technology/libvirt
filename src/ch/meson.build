@@ -45,6 +45,7 @@ if conf.has('WITH_CH')
     include_directories: [
       conf_inc_dir,
       hypervisor_inc_dir,
+      storage_file_inc_dir,
     ],
   )
 

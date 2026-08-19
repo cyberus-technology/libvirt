@@ -46,6 +46,10 @@
 #define URL_VM_RESIZE_DISK "vm.resize-disk"
 #define URL_VM_MIGRATION_PROGRESS "vm.migration-progress"
 #define URL_VM_MIGRATION_CANCEL "vm.cancel-migration"
+#define URL_VM_DISK_MIRROR_START "vm.disk-mirror-start"
+#define URL_VM_DISK_MIRROR_STATUS "vm.disk-mirror-status"
+#define URL_VM_DISK_MIRROR_COMPLETE "vm.disk-mirror-complete"
+#define URL_VM_DISK_MIRROR_CANCEL "vm.disk-mirror-cancel"
 
 #define VIRCH_THREAD_NAME_LEN   16
 
