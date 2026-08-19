@@ -21,6 +21,8 @@
 #pragma once
 
 #include "ch_monitor.h"
+#include "domain_conf.h"
+#include "domain_event.h"
 
 #define CH_EVENT_BUFFER_SZ  PIPE_BUF
 
@@ -34,6 +36,8 @@ typedef enum {
     VIR_CH_EVENT_VM_BOOTED,
     VIR_CH_EVENT_VM_BOOTING,
     VIR_CH_EVENT_VM_DELETED,
+    VIR_CH_EVENT_VM_DISK_MIRROR_READY,
+    VIR_CH_EVENT_VM_DISK_MIRROR_FAILED,
     VIR_CH_EVENT_VM_MIGRATION_MEMORY_ITERATION,
     VIR_CH_EVENT_VM_MIGRATION_RECEIVE_STARTED,
     VIR_CH_EVENT_VM_PAUSED,

@@ -27,11 +27,15 @@
 #include "ch_events.h"
 #include "ch_process.h"
 #include "domain_event.h"
+#include "storage_source.h"
+#include "virerror.h"
 #include "virfile.h"
+#include "virjson.h"
 #include "virlog.h"
 #include "virstring.h"
 
 #define CH_EVENT_POLL_TIMEOUT_MS 1000
+
 #define VIR_FROM_THIS VIR_FROM_CH
 
 #include "conf/domain_event.h"
@@ -45,6 +49,8 @@ VIR_ENUM_IMPL(virCHEvent,
               "vm:booted",
               "vm:booting",
               "vm:deleted",
+              "vm:disk-mirror-ready",
+              "vm:disk-mirror-failed",
               "vm:migration-memory-iteration",
               "vm:migration-receive-started",
               "vm:paused",
@@ -81,6 +87,139 @@ virCHDomainBlockJobEmitEvents(virCHDriver *driver,
                                                VIR_DOMAIN_BLOCK_JOB_TYPE_COPY,
                                                status);
     virObjectEventStateQueue(driver->domainEventState, event2);
+}
+
+static virDomainDiskDef *
+virCHEventDiskByAlias(virDomainObj *vm,
+                      const char *alias)
+{
+    size_t i;
+
+    for (i = 0; i < vm->def->ndisks; i++) {
+        if (STREQ_NULLABLE(vm->def->disks[i]->info.alias, alias))
+            return vm->def->disks[i];
+    }
+
+    return NULL;
+}
+
+static const char *
+virCHEventGetDiskAlias(virJSONValue *eventJSON)
+{
+    virJSONValue *properties;
+
+    if (!(properties = virJSONValueObjectGetObject(eventJSON, "properties")))
+        return NULL;
+
+    return virJSONValueObjectGetString(properties, "id");
+}
+
+/**
+ * Note:
+ * See note of virCHEventBlockMirrorFailed function.
+ */
+static int
+virCHEventBlockMirrorReady(virDomainObj *vm,
+                           const char *alias)
+{
+    virCHDomainObjPrivate *priv = CH_DOMAIN_PRIVATE(vm);
+    g_autoptr(virCHDriverConfig) cfg = virCHDriverGetConfig(priv->driver);
+    virDomainDiskDef *disk;
+    VIR_LOCK_GUARD lock = virObjectLockGuard(vm);
+
+    if (virDomainObjBeginJob(vm, VIR_JOB_MODIFY) < 0)
+        return -1;
+
+    if (!virDomainObjIsActive(vm))
+        goto endjob;
+
+    if (!(disk = virCHEventDiskByAlias(vm, alias))) {
+        VIR_WARN("%s: Disk '%s' from disk mirror event does not exist",
+                 vm->def->name, alias);
+        goto endjob;
+    }
+
+    if (disk->mirror &&
+        disk->mirrorJob == VIR_DOMAIN_BLOCK_JOB_TYPE_COPY &&
+        disk->mirrorState != VIR_DOMAIN_DISK_MIRROR_STATE_READY) {
+        disk->mirrorState = VIR_DOMAIN_DISK_MIRROR_STATE_READY;
+
+        virCHDomainBlockJobEmitEvents(priv->driver, vm, disk,
+                                      VIR_DOMAIN_BLOCK_JOB_READY);
+
+        if (virDomainObjSave(vm, priv->driver->xmlopt, cfg->stateDir) < 0)
+            DBG("Failed to save status on vm %s", vm->def->name);
+    }
+
+ endjob:
+    virDomainObjEndJob(vm);
+    return 0;
+}
+
+/**
+ * Called from the event handler loop when CH emits a block mirror failed
+ * event.
+ *
+ * Handler errors are logged by the dispatcher without stopping the event loop.
+ *
+ * Note:
+ * This function identifies the affected job solely by disk alias. If copy A
+ * fails, an API caller cancels it and starts copy B before the event thread
+ * processes A’s failure, this handler reports B as failed and cancels it. The
+ * READY handler has the equivalent stale-event problem.
+ */
+static int
+virCHEventBlockMirrorFailed(virDomainObj *vm,
+                            const char *alias)
+{
+    virCHDomainObjPrivate *priv = CH_DOMAIN_PRIVATE(vm);
+    g_autoptr(virCHDriverConfig) cfg = virCHDriverGetConfig(priv->driver);
+    virDomainDiskDef *disk;
+    g_autoptr(virJSONValue) diskJSON = virJSONValueNewObject();
+    g_autofree char *payload = NULL;
+    VIR_LOCK_GUARD lock = virObjectLockGuard(vm);
+    int ret = 0;
+
+    if (virDomainObjBeginJob(vm, VIR_JOB_MODIFY) < 0)
+        return -1;
+
+    if (!virDomainObjIsActive(vm))
+        goto endjob;
+
+    if (!(disk = virCHEventDiskByAlias(vm, alias))) {
+        VIR_WARN("%s: Disk '%s' from disk mirror event does not exist",
+                 vm->def->name, alias);
+        goto endjob;
+    }
+
+    if (!disk->mirror || disk->mirrorJob != VIR_DOMAIN_BLOCK_JOB_TYPE_COPY)
+        goto endjob;
+
+    virCHDomainBlockJobEmitEvents(priv->driver, vm, disk,
+                                  VIR_DOMAIN_BLOCK_JOB_FAILED);
+
+    virJSONValueObjectAppendString(diskJSON, "id", disk->info.alias);
+    payload = virJSONValueToString(diskJSON, false);
+
+    if (virCHMonitorPutNoResponse(priv->monitor, URL_VM_DISK_MIRROR_CANCEL, payload) != 0) {
+        virReportError(VIR_ERR_OPERATION_FAILED,
+                       _("failed to cancel failed block copy for disk '%1$s'"),
+                       disk->dst);
+        /* Keep the mirror bookkeeping until cancellation is confirmed. */
+        ret = -1;
+        goto endjob;
+    }
+
+    g_clear_pointer(&disk->mirror, virObjectUnref);
+    disk->mirrorState = VIR_DOMAIN_DISK_MIRROR_STATE_NONE;
+    disk->mirrorJob = VIR_DOMAIN_BLOCK_JOB_TYPE_UNKNOWN;
+
+    if (virDomainObjSave(vm, priv->driver->xmlopt, cfg->stateDir) < 0)
+        DBG("Failed to save status on vm %s", vm->def->name);
+
+ endjob:
+    virDomainObjEndJob(vm);
+    return ret;
 }
 
 static int
@@ -246,6 +385,20 @@ virCHProcessEvent(virCHMonitor *mon,
     case VIR_CH_EVENT_VM_MIGRATION_MEMORY_ITERATION:
         virCHEventEmitMigrationIteration(vm, eventJSON);
         break;
+    case VIR_CH_EVENT_VM_DISK_MIRROR_READY:
+    case VIR_CH_EVENT_VM_DISK_MIRROR_FAILED: {
+        const char *alias = virCHEventGetDiskAlias(eventJSON);
+
+        if (!alias) {
+            VIR_WARN("%s: Disk mirror event is missing disk id", vm->def->name);
+            ret = -1;
+        } else if (ev == VIR_CH_EVENT_VM_DISK_MIRROR_READY) {
+            ret = virCHEventBlockMirrorReady(vm, alias);
+        } else {
+            ret = virCHEventBlockMirrorFailed(vm, alias);
+        }
+        break;
+    }
     case VIR_CH_EVENT_VMM_SHUTDOWN:
     case VIR_CH_EVENT_VM_SHUTDOWN: {
         virCHEventEmitShutdown(vm, ev);
