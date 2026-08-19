@@ -248,6 +248,12 @@ test:default-windows-tests:
   variables:
     TEST_ATTR: windows
 
+test:blockdevice-mirror-tests:
+  extends:
+    - .test_nixos_tests
+  variables:
+    TEST_ATTR: blockdevice_mirror
+
 # the cpu profile test requires the appropriate hardware
 test:cpu_profiles:
   stage: test
