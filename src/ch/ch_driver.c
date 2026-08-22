@@ -1842,6 +1842,17 @@ chDomainReattach(virDomainObj *vm, void*data) {
 
     DBG("Reattach to domain: %s", vm->def->name);
 
+    /* hasManagedSave only lives in memory; rediscover it, or managed
+     * save images would be forgotten (and fresh-booted over) after a
+     * daemon restart. */
+    {
+        g_autofree char *save_xml = g_strdup_printf("%s/%s.save/%s",
+                                                    cfg->saveDir,
+                                                    vm->def->name,
+                                                    CH_SAVE_XML);
+        vm->hasManagedSave = virFileExists(save_xml);
+    }
+
     if (state == VIR_DOMAIN_RUNNING || state == VIR_DOMAIN_PAUSED) {
         /* Rederive the pidfile so that virCHProcessStopOrKill() gracefully
          * deletes it from the state directory. */
