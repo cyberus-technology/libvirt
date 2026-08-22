@@ -1100,7 +1100,7 @@ virCHProcessInit(virCHDriver *driver,
 
  cleanup:
     if (ret)
-        virCHProcessStop(driver, vm, VIR_DOMAIN_SHUTOFF_FAILED);
+        virCHProcessKill(driver, vm, VIR_DOMAIN_SHUTOFF_FAILED);
 
     return ret;
 }
@@ -1213,7 +1213,7 @@ virCHProcessStart(virCHDriver *driver,
 
  cleanup:
     if (ret)
-        virCHProcessStop(driver, vm, VIR_DOMAIN_SHUTOFF_FAILED);
+        virCHProcessKill(driver, vm, VIR_DOMAIN_SHUTOFF_FAILED);
 
     return ret;
 }
@@ -1431,6 +1431,6 @@ virCHProcessStartRestore(virCHDriver *driver, virDomainObj *vm, const char *from
     if (tapfds)
         chCloseFDs(tapfds, ntapfds);
     if (ret)
-        virCHProcessStop(driver, vm, VIR_DOMAIN_SHUTOFF_FAILED);
+        virCHProcessKill(driver, vm, VIR_DOMAIN_SHUTOFF_FAILED);
     return ret;
 }
