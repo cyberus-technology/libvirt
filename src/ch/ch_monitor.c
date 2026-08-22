@@ -2367,26 +2367,29 @@ G_GNUC_UNUSED static int chMigrationParseProgress(virJSONValue * json, chMigrati
     }
 
 
-    jsonState = virJSONValueObjectGetObject(json, "state");
-    jsonStateOngoing = virJSONValueObjectGetObject(
-        jsonState,
-        virCHMigrationProgressStateTypeToString(VIR_CH_MIGRATION_PROGRESS_STATE_ONGOING)
-    );
-    jsonStateCancelled = virJSONValueObjectGetObject(
-        jsonState,
-        virCHMigrationProgressStateTypeToString(VIR_CH_MIGRATION_PROGRESS_STATE_CANCELLED)
-    );
-    jsonStateFinished = virJSONValueObjectGetObject(
-        jsonState,
-        virCHMigrationProgressStateTypeToString(VIR_CH_MIGRATION_PROGRESS_STATE_FINISHED)
-    );
-    jsonStateFailed = virJSONValueObjectGetObject(
-        jsonState,
-        virCHMigrationProgressStateTypeToString(VIR_CH_MIGRATION_PROGRESS_STATE_FAILED)
-    );
-
     progress->state = VIR_CH_MIGRATION_PROGRESS_STATE_INVALID;
     progress->ongoing_phase = VIR_CH_MIGRATION_PROGRESS_ONGOING_PHASE_INVALID;
+
+    jsonState = virJSONValueObjectGetObject(json, "state");
+    if (jsonState) {
+        jsonStateOngoing = virJSONValueObjectGetObject(
+            jsonState,
+            virCHMigrationProgressStateTypeToString(VIR_CH_MIGRATION_PROGRESS_STATE_ONGOING)
+        );
+        jsonStateCancelled = virJSONValueObjectGetObject(
+            jsonState,
+            virCHMigrationProgressStateTypeToString(VIR_CH_MIGRATION_PROGRESS_STATE_CANCELLED)
+        );
+        jsonStateFinished = virJSONValueObjectGetObject(
+            jsonState,
+            virCHMigrationProgressStateTypeToString(VIR_CH_MIGRATION_PROGRESS_STATE_FINISHED)
+        );
+        jsonStateFailed = virJSONValueObjectGetObject(
+            jsonState,
+            virCHMigrationProgressStateTypeToString(VIR_CH_MIGRATION_PROGRESS_STATE_FAILED)
+        );
+    }
+
     if (jsonStateOngoing != NULL) {
         progress->state = VIR_CH_MIGRATION_PROGRESS_STATE_ONGOING;
         tmp_str = virJSONValueObjectGetString(jsonStateOngoing, "phase");
@@ -2418,16 +2421,23 @@ G_GNUC_UNUSED static int chMigrationParseProgress(virJSONValue * json, chMigrati
         json,
         "transportation_mode"
     );
-    jsonTransportationModeTcp = virJSONValueObjectGetObject(
-        jsonTransportationMode,
-        "Tcp"
-    );
+    if (jsonTransportationMode) {
+        jsonTransportationModeTcp = virJSONValueObjectGetObject(
+            jsonTransportationMode,
+            "Tcp"
+        );
+    }
 
-    progress->transportation_mode = VIR_CH_MIGRATION_TRANSPORT_MODE_TCP;
-    ignore_value(virJSONValueObjectGetNumberUlong(jsonTransportationModeTcp, "connections", &tmp_ulong));
-    progress->tcp_connections = tmp_ulong;
-    ignore_value(virJSONValueObjectGetBoolean(jsonTransportationModeTcp, "tls", &tmp_bool));
-    progress->tcp_tls = tmp_bool;
+    /* "Local" (and any unknown mode) has no Tcp sub-object. */
+    if (jsonTransportationModeTcp) {
+        progress->transportation_mode = VIR_CH_MIGRATION_TRANSPORT_MODE_TCP;
+        ignore_value(virJSONValueObjectGetNumberUlong(jsonTransportationModeTcp, "connections", &tmp_ulong));
+        progress->tcp_connections = tmp_ulong;
+        ignore_value(virJSONValueObjectGetBoolean(jsonTransportationModeTcp, "tls", &tmp_bool));
+        progress->tcp_tls = tmp_bool;
+    } else {
+        progress->transportation_mode = VIR_CH_MIGRATION_TRANSPORT_MODE_LOCAL;
+    }
 
     return 0;
 }
