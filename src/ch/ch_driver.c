@@ -5428,7 +5428,10 @@ chConnectGetCPUModelNames(virConnectPtr conn,
     if (!models)
         return -1;
 
-    *models = g_new0(char *, num_models);
+    /* One extra NULL entry: the RPC dispatch stores the list in a
+     * g_auto(GStrv), whose g_strfreev() cleanup requires NULL
+     * termination. */
+    *models = g_new0(char *, num_models + 1);
 
     for (i = 0; i < num_models; i++) {
         (*models)[i] = g_strdup(cpu_models[i]);
