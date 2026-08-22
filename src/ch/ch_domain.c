@@ -75,6 +75,7 @@ virCHDomainObjPrivateAlloc(void *opaque)
         return NULL;
     }
     if (virMutexInit(&priv->migrationStatsMutex) < 0) {
+        virChrdevFree(priv->chrdevs);
         g_free(priv);
         return NULL;
     }
