@@ -410,6 +410,9 @@ chDomainGetJobInfo(virDomainPtr domain, virDomainJobInfoPtr info)
     if (!(vm = virCHDomainObjFromDomain(domain)))
         goto cleanup;
 
+    if (virDomainGetJobInfoEnsureACL(domain->conn, vm->def) < 0)
+        goto cleanup;
+
     if (!vm->job->active) {
         info->type = VIR_DOMAIN_JOB_NONE;
         ret = 0;
@@ -459,6 +462,9 @@ chDomainGetJobStats(virDomainPtr dom,
                   VIR_DOMAIN_JOB_STATS_KEEP_COMPLETED, -1);
 
     if (!(vm = virCHDomainObjFromDomain(dom)))
+        goto cleanup;
+
+    if (virDomainGetJobStatsEnsureACL(dom->conn, vm->def) < 0)
         goto cleanup;
 
     priv = vm->privateData;
@@ -576,6 +582,9 @@ chDomainAbortJob(virDomainPtr dom)
     int ret = -1;
 
     if (!(vm = virCHDomainObjFromDomain(dom)))
+        goto cleanup;
+
+    if (virDomainAbortJobEnsureACL(dom->conn, vm->def) < 0)
         goto cleanup;
 
     priv = vm->privateData;
@@ -3942,7 +3951,7 @@ chDomainMigratePerform3Params(virDomainPtr dom,
     if (!(vm = virCHDomainObjFromDomain(dom)))
         return -1;
 
-    if (virDomainMigratePerform3EnsureACL(dom->conn, vm->def) < 0) {
+    if (virDomainMigratePerform3ParamsEnsureACL(dom->conn, vm->def) < 0) {
         rc = -1;
         goto error;
     }
