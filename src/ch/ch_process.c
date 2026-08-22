@@ -1246,7 +1246,12 @@ virCHProcessStopOrKill(virCHDriver *driver,
     virErrorPreserveLast(&orig_err);
 
     if (priv->monitor) {
-        virProcessKill(vm->pid, kill ? SIGKILL : SIGTERM);
+        /* Wait until the process is killed, so that the following cleanups do
+           not race with a dying process. */
+        if (virProcessKillPainfully(vm->pid, kill) < 0) {
+            VIR_WARN("Failed to wait for cloud-hypervisor process %lld of domain %s to exit",
+                     (long long)vm->pid, vm->def->name);
+        }
         g_clear_pointer(&priv->monitor, virCHMonitorClose);
     }
 
