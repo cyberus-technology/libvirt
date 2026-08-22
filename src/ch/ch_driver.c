@@ -3235,16 +3235,16 @@ chDomainMigratePrepare3(virConnectPtr dconn,
     if (uri_out)
         *uri_out = NULL;
 
-    if (virDomainMigratePrepare3EnsureACL(dconn, def) < 0) {
-        rc = -1;
-        goto err_cleanup_args;
-    }
-
     if (!(def = chMigrationAnyPrepareDef(driver, dom_xml, dname))) {
         virReportError(VIR_ERR_OPERATION_FAILED, "%s",
                        _("Failed to prepare domain def"));
         rc = -1;
         goto err_cleanup_args;
+    }
+
+    if (virDomainMigratePrepare3EnsureACL(dconn, def) < 0) {
+        rc = -1;
+        goto err_cleanup_def;
     }
 
     VIR_INFO("Got DomainDef prepared successfully");
