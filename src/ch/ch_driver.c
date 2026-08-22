@@ -1794,8 +1794,12 @@ static int chStateCleanup(void)
     if (ch_driver == NULL)
         return -1;
 
+    /* Stop the event worker threads first; they reference the driver. */
+    virThreadPoolFree(ch_driver->workerPool);
     virBitmapFree(ch_driver->chCaps);
     virSysinfoDefFree(ch_driver->hostsysinfo);
+    virPortAllocatorRangeFree(ch_driver->migrationPorts);
+    virInhibitorFree(ch_driver->inhibitor);
     virObjectUnref(ch_driver->config);
     virObjectUnref(ch_driver->xmlopt);
     virObjectUnref(ch_driver->caps);
@@ -5173,6 +5177,8 @@ chStateShutdownWait(void)
     virObjectUnref(ch_driver->caps);
 
     virObjectUnref(ch_driver->config);
+
+    virMutexDestroy(&ch_driver->lock);
 
     VIR_FREE(ch_driver);
     return 0;
