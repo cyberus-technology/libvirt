@@ -43,6 +43,7 @@
 #include "virjson.h"
 #include "virlog.h"
 #include "virpidfile.h"
+#include "virprocess.h"
 #include "virstring.h"
 
 #define VIR_FROM_THIS VIR_FROM_CH
@@ -1271,7 +1272,7 @@ virCHMonitorNew(virDomainObj *vm, virCHDriverConfig *cfg, int logfile)
             virReportSystemError(-rv,
                                  _("Domain %1$s didn't show up"),
                                  vm->def->name);
-            return NULL;
+            goto error;
         }
         VIR_DEBUG("CH vm=%p name=%s running with pid=%lld",
                   vm, vm->def->name, (long long)vm->pid);
@@ -1291,7 +1292,7 @@ virCHMonitorNew(virDomainObj *vm, virCHDriverConfig *cfg, int logfile)
             /* CH process(Writer) is blocked at this point as EventHandler(Reader)
              * fails to open the FIFO.
              */
-            return NULL;
+            goto error;
         }
         mon->eventmonitorfd = event_monitor_fd;
         VIR_DEBUG("%s: Opened the event monitor FIFO(%s)", vm->def->name, mon->eventmonitorpath);
@@ -1300,10 +1301,21 @@ virCHMonitorNew(virDomainObj *vm, virCHDriverConfig *cfg, int logfile)
         mon->vm = virObjectRef(vm);
 
         if (virCHStartEventHandler(mon) < 0)
-            return NULL;
+            goto error;
     }
 
     return g_steal_pointer(&mon);
+
+ error:
+    /* Kill the already spawned VMM process or it lingers unmanaged forever. */
+    if (vm->pid > 0) {
+        if (virProcessKillPainfully(vm->pid, true) < 0) {
+            VIR_WARN("Failed to wait for cloud-hypervisor process %lld of domain %s to exit",
+                     (long long)vm->pid, vm->def->name);
+        }
+        vm->pid = 0;
+    }
+    return NULL;
 }
 
 static void virCHMonitorDispose(void *opaque)
