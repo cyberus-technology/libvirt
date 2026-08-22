@@ -4640,7 +4640,8 @@ chFindNet(virDomainDef *def, const char *dst)
     size_t i;
 
     for (i = 0; i < def->nnets; i++) {
-        if (STREQ(def->nets[i]->ifname, dst))
+        /* ifname may be unset, e.g. for devices that were never started */
+        if (STREQ_NULLABLE(def->nets[i]->ifname, dst))
             return i;
     }
 
