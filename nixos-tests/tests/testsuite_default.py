@@ -1691,6 +1691,10 @@ class LibvirtTests(LibvirtTestsBase):  # type: ignore
             20,
         )
 
+        # This start fails after the VMM process was already spawned. The
+        # failure cleanup must not leak it as an unmanaged orphan.
+        controllerVM.wait_until_fails("pidof cloud-hypervisor", timeout=30)
+
     def test_log_format(self):
         """
         Test that Cloud Hypervisor uses the expected log format.
