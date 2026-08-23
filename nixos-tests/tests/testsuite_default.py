@@ -471,6 +471,30 @@ class LibvirtTests(LibvirtTestsBase):  # type: ignore
 
         ssh(controllerVM, "ls /tmp/foo")
 
+    def test_managedsave_survives_virtchd_restart(self):
+        """
+        A daemon restart between managedsave and restore (e.g. a host
+        update) must not lose the managed save: hasManagedSave only lives
+        in memory and used to be forgotten, so a later start silently
+        booted the domain fresh from its older disk state.
+        """
+        controllerVM.succeed("virsh define /etc/domain-chv.xml")
+        controllerVM.succeed("virsh start testvm")
+        wait_for_ssh(controllerVM)
+
+        # Marker that only survives a restore, not a fresh boot.
+        ssh(controllerVM, "touch /tmp/restore-marker")
+
+        controllerVM.succeed("virsh managedsave testvm")
+        controllerVM.succeed("systemctl restart virtchd")
+
+        controllerVM.succeed("virsh start testvm")
+        # A consumed save directory proves an actual restore.
+        controllerVM.fail("ls /var/lib/libvirt/ch/save/testvm.save")
+
+        wait_for_ssh(controllerVM)
+        ssh(controllerVM, "ls /tmp/restore-marker")
+
     def test_shutdown(self):
         """
         Test that transient XMLs are cleaned up correctly when using different
@@ -1723,6 +1747,7 @@ def suite():
         LibvirtTests.test_list_smbios_sysinfo,
         LibvirtTests.test_log_format,
         LibvirtTests.test_managedsave,
+        LibvirtTests.test_managedsave_survives_virtchd_restart,
         LibvirtTests.test_memory_prefault,
         LibvirtTests.test_nested_chv_guest,
         LibvirtTests.test_network_hotplug_attach_detach_persistent,
