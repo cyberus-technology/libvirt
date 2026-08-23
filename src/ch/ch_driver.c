@@ -52,6 +52,8 @@
 #include "virlog.h"
 #include "virobject.h"
 #include "virfile.h"
+#include "virpidfile.h"
+#include "virprocess.h"
 #include "virtypedparam.h"
 #include "virutil.h"
 #include "viruuid.h"
@@ -1817,6 +1819,11 @@ chDomainReattach(virDomainObj *vm, void*data) {
     DBG("Reattach to domain: %s", vm->def->name);
 
     if (state == VIR_DOMAIN_RUNNING || state == VIR_DOMAIN_PAUSED) {
+        /* Rederive the pidfile so that virCHProcessStopOrKill() gracefully
+         * deletes it from the state directory. */
+        if (!priv->pidfile)
+            priv->pidfile = virPidFileBuildPath(cfg->stateDir, vm->def->name);
+
         priv->monitor = virCHMonitorReattach(vm, cfg, driver);
     }
 
