@@ -317,6 +317,13 @@ class LibvirtTests(LibvirtTestsBase):  # type: ignore
         controllerVM.succeed("systemctl restart virtchd")
         controllerVM.succeed("virsh list | grep 'running'")
 
+        # Stopping a domain after a daemon restart must clean up its
+        # pidfile: the path only lives in daemon memory and used to be
+        # lost across the restart, leaking one pidfile per stopped
+        # domain.
+        controllerVM.succeed("virsh destroy testvm")
+        controllerVM.fail("test -e /run/libvirt/ch/testvm.pid")
+
     def test_memory_prefault(self):
         """
         Test that immediate memory allocation is passed to Cloud Hypervisor as
