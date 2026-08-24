@@ -86,6 +86,7 @@ class LibvirtTests(LibvirtTestsBase):  # type: ignore
                 wait_for_ssh(src)
 
             src.succeed("virsh shutdown testvm")
+            src.wait_until_succeeds("virsh domstate testvm | grep 'shut off'")
             src.succeed("virsh undefine testvm")
 
         # Check creating the CHV VM on both, the newer and the older CPU
@@ -152,6 +153,7 @@ class LibvirtTests(LibvirtTestsBase):  # type: ignore
                 )
 
             machine.succeed("virsh shutdown testvm")
+            machine.wait_until_succeeds("virsh domstate testvm | grep 'shut off'")
             machine.succeed("virsh undefine testvm")
 
         # Check creating the CHV VM on both, the newer and the older CPU

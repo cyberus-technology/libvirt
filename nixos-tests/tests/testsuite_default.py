@@ -309,6 +309,7 @@ class LibvirtTests(LibvirtTestsBase):  # type: ignore
         wait_for_ssh(controllerVM)
 
         controllerVM.succeed("virsh shutdown testvm")
+        controllerVM.wait_until_succeeds("virsh domstate testvm | grep 'shut off'")
         controllerVM.succeed("systemctl restart virtchd")
 
         controllerVM.succeed("virsh list --all | grep 'shut off'")
