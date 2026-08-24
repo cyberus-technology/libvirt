@@ -490,6 +490,11 @@ in
     package = pkgs.libvirt;
   };
 
+  # The test VMs read the multi-GiB guest images from the host Nix store,
+  # which is mounted via 9p. The NixOS default msize of 16 KiB caps that
+  # at ~65 MB/s, 512 KiB reaches ~1.4 GB/s.
+  virtualisation.msize = 512 * 1024;
+
   systemd.services.virtstoraged.path = [ pkgs.mount ];
 
   systemd.services.virtchd.wantedBy = [ "multi-user.target" ];
