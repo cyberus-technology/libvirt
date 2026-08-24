@@ -477,6 +477,7 @@ class LibvirtTests(LibvirtTestsBase):  # type: ignore
         methods to shutdown the VM:
             * VM shuts down from the inside via "shutdown" command
             * virsh shutdown
+            * virsh shutdown while the guest ignores the power button
             * virsh destroy
         """
 
@@ -505,8 +506,28 @@ class LibvirtTests(LibvirtTestsBase):  # type: ignore
         wait_until_succeed(is_shutoff)
         controllerVM.fail("find /run/libvirt/ch -name *.xml | grep .")
 
+        # Ensure VM is shut off, by failing to ssh into it.
+        with self.assertRaises(RuntimeError):
+            ssh(controllerVM, "true")
+
         controllerVM.succeed("virsh start testvm")
         wait_for_ssh(controllerVM)
+
+        # Ensure the next power button event is ignored.
+        ssh(controllerVM, "mkdir -p /run/systemd/logind.conf.d")
+        content = "[Login]\nHandlePowerKey=ignore\n"
+        ssh(
+            controllerVM,
+            shlex.quote(
+                f"printf '{content}' > /run/systemd/logind.conf.d/ignore-power-key.conf"
+            ),
+        )
+        ssh(controllerVM, "systemctl restart systemd-logind")
+
+        controllerVM.succeed("virsh shutdown testvm")
+        time.sleep(5)
+        assert_domain_domstate(controllerVM, "running")
+        ssh(controllerVM, "true")
 
         controllerVM.succeed("virsh destroy testvm")
         wait_until_succeed(is_shutoff)
