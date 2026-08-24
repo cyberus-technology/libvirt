@@ -106,8 +106,8 @@
           libvirt = pkgs.libvirt.overrideAttrs (old: {
             inherit name src;
             version = if matches != null then version else fallback;
-            doInstallCheck = false;
-            doCheck = false;
+            doInstallCheck = true;
+            doCheck = true;
             patches = [
               ./patches/libvirt/0001-meson-patch-in-an-install-prefix-for-building-on-nix.patch
               ./patches/libvirt/0002-substitute-zfs-and-zpool-commands.patch
@@ -153,8 +153,15 @@
           cloud-hypervisor-prev
           edk2-src
           ;
-        libvirt = libvirtPackageSet.libvirt-debugoptimized;
-        libvirt-prev = libvirtPrevPackageSet.libvirt-debugoptimized;
+        # Deactivate tests (doCheck) for quicker builds during local development.
+        libvirt = libvirtPackageSet.libvirt-debugoptimized.overrideAttrs {
+          doCheck = false;
+          doInstallCheck = false;
+        };
+        libvirt-prev = libvirtPrevPackageSet.libvirt-debugoptimized.overrideAttrs {
+          doCheck = false;
+          doInstallCheck = false;
+        };
       };
 
       libvirtPackages = libvirtPackageSet // {
