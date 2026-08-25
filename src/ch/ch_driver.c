@@ -1112,6 +1112,8 @@ chDomainSaveRestoreAdditionalValidation(virCHDriver *driver,
  * using CH's vmm.snapshot API. CH creates multiple files for config, memory,
  * device state into @to_dir.
  *
+ * The libvirt XML file is written last: its existence marks the save as complete.
+ *
  * Returns 0 on success or -1 in case of error
  */
 static int
@@ -1153,7 +1155,22 @@ chDoDomainSave(virCHDriver *driver,
         goto end;
     }
 
+    /* The XML file's presence marks the save as complete: drop any
+     * leftover from an earlier save and only recreate it after the
+     * snapshot succeeded. */
     to = g_strdup_printf("%s/%s", to_dir, CH_SAVE_XML);
+    if (unlink(to) < 0 && errno != ENOENT) {
+        virReportSystemError(errno,
+                             _("Failed to remove stale domain save xml file '%1$s'"),
+                             to);
+        goto end;
+    }
+
+    if (virCHMonitorSaveVM(priv->monitor, to_dir) < 0) {
+        virReportError(VIR_ERR_INTERNAL_ERROR, "%s", _("Failed to save domain"));
+        goto end;
+    }
+
     if ((fd = virFileOpenAs(to, O_CREAT|O_TRUNC|O_WRONLY, S_IRUSR|S_IWUSR,
                             cfg->user, cfg->group, 0)) < 0) {
         virReportSystemError(-fd,
@@ -1180,11 +1197,6 @@ chDoDomainSave(virCHDriver *driver,
         goto end;
     }
 
-    if (virCHMonitorSaveVM(priv->monitor, to_dir) < 0) {
-        virReportError(VIR_ERR_INTERNAL_ERROR, "%s", _("Failed to save domain"));
-        goto end;
-    }
-
     if (virCHProcessStop(driver, vm, VIR_DOMAIN_SHUTOFF_SAVED) < 0 ) {
         virReportError(VIR_ERR_INTERNAL_ERROR, "%s",
                 _("failed to stop CH process"));
@@ -1194,6 +1206,10 @@ chDoDomainSave(virCHDriver *driver,
     ret = 0;
 
  end:
+    if (ret < 0 && to) {
+        /* Remove the marker on error, as the marker indicates a successful snapshot. */
+        ignore_value(unlink(to));
+    }
     return ret;
 }
 
