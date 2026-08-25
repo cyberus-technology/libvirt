@@ -53,5 +53,10 @@ typedef enum {
 
 VIR_ENUM_DECL(virCHEvent);
 
+void virCHDomainBlockJobEmitEvents(virCHDriver *driver,
+                                   virDomainObj *vm,
+                                   virDomainDiskDef *disk,
+                                   virConnectDomainEventBlockJobStatus status);
+
 int virCHStartEventHandler(virCHMonitor *mon);
 void virCHStopEventHandler(virCHMonitor *mon);

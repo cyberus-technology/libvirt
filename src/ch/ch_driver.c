@@ -26,6 +26,7 @@
 #include "ch_conf.h"
 #include "ch_domain.h"
 #include "ch_driver.h"
+#include "ch_events.h"
 #include "ch_migration_cookie.h"
 #include "ch_monitor.h"
 #include "ch_pci_addr.h"
@@ -6178,6 +6179,8 @@ chDomainBlockJobAbort(virDomainPtr dom,
         if (virDomainObjSave(vm, driver->xmlopt, cfg->stateDir) < 0)
             DBG("Failed to save status on vm %s", vm->def->name);
 
+        virCHDomainBlockJobEmitEvents(driver, vm, disk,
+                                      VIR_DOMAIN_BLOCK_JOB_CANCELED);
         goto endjob;
     }
 
@@ -6199,6 +6202,9 @@ chDomainBlockJobAbort(virDomainPtr dom,
     if (vm->newDef &&
         virDomainDefSave(vm->newDef, driver->xmlopt, cfg->configDir) < 0)
         DBG("Failed to save config of vm %s", vm->def->name);
+
+    virCHDomainBlockJobEmitEvents(driver, vm, disk,
+                                  VIR_DOMAIN_BLOCK_JOB_COMPLETED);
 
  endjob:
     virDomainObjEndJob(vm);

@@ -34,6 +34,8 @@
 #define CH_EVENT_POLL_TIMEOUT_MS 1000
 #define VIR_FROM_THIS VIR_FROM_CH
 
+#include "conf/domain_event.h"
+
 VIR_LOG_INIT("ch.ch_events");
 
 VIR_ENUM_IMPL(virCHEvent,
@@ -57,6 +59,29 @@ VIR_ENUM_IMPL(virCHEvent,
               "vm:snapshotted",
               "vm:snapshotting",
 );
+
+void
+virCHDomainBlockJobEmitEvents(virCHDriver *driver,
+                              virDomainObj *vm,
+                              virDomainDiskDef *disk,
+                              virConnectDomainEventBlockJobStatus status)
+{
+    virObjectEvent *event = NULL;
+    virObjectEvent *event2 = NULL;
+
+    if (virStorageSourceIsLocalStorage(disk->src) &&
+        !virStorageSourceIsEmpty(disk->src)) {
+        event = virDomainEventBlockJobNewFromObj(vm, virDomainDiskGetSource(disk),
+                                                 VIR_DOMAIN_BLOCK_JOB_TYPE_COPY,
+                                                 status);
+        virObjectEventStateQueue(driver->domainEventState, event);
+    }
+
+    event2 = virDomainEventBlockJob2NewFromObj(vm, disk->dst,
+                                               VIR_DOMAIN_BLOCK_JOB_TYPE_COPY,
+                                               status);
+    virObjectEventStateQueue(driver->domainEventState, event2);
+}
 
 static int
 virCHEventStopProcess(virDomainObj *vm,
