@@ -1436,6 +1436,51 @@ class LibvirtTests(LibvirtTestsBase):  # type: ignore
             self, controllerVM, context="after externally-triggered guest reboot"
         )
 
+    def test_reboot_during_write(self):
+        """
+        Tests filesystem consistency after a graceful shutdown during a write.
+
+        Shutting down and restarting the domain must not corrupt the filesystem
+        or remove the partially written file.
+        """
+
+        controllerVM.succeed("virsh define /etc/domain-chv.xml")
+        controllerVM.succeed("qemu-img create -f raw /tmp/test-disk.img 2G")
+        controllerVM.succeed(
+            "virsh attach-disk --domain testvm --target vdb --persistent "
+            "--source /tmp/test-disk.img --subdriver raw"
+        )
+
+        controllerVM.succeed("virsh start testvm")
+        wait_for_ssh(controllerVM)
+
+        ssh(controllerVM, "mkfs.ext4 -F /dev/vdb")
+        ssh(controllerVM, "mount /dev/vdb /mnt")
+
+        ssh(
+            controllerVM,
+            "screen -dmS long-write dd if=/dev/urandom of=/mnt/test bs=1M count=1000",
+        )
+        # Wait until dd has written data and is still running.
+        ssh(
+            controllerVM,
+            shlex.quote(
+                "until test -s /mnt/test && pgrep -x dd >/dev/null; do sleep 0.1; done"
+            ),
+        )
+
+        controllerVM.succeed("virsh shutdown testvm")
+        controllerVM.wait_until_succeeds("virsh domstate testvm | grep 'shut off'")
+        controllerVM.succeed("virsh start testvm")
+        wait_for_ssh(controllerVM)
+
+        print("fsck.ext4 -fy /dev/vdb:")
+        print(ssh(controllerVM, "fsck.ext4 -fy /dev/vdb"))
+
+        ssh(controllerVM, "mount /dev/vdb /mnt")
+        print("ls -lh /mnt/test:")
+        print(ssh(controllerVM, "ls -lh /mnt/test"))
+
     def test_raw_image_is_properly_attached(self):
         """
         Attaches a disk once with "file_type=raw" and once without. If the file
@@ -1688,6 +1733,7 @@ def suite():
         LibvirtTests.test_numa_topology,
         LibvirtTests.test_pause_resume_during_boot,
         LibvirtTests.test_raw_image_is_properly_attached,
+        LibvirtTests.test_reboot_during_write,
         LibvirtTests.test_reboot_externallytriggered,
         LibvirtTests.test_reboot_guestinduced,
         LibvirtTests.test_save_restore_during_boot,
