@@ -16,7 +16,6 @@ NETWORK_TIMEOUT="60"
 CI_JOB_ID=$1
 CI_PROJECT_NAME=$2
 TAPDEV=$3
-CHV_VERSION="${4:-current}"
 
 # please look into helper_functions.sh
 VM_IP=$(get_vm_ip_address $TAPDEV)
@@ -103,18 +102,10 @@ ssh -F ~/.ssh/config ${HOST2} "ps axu | grep tmp-${CI_JOB_ID}"
 
 # send vm
 logging "Run ch-remote send-migration on host: ${HOST1}"
-if [ "$CHV_VERSION" == "v51" ]; then
-  # use old chv v51 syntax
-  start_sync ssh -F ~/.ssh/config ${HOST1} \
-    "/home/benchmark/tmp-${CI_JOB_ID}/${CI_PROJECT_NAME}/result/bin/ch-remote \
-    --api-socket \
-    /tmp/chv.${CI_JOB_ID}.sock send-migration tcp:172.16.0.82:${VMM_PORT}" || collect_logs_exit_error
-else
-  start_sync ssh -F ~/.ssh/config ${HOST1} \
-    "/home/benchmark/tmp-${CI_JOB_ID}/${CI_PROJECT_NAME}/result/bin/ch-remote \
-    --api-socket \
-    /tmp/chv.${CI_JOB_ID}.sock send-migration destination_url=tcp:172.16.0.82:${VMM_PORT},connections=8,keep_alive=true" || collect_logs_exit_error
-fi
+start_sync ssh -F ~/.ssh/config ${HOST1} \
+  "/home/benchmark/tmp-${CI_JOB_ID}/${CI_PROJECT_NAME}/result/bin/ch-remote \
+  --api-socket \
+  /tmp/chv.${CI_JOB_ID}.sock send-migration destination_url=tcp:172.16.0.82:${VMM_PORT},connections=8,keep_alive=true" || collect_logs_exit_error
 
 logging "Run ch-remote info on host: ${HOST2}"
 start_sync ssh -F ~/.ssh/config ${HOST2} \

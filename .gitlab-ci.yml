@@ -323,8 +323,7 @@ test:bm:linux:live-mig-prev-version:
         # build current version on this host
         ssh -F ~/.ssh/config ferona-sapphire-rapids "./tmp-${CI_JOB_ID}/${CI_PROJECT_NAME}/local_tests/run_chv_profile_prepare_chv.sh ${CI_JOB_ID} ${CI_PROJECT_NAME}"
         # build vm and run live migration
-        # remove the v51 paramter if the previous version of CHV >= v52
-        ./local_tests/run_chv_profile_test.sh ${CI_JOB_ID} ${CI_PROJECT_NAME} "tap16" "v51"
+        ./local_tests/run_chv_profile_test.sh ${CI_JOB_ID} ${CI_PROJECT_NAME} "tap16"
       '
 
 test:bm:windows:live-mig:
@@ -349,8 +348,8 @@ test:bm:windows:live-mig:
         ssh -F ~/.ssh/config ferona-granite-rapids "./tmp-${CI_JOB_ID}/${CI_PROJECT_NAME}/local_tests/run_chv_profile_prepare_chv.sh ${CI_JOB_ID} ${CI_PROJECT_NAME}"
         ssh -F ~/.ssh/config ferona-sapphire-rapids "./tmp-${CI_JOB_ID}/${CI_PROJECT_NAME}/local_tests/run_chv_profile_prepare_chv.sh ${CI_JOB_ID} ${CI_PROJECT_NAME}"
         # build vm and run live migration
-        # ./local_tests/run_chv_profile_test_windows.sh ${CI_JOB_ID} ${CI_PROJECT_NAME} "<tap-device-name>" "chv-version: current | previous" "multi-queue-enable"
-        ./local_tests/run_chv_profile_test_windows.sh ${CI_JOB_ID} ${CI_PROJECT_NAME} "tap10" "current" "false"
+        # ./local_tests/run_chv_profile_test_windows.sh ${CI_JOB_ID} ${CI_PROJECT_NAME} "<tap-device-name>" "multi-queue-enable"
+        ./local_tests/run_chv_profile_test_windows.sh ${CI_JOB_ID} ${CI_PROJECT_NAME} "tap10" "false"
       '
 test:bm:windows:mq:
   stage: test
@@ -374,8 +373,8 @@ test:bm:windows:mq:
         ssh -F ~/.ssh/config ferona-granite-rapids "./tmp-${CI_JOB_ID}/${CI_PROJECT_NAME}/local_tests/run_chv_profile_prepare_chv.sh ${CI_JOB_ID} ${CI_PROJECT_NAME}"
         ssh -F ~/.ssh/config ferona-sapphire-rapids "./tmp-${CI_JOB_ID}/${CI_PROJECT_NAME}/local_tests/run_chv_profile_prepare_chv.sh ${CI_JOB_ID} ${CI_PROJECT_NAME}"
         # build vm and run live migration
-        # ./local_tests/run_chv_profile_test_windows.sh ${CI_JOB_ID} ${CI_PROJECT_NAME} "<tap-device-name>" "chv-version: current | v51" "multi-queue-enable"
-        ./local_tests/run_chv_profile_test_windows.sh ${CI_JOB_ID} ${CI_PROJECT_NAME} "tap20" "current" "true"
+        # ./local_tests/run_chv_profile_test_windows.sh ${CI_JOB_ID} ${CI_PROJECT_NAME} "<tap-device-name>" "multi-queue-enable"
+        ./local_tests/run_chv_profile_test_windows.sh ${CI_JOB_ID} ${CI_PROJECT_NAME} "tap20" "true"
       '
 
 test:bm:windows:live-mig-prev-version:
@@ -401,8 +400,8 @@ test:bm:windows:live-mig-prev-version:
         # build current version on this host
         ssh -F ~/.ssh/config ferona-sapphire-rapids "./tmp-${CI_JOB_ID}/${CI_PROJECT_NAME}/local_tests/run_chv_profile_prepare_chv.sh ${CI_JOB_ID} ${CI_PROJECT_NAME}"
         # build vm and run live migration
-        # ./local_tests/run_chv_profile_test_windows.sh ${CI_JOB_ID} ${CI_PROJECT_NAME} "<tap-device-name>" "chv-version: current | v51" "multi-queue-enable"
-        ./local_tests/run_chv_profile_test_windows.sh ${CI_JOB_ID} ${CI_PROJECT_NAME} "tap11" "v51" "false"
+        # ./local_tests/run_chv_profile_test_windows.sh ${CI_JOB_ID} ${CI_PROJECT_NAME} "<tap-device-name>" "multi-queue-enable"
+        ./local_tests/run_chv_profile_test_windows.sh ${CI_JOB_ID} ${CI_PROJECT_NAME} "tap11" "false"
       '
 
 # this post job should always run
