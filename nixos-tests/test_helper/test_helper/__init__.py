@@ -42,17 +42,8 @@ from .test_helper import (
     wait_until_succeed,
 )
 
-from .msrs import (
-    FORBIDDEN_ARCHITECTURAL_MSRS,
-    FORBIDDEN_NON_ARCHITECTURAL_MSRS,
-    BENIGN_FORBIDDEN_MSRS,
-)
-
 __all__ = [
-    "BENIGN_FORBIDDEN_MSRS",
     "CommandGuard",
-    "FORBIDDEN_ARCHITECTURAL_MSRS",
-    "FORBIDDEN_NON_ARCHITECTURAL_MSRS",
     "LibvirtTestsBase",
     "MAX_EXPECTED_WAIT_SEC",
     "MigrationThrottleGuard",
