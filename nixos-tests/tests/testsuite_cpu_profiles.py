@@ -47,7 +47,7 @@ class LibvirtTests(LibvirtTestsBase):  # type: ignore
 
     def test_live_migration_with_cpu_profile(self):
         """
-        Check if the live migration works when the skylake CPU profile is used.
+        Check if the live migration works when the cascade-lake CPU profile is used.
         The nixos test should make sure that controllerVM and computeVM use
         different CPU generations, to really test we are able to migrate across
         CPU generations.
@@ -60,7 +60,7 @@ class LibvirtTests(LibvirtTestsBase):  # type: ignore
         print("Note: This test can only run on Intel hardware!")
 
         def test_cycle(src: QemuMachine, dst: QemuMachine):
-            src.succeed("virsh define /etc/domain-chv-cpu-skylake.xml")
+            src.succeed("virsh define /etc/domain-chv-cpu-cascade-lake.xml")
             src.succeed("virsh start testvm")
             wait_for_ssh(src)
 

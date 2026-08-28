@@ -1272,7 +1272,7 @@ class LibvirtTests(LibvirtTestsBase):  # type: ignore
     def test_list_cpu_models(self):
         """
         This tests checks that the cpu-models API call is implemented and
-        returns at least a skylake and a sapphire-rapids model.
+        returns at least a cascade-lake and a sapphire-rapids model.
         Further, we check that the domain capabilities API call returns the
         expected CPU profile as usable.
         Both is required to be able to use the specific CPU profile.
@@ -1282,7 +1282,7 @@ class LibvirtTests(LibvirtTestsBase):  # type: ignore
         used in the current environment.
         """
         expected_cpu_models = [
-            "skylake",
+            "cascade-lake",
             "sapphire-rapids",
         ]
 

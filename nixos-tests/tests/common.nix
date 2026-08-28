@@ -846,10 +846,10 @@ in
             })}";
           };
         };
-        "/etc/domain-chv-cpu-skylake.xml" = {
+        "/etc/domain-chv-cpu-cascade-lake.xml" = {
           "C+" = {
-            argument = "${pkgs.writeText "cirros-skylake.xml" (virsh_ch_xml {
-              cpuModel = "skylake";
+            argument = "${pkgs.writeText "cirros-cascade-lake.xml" (virsh_ch_xml {
+              cpuModel = "cascade-lake";
             })}";
           };
         };
