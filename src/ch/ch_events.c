@@ -32,6 +32,7 @@
 #include "virstring.h"
 
 #define CH_EVENT_POLL_TIMEOUT_MS 1000
+#define VIR_FROM_THIS VIR_FROM_CH
 
 VIR_LOG_INIT("ch.ch_events");
 
@@ -423,6 +424,7 @@ virCHReadProcessEvents(virCHMonitor *mon)
     size_t max_sz = CH_EVENT_BUFFER_SZ - 1;
     char *buf = mon->event_buffer.buffer;
     virDomainObj *vm = mon->vm;
+    virCHDriver *driver = CH_DOMAIN_PRIVATE(vm)->driver;
     bool incomplete = false;
     size_t sz = 0;
     int poll_ret = 0;
@@ -487,9 +489,22 @@ virCHReadProcessEvents(virCHMonitor *mon)
             incomplete = false;
         sz = mon->event_buffer.buf_fill_sz;
 
-    } while (virDomainObjIsActive(vm) && (sz < max_sz) && incomplete);
+    } while (virDomainObjIsActive(vm) &&
+             g_atomic_int_get(&mon->event_handler_stop) == 0 &&
+             g_atomic_int_get(&driver->shuttingDown) == 0 &&
+             (sz < max_sz) && incomplete);
 
     return 0;
+}
+
+static void
+virCHEventHandlerThreadFinished(virCHDriver *driver)
+{
+    VIR_LOCK_GUARD lock = virLockGuardLock(&driver->lock);
+
+    driver->eventHandlerThreads--;
+    if (driver->eventHandlerThreads == 0)
+        virCondBroadcast(&driver->eventHandlerCond);
 }
 
 static void
@@ -497,16 +512,19 @@ virCHEventHandlerLoop(void *data)
 {
     virCHMonitor *mon = data;
     virDomainObj *vm = NULL;
+    virCHDriver *driver;
 
     /* Obtain a vm reference */
     vm = virObjectRef(mon->vm);
+    driver = CH_DOMAIN_PRIVATE(vm)->driver;
 
     VIR_DEBUG("%s: Event handler loop thread starting", vm->def->name);
 
     mon->event_buffer.buffer = g_new0(char, CH_EVENT_BUFFER_SZ);
     mon->event_buffer.buf_fill_sz = 0;
 
-    while (g_atomic_int_get(&mon->event_handler_stop) == 0) {
+    while (g_atomic_int_get(&mon->event_handler_stop) == 0 &&
+           g_atomic_int_get(&driver->shuttingDown) == 0) {
         VIR_DEBUG("%s: Reading events from event monitor file", vm->def->name);
         if (virCHReadProcessEvents(mon) < 0) {
             virCHStopEventHandler(mon);
@@ -515,6 +533,7 @@ virCHEventHandlerLoop(void *data)
 
     g_clear_pointer(&mon->event_buffer.buffer, g_free);
     VIR_DEBUG("%s: Event handler loop thread exiting", vm->def->name);
+    virCHEventHandlerThreadFinished(driver);
     virObjectUnref(vm);
     virObjectUnref(mon);
     return;
@@ -524,7 +543,21 @@ int
 virCHStartEventHandler(virCHMonitor *mon)
 {
     g_autofree char *name = NULL;
+    virCHDriver *driver = CH_DOMAIN_PRIVATE(mon->vm)->driver;
+
     name = g_strdup_printf("ch-evt-%d", mon->vm->pid);
+
+    g_atomic_int_set(&mon->event_handler_stop, 0);
+
+    virMutexLock(&driver->lock);
+    if (g_atomic_int_get(&driver->shuttingDown) != 0) {
+        virMutexUnlock(&driver->lock);
+        virReportError(VIR_ERR_OPERATION_INVALID, "%s",
+                       _("cannot start event handler while driver is shutting down"));
+        return -1;
+    }
+    driver->eventHandlerThreads++;
+    virMutexUnlock(&driver->lock);
 
     virObjectRef(mon);
     if (virThreadCreateFull(&mon->event_handler_thread,
@@ -534,10 +567,10 @@ virCHStartEventHandler(virCHMonitor *mon)
                             false,
                             mon) < 0) {
         virObjectUnref(mon);
+        virCHEventHandlerThreadFinished(driver);
         return -1;
     }
 
-    g_atomic_int_set(&mon->event_handler_stop, 0);
     return 0;
 }
 

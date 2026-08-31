@@ -63,6 +63,10 @@ G_DEFINE_AUTOPTR_CLEANUP_FUNC(virCHDriverConfig, virObjectUnref);
 struct _virCHDriver
 {
     virMutex lock;
+    virCond eventHandlerCond;
+
+    size_t eventHandlerThreads;
+    int shuttingDown;
 
     bool privileged;
 

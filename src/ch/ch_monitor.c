@@ -1323,6 +1323,9 @@ static void virCHMonitorDispose(void *opaque)
     virCHMonitor *mon = opaque;
 
     VIR_DEBUG("mon=%p", mon);
+    VIR_FORCE_CLOSE(mon->eventmonitorfd);
+    g_clear_pointer(&mon->socketpath, g_free);
+    g_clear_pointer(&mon->eventmonitorpath, g_free);
     virCHMonitorThreadInfoFree(mon);
     virObjectUnref(mon->vm);
 }

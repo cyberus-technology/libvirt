@@ -68,6 +68,8 @@ VIR_LOG_INIT("ch.ch_driver");
 
 virCHDriver *ch_driver = NULL;
 
+static int chDomainObjUnrefMonitor(virDomainObj *vm, void *opaque);
+
 /**
  * Cloud Hypervisor does not yet support to list all available CPU profiles. We
  * maintain a hardcoded list here for now.
@@ -1822,7 +1824,11 @@ static int chStateCleanup(void)
     if (ch_driver == NULL)
         return -1;
 
-    /* Stop the event worker threads first; they reference the driver. */
+    if (ch_driver->domains) {
+        virDomainObjListForEach(ch_driver->domains, false,
+                                chDomainObjUnrefMonitor, NULL);
+    }
+
     virThreadPoolFree(ch_driver->workerPool);
     virBitmapFree(ch_driver->chCaps);
     virSysinfoDefFree(ch_driver->hostsysinfo);
@@ -1834,6 +1840,7 @@ static int chStateCleanup(void)
     virObjectUnref(ch_driver->domains);
     virObjectUnref(ch_driver->hostdevMgr);
     virObjectUnref(ch_driver->domainEventState);
+    virCondDestroy(&ch_driver->eventHandlerCond);
     virMutexDestroy(&ch_driver->lock);
     g_clear_pointer(&ch_driver, g_free);
 
@@ -1957,6 +1964,11 @@ chStateInitialize(bool privileged,
     ch_driver = g_new0(virCHDriver, 1);
 
     if (virMutexInit(&ch_driver->lock) < 0) {
+        g_free(ch_driver);
+        return VIR_DRV_STATE_INIT_ERROR;
+    }
+    if (virCondInit(&ch_driver->eventHandlerCond) < 0) {
+        virMutexDestroy(&ch_driver->lock);
         g_free(ch_driver);
         return VIR_DRV_STATE_INIT_ERROR;
     }
@@ -5207,6 +5219,18 @@ chStateStop(void)
 }
 
 static int
+chDomainObjUnrefMonitor(virDomainObj *vm,
+                        void *opaque G_GNUC_UNUSED)
+{
+    virCHDomainObjPrivate *priv = CH_DOMAIN_PRIVATE(vm);
+    VIR_LOCK_GUARD lock = virObjectLockGuard(vm);
+
+    g_clear_pointer(&priv->monitor, virObjectUnref);
+
+    return 0;
+}
+
+static int
 chStateShutdownPrepare(void)
 {
     DBG("Shutdown libvirt daemon\n");
@@ -5215,7 +5239,11 @@ chStateShutdownPrepare(void)
         return 0;
     }
 
-    virThreadPoolStop(ch_driver->workerPool);
+    g_atomic_int_set(&ch_driver->shuttingDown, 1);
+
+    if (ch_driver->workerPool)
+        virThreadPoolStop(ch_driver->workerPool);
+
     return 0;
 }
 
@@ -5228,31 +5256,15 @@ chStateShutdownWait(void)
         VIR_WARN("No ch_driver object yet. Early return.");
         return 0;
     }
-    /* virDomainObjListForEach(ch_driver->domains, false, */
-                            /* qemuDomainObjStopWorkerIter, NULL); */
-    virThreadPoolDrain(ch_driver->workerPool);
-    virThreadPoolFree(ch_driver->workerPool);
+    if (ch_driver->workerPool)
+        virThreadPoolDrain(ch_driver->workerPool);
 
-    virBitmapFree(ch_driver->chCaps);
+    virMutexLock(&ch_driver->lock);
+    while (ch_driver->eventHandlerThreads > 0)
+        ignore_value(virCondWait(&ch_driver->eventHandlerCond,
+                                 &ch_driver->lock));
+    virMutexUnlock(&ch_driver->lock);
 
-    virSysinfoDefFree(ch_driver->hostsysinfo);
-
-    virPortAllocatorRangeFree(ch_driver->migrationPorts);
-
-    virInhibitorRelease(ch_driver->inhibitor);
-    virInhibitorFree(ch_driver->inhibitor);
-
-    virObjectUnref(ch_driver->domainEventState);
-    virObjectUnref(ch_driver->xmlopt);
-    virObjectUnref(ch_driver->domains);
-    virObjectUnref(ch_driver->hostdevMgr);
-    virObjectUnref(ch_driver->caps);
-
-    virObjectUnref(ch_driver->config);
-
-    virMutexDestroy(&ch_driver->lock);
-
-    VIR_FREE(ch_driver);
     return 0;
 }
 
