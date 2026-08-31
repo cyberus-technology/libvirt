@@ -31,6 +31,8 @@
 #include "virlog.h"
 #include "virstring.h"
 
+#define CH_EVENT_POLL_TIMEOUT_MS 1000
+
 VIR_LOG_INIT("ch.ch_events");
 
 VIR_ENUM_IMPL(virCHEvent,
@@ -433,7 +435,7 @@ virCHReadProcessEvents(virCHMonitor *mon)
     do {
         ssize_t ret;
 
-        poll_ret = poll(fds, 1, G_USEC_PER_SEC);
+        poll_ret = poll(fds, 1, CH_EVENT_POLL_TIMEOUT_MS);
 
         if (poll_ret < 0) {
             VIR_ERROR(_("%1$s: Failed to poll monitor fd!: %2$s"),
