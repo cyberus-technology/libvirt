@@ -141,7 +141,7 @@ let
 
               [
                 "-cpu"
-                "Cascadelake-Server-v5,+vmx,+stibp,+md-clear,+flush-l1d,+gds-no,+vmx-tsc-scaling"
+                "Cascadelake-Server-v5,+vmx,+stibp,+md-clear,+flush-l1d,+gds-no,+vmx-tsc-scaling,+sbdr-ssdp-no,+psdp-no,+fb-clear,+rrsba-ctrl"
               ];
           }
         )
@@ -154,7 +154,7 @@ let
 
               [
                 "-cpu"
-                "Icelake-Server-v7,+vmx,+stibp,+md-clear,+flush-l1d,+gds-no,+vmx-tsc-scaling"
+                "Icelake-Server-v7,+vmx,+stibp,+md-clear,+flush-l1d,+gds-no,+vmx-tsc-scaling,+sbdr-ssdp-no,+psdp-no,+fb-clear,+rrsba-ctrl"
               ];
           }
         )
