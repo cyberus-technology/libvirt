@@ -23,6 +23,7 @@ try:
         number_of_network_devices,
         parse_devices_from_dom_def,
         pci_devices_by_bdf,
+        restart_virtchd,
         setup_nested_cirros,
         ssh,
         start_net_capture,
@@ -47,6 +48,7 @@ except Exception:
         number_of_network_devices,
         parse_devices_from_dom_def,
         pci_devices_by_bdf,
+        restart_virtchd,
         setup_nested_cirros,
         ssh,
         start_net_capture,
@@ -294,6 +296,31 @@ class LibvirtTests(LibvirtTestsBase):  # type: ignore
             controllerVM,
             "virsh detach-device testvm /etc/new_interface_type_bridge.xml",
         )
+
+    def test_event_handler_teardown_on_virtchd_restart(self):
+        """
+        Restarting virtchd with an idle event handler must complete promptly,
+        and the reattached handler must continue to deliver domain events.
+        """
+        controllerVM.succeed("virsh define /etc/domain-chv.xml")
+        controllerVM.succeed("virsh start testvm")
+        wait_for_ssh(controllerVM)
+
+        restart_virtchd(controllerVM)
+        assert_domain_domstate(controllerVM, "running")
+
+        with capture_libvirt_events(controllerVM) as events:
+            controllerVM.succeed("virsh suspend testvm")
+            assert_domain_domstate(controllerVM, "paused")
+            events.wait_for_event(
+                "event 'lifecycle' for domain 'testvm': Suspended Paused",
+            )
+
+            controllerVM.succeed("virsh resume testvm")
+            assert_domain_domstate(controllerVM, "running")
+            events.wait_for_event(
+                "event 'lifecycle' for domain 'testvm': Resumed Unpaused",
+            )
 
     def test_libvirt_restart(self):
         """
@@ -1769,6 +1796,7 @@ def suite():
         LibvirtTests.test_disk_resize_qcow2,
         LibvirtTests.test_disk_resize_raw,
         LibvirtTests.test_domain_with_many_devices_without_explicit_bdf,
+        LibvirtTests.test_event_handler_teardown_on_virtchd_restart,
         LibvirtTests.test_hotplug,
         LibvirtTests.test_libvirt_default_net_prefix_triggers_desynchronizing,
         LibvirtTests.test_libvirt_event_stop_failed,
