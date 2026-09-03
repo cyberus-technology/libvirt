@@ -3,6 +3,7 @@
 {
   nixpkgs,
   chv-ovmf,
+  tdxGuest ? false,
 }:
 
 nixpkgs.lib.nixosSystem {
@@ -37,9 +38,14 @@ nixpkgs.lib.nixosSystem {
         boot.initrd.kernelModules = [
           "virtio_net"
         ];
+        # The installer image uses `linuxPackages_latest`. Cloud Hypervisor's
+        # TDX support needs Linux >= 6.17. Pin 6.18, the Nixpkgs default
+        # kernel, to keep the guest kernel the same across Nixpkgs updates.
+        boot.kernelPackages = lib.mkIf tdxGuest (lib.mkForce pkgs.linuxPackages_6_18);
         boot.kernelModules = [
           "msr"
-        ];
+        ]
+        ++ lib.optional tdxGuest "tdx_guest";
         boot.kernelParams = [
           "console=ttyS0"
           "earlyprintk=ttyS0"
@@ -124,6 +130,15 @@ nixpkgs.lib.nixosSystem {
               matchConfig.MACAddress = "52:54:00:e5:b8:01";
               address = [ "192.168.1.2/24" ];
               networkConfig.ConfigureWithoutCarrier = true;
+              linkConfig.RequiredForOnline = "no";
+            };
+            # The bare-metal TDX suite expects the guest at 192.168.100.70.
+            # The host's DHCP reservation is defined here:
+            # https://gitlab.cyberus-technology.de/cyberus/cloud/hardware/-/blob/2a009060cd1c65c98402f945060e220738e0357e/modules/host-services.nix#L45
+            # Keep in sync with testsuite_tdx.py.
+            tdx = lib.mkIf tdxGuest {
+              matchConfig.MACAddress = "be:e3:00:00:00:01";
+              networkConfig.DHCP = "ipv4";
               linkConfig.RequiredForOnline = "no";
             };
             eth1338 = {

@@ -82,12 +82,17 @@ let
     })
   ];
 
-  nixos-image =
+  mkNixosImage =
+    {
+      tdxGuest ? false,
+    }:
     let
-      nixos-system = pkgs.callPackage ./images/nixos-image.nix { inherit nixpkgs chv-ovmf; };
+      nixos-system = pkgs.callPackage ./images/nixos-image.nix {
+        inherit nixpkgs chv-ovmf tdxGuest;
+      };
       iso = nixos-system.config.system.build.isoImage;
     in
-    pkgs.runCommand "nixos.iso"
+    pkgs.runCommand "nixos${if tdxGuest then "-tdx" else ""}.iso"
       {
         nativeBuildInputs = [ pkgs.coreutils ];
       }
@@ -96,6 +101,9 @@ let
         # deterministic.
         cp ${iso}/iso/*.iso $out
       '';
+
+  nixos-image = mkNixosImage { };
+  nixos-tdx-image = mkNixosImage { tdxGuest = true; };
 
   checks."x86_64-linux" =
     let
@@ -217,7 +225,7 @@ let
       libvirt
       libvirt-prev
       ;
-    inherit nixos-image;
+    inherit nixos-image nixos-tdx-image;
     cloud-hypervisor-tdx = cloud-hypervisor-tdx-pkg;
     chv-ovmf = pkgs.runCommand "OVMF-CLOUHDHV.fd" { } ''
       cp ${chv-ovmf.fd}/FV/CLOUDHV.fd $out
