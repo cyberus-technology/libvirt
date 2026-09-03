@@ -3,6 +3,7 @@
   nixpkgs,
   cloud-hypervisor,
   cloud-hypervisor-prev,
+  cloud-hypervisor-tdx,
   edk2-src,
   libvirt,
   libvirt-prev,
@@ -54,6 +55,19 @@ let
       }
     )
   ];
+
+  tdxPkg = cloud-hypervisor-tdx.packages."x86_64-linux".default;
+
+  # Add `tdx` to the `--features kvm` flag hardcoded in chv.nix. The assert catches a changed input.
+  cloud-hypervisor-tdx-pkg = toDebugOptimizedChv (
+    assert pkgs.lib.hasInfix "--features kvm" tdxPkg.buildPhase;
+    tdxPkg.overrideAttrs (oldAttrs: {
+      name = "cloud-hypervisor-tdx";
+      buildPhase =
+        pkgs.lib.replaceStrings [ "--features kvm" ] [ "--features kvm,tdx" ]
+          oldAttrs.buildPhase;
+    })
+  );
 
   testPkgs = pkgs.appendOverlays [
     (_: prev: {
@@ -204,6 +218,7 @@ let
       libvirt-prev
       ;
     inherit nixos-image;
+    cloud-hypervisor-tdx = cloud-hypervisor-tdx-pkg;
     chv-ovmf = pkgs.runCommand "OVMF-CLOUHDHV.fd" { } ''
       cp ${chv-ovmf.fd}/FV/CLOUDHV.fd $out
     '';

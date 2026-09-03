@@ -35,6 +35,7 @@
       edk2-src,
       cloud-hypervisor,
       cloud-hypervisor-prev,
+      cloud-hypervisor-tdx,
       libvirt-prev,
       ...
     }:
@@ -162,6 +163,7 @@
           nixpkgs
           cloud-hypervisor
           cloud-hypervisor-prev
+          cloud-hypervisor-tdx
           edk2-src
           ;
         # Deactivate tests (doCheck) for quicker builds during local development.
