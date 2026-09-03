@@ -94,6 +94,28 @@ test attributes are available. Each attribute can be run via
     `XDG_RUNTIME_DIR` (see above)
   - need to run an a CPU compatible with the CPU profile used in the respective
     test
+- `tdx`
+  - runs directly on a TDX-enabled bare-metal host
+  - starts a NixOS guest directly with Cloud Hypervisor
+  - requires a TDX-enabled guest firmware image and host TDX support
+
+### Running the bare-metal TDX suite
+
+The TDX suite does not use the nested NixOS test VMs. Run it on the target
+machine and provide the TDVF or equivalent TDX firmware image:
+
+```bash
+DBG_LOG_DIR=./logs \
+  TDX_FIRMWARE=/path/to/OVMF.inteltdx.ms.fd \
+  nix run -L .#tests.x86_64-linux.tdx.driver
+```
+
+The generated NixOS TDX guest image is used by default. `TDX_IMAGE` can override
+it. `TDX_IMAGE_TYPE` is forwarded to Cloud Hypervisor as the disk `image_type`
+and defaults to `raw`. It must be one of `raw`, `qcow2`, `vhd`, or `vhdx`. The
+runner requires TDX-enabled KVM, the persistent `tap15` interface, and the
+corresponding DHCP reservation on the host. Cloud Hypervisor is launched
+directly. The TDX test does not use a libvirt daemon or `virsh` configuration.
 
 ### Obtaining debug logs
 
