@@ -1,3 +1,4 @@
+from .local_machine import LocalMachine
 from .test_helper import (
     DOMMEMSTAT_FIELDS,
     DOMSTATS_FIELDS,
@@ -143,4 +144,5 @@ __all__ = [
     "wait_for_ssh",
     "wait_until_fail",
     "wait_until_succeed",
+    "LocalMachine",
 ]
