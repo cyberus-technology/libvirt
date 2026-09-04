@@ -235,8 +235,11 @@ let
   tests."x86_64-linux" = import (src + "/tests/default.nix") {
     inherit
       nixos-image
+      nixos-tdx-image
       chv-ovmf
+      nixos-test-driver
       ;
+    cloud-hypervisor-tdx = cloud-hypervisor-tdx-pkg;
     pkgs = testPkgs;
   };
 in
