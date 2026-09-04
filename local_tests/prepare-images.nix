@@ -3,7 +3,7 @@
 }:
 let
   ubuntu_img = pkgs.fetchurl {
-    url = "https://cloud-images.ubuntu.com/jammy/20260320/jammy-server-cloudimg-amd64.img";
+    url = "http://cloud-images-archive.ubuntu.com/releases/jammy/release-20260320/ubuntu-22.04-server-cloudimg-amd64.img";
     hash = "sha256-6oWxb4Gz9qpToSYJEtP5kfwz4OD8HXPwuMnJYkfkL9s=";
   };
 
