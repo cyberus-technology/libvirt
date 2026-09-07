@@ -25,6 +25,91 @@ VIRTCHD_RESTART_TIMEOUT_SEC = 15
 CLOUD_HYPERVISOR_EXIT_RETRIES = 50
 MAX_EXPECTED_WAIT_SEC = 60
 
+DOMSTATS_FIELDS = [
+    "cpu.time",
+    "cpu.user",
+    "cpu.system",
+    "vcpu.current",
+    "vcpu.maximum",
+    "vcpu.0.wait",
+    "block.0.allocation",
+    "block.0.capacity",
+    "block.0.physical",
+    "net.0.rx.bytes",
+    "net.0.rx.pkts",
+    "net.0.rx.errs",
+    "net.0.rx.drop",
+    "net.0.tx.bytes",
+    "net.0.tx.pkts",
+    "net.0.tx.errs",
+    "net.0.tx.drop",
+    # Following statistics are currently not offered by CH and cannot be
+    # retrieved from the host. Therefore, CH adaptions are required to support
+    # them.
+    # "block.0.rd.times",
+    # "block.0.wr.times",
+    # "block.0.fl.reqs",
+    # "block.0.fl.times",
+]
+
+NET_HOST_COUNTERS = {
+    # A managed TAP sees traffic from the host side, while libvirt reports
+    # interface statistics from the guest side. Thus host TX is guest RX and
+    # host RX is guest TX, matching virNetDevTapInterfaceStats(..., true).
+    "net.0.rx.bytes": "tx_bytes",
+    "net.0.rx.pkts": "tx_packets",
+    "net.0.rx.errs": "tx_errors",
+    "net.0.rx.drop": "tx_dropped",
+    "net.0.tx.bytes": "rx_bytes",
+    "net.0.tx.pkts": "rx_packets",
+    "net.0.tx.errs": "rx_errors",
+    "net.0.tx.drop": "rx_dropped",
+}
+
+VALUE_CPU_FIELDS = [
+    "cpu.time",
+    "cpu.user",
+    "cpu.system",
+    "vcpu.current",
+    "vcpu.maximum",
+    "vcpu.0.wait",
+]
+
+VALUE_BLOCK_FIELDS = [
+    "block.0.allocation",
+    "block.0.capacity",
+    "block.0.physical",
+]
+
+VALUE_INTERFACE_FIELDS = [
+    "net.0.rx.bytes",
+    "net.0.rx.pkts",
+    "net.0.rx.errs",
+    "net.0.rx.drop",
+    "net.0.tx.bytes",
+    "net.0.tx.pkts",
+    "net.0.tx.errs",
+    "net.0.tx.drop",
+]
+
+VALUE_DOMMEMSTAT_FIELDS = ["actual", "rss"]
+
+DOMMEMSTAT_FIELDS = [
+    "actual",
+    "rss",
+    # The following memory statistics require a virtio-balloon device inside of
+    # the guest VM with the statistics feature enabled.
+    # "swap_in",
+    # "swap_out",
+    # "major_fault",
+    # "minor_fault",
+    # "unused",
+    # "available",
+    # "usable",
+    # "disk_caches",
+    # "last_update",
+]
+
 
 def testcase_start_marker(name: str) -> str:
     """
@@ -1560,3 +1645,219 @@ def get_attached_labeled_disks(
                 break
 
     return result
+
+
+def parse_statistics(output: str) -> dict[str, str]:
+    """Parse the key/value output shared by virsh statistics commands."""
+    values = {}
+
+    for line in output.splitlines():
+        match = re.match(r"^\s*([^=:\s]+)\s*(?:=|:)\s*(\S+)\s*$", line)
+        if match:
+            values[match.group(1)] = match.group(2)
+            continue
+
+        match = re.match(r"^\s*(\S+)\s+(\S+)\s*$", line)
+        if match:
+            values[match.group(1)] = match.group(2)
+
+    return values
+
+
+def assert_reported_unsigned_values(
+    values: dict[str, str], expected: list[str]
+) -> list[str]:
+    invalid = []
+
+    for field in expected:
+        value = values.get(field)
+        if value is None:
+            invalid.append(f"{field}: not reported")
+        elif not value.isdecimal():
+            invalid.append(f" {field}: invalid unsigned value {value!r}")
+
+    return invalid
+
+
+def get_statistics(
+    machine, command: str, expected: list[str]
+) -> tuple[dict[str, str], list[str]]:
+    """Run a virsh statistics query without aborting on an unsupported API."""
+    status, output = machine.execute(command)
+    if status == 0:
+        return parse_statistics(output), []
+
+    error = " ".join(output.split()) or f"exit status {status}"
+    return {}, [f" {field}: unavailable ({error})" for field in expected]
+
+
+def get_required_statistics(
+    machine: QemuMachine, command: str, expected: list[str]
+) -> dict[str, str]:
+    values, unavailable = get_statistics(machine, command, expected)
+    if unavailable:
+        raise RuntimeError("Could not get statistics: " + "\n".join(unavailable))
+
+    invalid = assert_reported_unsigned_values(values, expected)
+    if invalid:
+        raise RuntimeError("Could not get statistics" + "\n".join(invalid))
+
+    return values
+
+
+def get_domain_pid(machine) -> int:
+    status, output = machine.execute("virsh domid testvm")
+    pid = output.strip()
+    if status == 0 and pid.isdecimal():
+        return int(pid)
+
+    raise RuntimeError(f"Error retrieving PID: {output}")
+
+
+def get_process_statistics(machine, pid: int) -> dict[str, str]:
+    command = (
+        f'awk \'{{print "user_ticks=" $14; '
+        f'print "system_ticks=" $15; '
+        f'print "rss_pages=" $24}}\' /proc/{pid}/stat; '
+        "printf 'clock_ticks='; getconf CLK_TCK; "
+        "printf 'page_size='; getconf PAGESIZE"
+    )
+    status, output = machine.execute(command)
+    if status == 0:
+        return parse_statistics(output)
+
+    raise RuntimeError(f"Error retrieving process stats: {output}")
+
+
+def get_domain_tap_name(machine) -> str:
+    status, output = machine.execute(
+        "virsh domiflist testvm | awk 'NF && $1 != \"Interface\" && $1 !~ /^-+$/ {print $1; exit}'"
+    )
+    if status != 0:
+        raise RuntimeError(f"Error retrieving tap name: {output}")
+
+    ifname = output.strip()
+    if not ifname:
+        raise RuntimeError("No interface reported")
+
+    return ifname
+
+
+def get_host_tap_statistics(machine: QemuMachine, ifname: str) -> dict[str, str]:
+    counter_names = " ".join(NET_HOST_COUNTERS.values())
+    command = (
+        f"for counter in {counter_names}; do "
+        "printf '%s=' \"$counter\"; "
+        f'cat /sys/class/net/{shlex.quote(ifname)}/statistics/"$counter"; '
+        "done"
+    )
+    status, output = machine.execute(command)
+    if status == 0:
+        return parse_statistics(output)
+
+    raise RuntimeError(f"Error getting tap statistics from {ifname}: {output}")
+
+
+def get_vcpu_tid(machine: QemuMachine, pid: int, vcpu: int) -> int:
+    command = (
+        f"for task in /proc/{pid}/task/*; do "
+        f'if [ "$(cat "$task/comm")" = vcpu{vcpu} ]; then '
+        'basename "$task"; exit 0; fi; done; exit 1'
+    )
+    status, output = machine.execute(command)
+    tid = output.strip()
+    if status == 0 and tid.isdecimal():
+        return int(tid)
+
+    raise RuntimeError(f"Could not retrieve vcpu TID: {output}")
+
+
+def get_vcpu_wait(machine: QemuMachine, pid: int, tid: int) -> int:
+    command = (
+        "awk -F: "
+        "'/^(wait_sum|se\\.statistics\\.wait_sum|se\\.wait_sum)/ "
+        '{ gsub(/^[[:space:]]+/, "", $2); print "wait_ms=" $2; exit }\' '
+        f"/proc/{pid}/task/{tid}/sched"
+    )
+    status, output = machine.execute(command)
+    if status != 0:
+        raise RuntimeError("Could not retrieve vcpu wait")
+
+    value = parse_statistics(output).get("wait_ms")
+    if value is None:
+        # virProcessGetSchedInfo reports a neutral value when schedstats
+        # are not enabled by the host kernel.
+        return 0
+
+    return int(float(value) * 1_000_000)
+
+
+def get_vcpu_affinity(machine: QemuMachine, pid: int, tid: int) -> set[int]:
+    status, output = machine.execute(
+        f"awk '/^Cpus_allowed_list:/ {{print $2}}' /proc/{pid}/task/{tid}/status"
+    )
+    cpulist = output.strip()
+    if status != 0 or not cpulist:
+        raise RuntimeError(f"Cannot retrieve CPU affinity: {output}")
+
+    cpus = set()
+    for item in cpulist.split(","):
+        bounds = item.split("-", 1)
+        first = int(bounds[0])
+        last = int(bounds[-1])
+        cpus.update(range(first, last + 1))
+    return cpus
+
+
+def get_ch_memory_actual(machine: QemuMachine) -> int:
+    status, output = machine.execute(
+        "ch-remote --api-socket /run/libvirt/ch/testvm-socket info | jq .memory_actual_size"
+    )
+
+    if status != 0:
+        raise RuntimeError(f"Could not get CH memory: {output}")
+
+    return int(output.strip()) // 1024
+
+
+def get_disk_sizes(machine: QemuMachine) -> dict[str, int]:
+    """
+    Return the host allocation, physical size, and capacity of the raw disk
+    attached to testvm.
+
+    Allocation and physical size are independent values: allocation is based
+    on st_blocks and can be larger than st_size due to filesystem accounting.
+    """
+    status, xml = machine.execute("virsh dumpxml testvm")
+    match = re.search(
+        r"<disk\b[^>]*\bdevice=['\"]disk['\"][^>]*>.*?"
+        r"<source\b[^>]*\bfile=['\"]([^'\"]+)['\"]",
+        xml,
+        re.DOTALL,
+    )
+    if status != 0 or match is None:
+        raise RuntimeError(f"Could not get disk sizes: {xml}")
+
+    if len(match.groups()) > 1:
+        raise RuntimeError("More than one potential disk found")
+
+    status, output = machine.execute(
+        f"stat -c '%b %B %s' {shlex.quote(match.group(1))}"
+    )
+    if status != 0:
+        raise RuntimeError(f"Could not get stats from disk: {output}")
+
+    try:
+        blocks, block_size, size = (int(value) for value in output.split())
+    except ValueError as error:
+        raise RuntimeError(f"Could not parse disk stats: {output}") from error
+
+    return {
+        "allocation": blocks * block_size,
+        "physical": size,
+        "capacity": size,
+    }
+
+
+def unsigned_value_in_interval(value: str | None, before: int, after: int) -> bool:
+    return value is not None and value.isdecimal() and before <= int(value) <= after
