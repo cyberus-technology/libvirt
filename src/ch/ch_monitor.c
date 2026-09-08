@@ -564,6 +564,23 @@ virCHMonitorBuildDiskJson(virJSONValue *disks, virDomainDiskDef *diskdef)
             }
         }
 
+        if (diskdef->info.bootIndex) {
+            // CHV can only generate Open Firmware device paths for devices connected to PCI bus 0
+            // in domain 0. See CHV code for details.
+            if ((diskdef->info.type != VIR_DOMAIN_DEVICE_ADDRESS_TYPE_PCI) || (diskdef->info.addr.pci.domain != 0) || (diskdef->info.addr.pci.bus != 0)) {
+                virReportError(VIR_ERR_INVALID_ARG,
+                           _("Device '%s' must be connected to PCI bus 0 in domain 0 if using bootindex"),
+                           diskdef->info.alias);
+                return -1;
+            }
+            if (virJSONValueObjectAppendNumberUint(disk, "bootindex", diskdef->info.bootIndex) < 0) {
+                virReportError(VIR_ERR_INTERNAL_ERROR,
+                           ("Failed to add boot index to JSON for disk with alias '%s'"),
+                           diskdef->info.alias);
+                return -1;
+            }
+        }
+
         if (diskdef->src->format == VIR_STORAGE_FILE_RAW) {
             if (virJSONValueObjectAppendString(disk, "image_type", "Raw") < 0)
                 return -1;
