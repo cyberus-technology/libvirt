@@ -728,6 +728,14 @@ in
             })}";
           };
         };
+        "/etc/domain-chv-cirros-32MiB-memory.xml" = {
+          "C+" = {
+            argument = "${pkgs.writeText "domain-cirros.xml" (virsh_ch_xml {
+              image = "/var/lib/libvirt/storage-pools/nfs-share/cirros.img";
+              memoryMiB = 32;
+            })}";
+          };
+        };
         "/etc/domain-chv-cirros.xml" = {
           "C+" = {
             argument = "${pkgs.writeText "domain-cirros.xml" (virsh_ch_xml {

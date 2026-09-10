@@ -1699,6 +1699,20 @@ class LibvirtTests(LibvirtTestsBase):  # type: ignore
 
         controllerVM.succeed("virsh destroy testvm")
 
+    def test_boot_not_enough_memory_32MiB(self):
+        """
+        Boot a VM with only 32MiB of memory and check that Cloud Hypervisor
+        survives, as in the 16MiB test. Using 32MiB of memory triggers a different code path in EDK2.
+        """
+        controllerVM.succeed("virsh define /etc/domain-chv-cirros-32MiB-memory.xml")
+        controllerVM.succeed("virsh start testvm")
+
+        # Allow the firmware to run before checking that the VMM is still alive.
+        time.sleep(5)
+        controllerVM.succeed("pidof cloud-hypervisor")
+
+        controllerVM.succeed("virsh destroy testvm")
+
     def test_boot_triple_fault(self):
         """
         Trigger a triple fault using the guest's Linux reboot method and check
@@ -1817,6 +1831,7 @@ def suite():
         LibvirtTests.test_bdf_valid_device_id_with_function_id,
         LibvirtTests.test_bdfs_implicitly_assigned_same_after_recreate,
         LibvirtTests.test_boot_not_enough_memory_16MiB,
+        LibvirtTests.test_boot_not_enough_memory_32MiB,
         LibvirtTests.test_boot_triple_fault,
         LibvirtTests.test_ch_endpoint_network_announcements,
         LibvirtTests.test_cirros_image,
