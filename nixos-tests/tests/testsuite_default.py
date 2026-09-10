@@ -1699,6 +1699,36 @@ class LibvirtTests(LibvirtTestsBase):  # type: ignore
 
         controllerVM.succeed("virsh destroy testvm")
 
+    def test_boot_triple_fault(self):
+        """
+        Trigger a triple fault using the guest's Linux reboot method and check
+        that Cloud Hypervisor and libvirt survive and the guest boots again.
+        """
+        controllerVM.succeed("virsh define /etc/domain-chv.xml")
+        controllerVM.succeed("virsh start testvm")
+        wait_for_ssh(controllerVM)
+
+        boot_id = ssh(controllerVM, "cat /proc/sys/kernel/random/boot_id").strip()
+        ssh(controllerVM, shlex.quote("echo triple > /sys/kernel/reboot/type"))
+
+        try:
+            ssh(controllerVM, "systemctl reboot")
+        except RuntimeError:
+            # The reboot may close the SSH connection before it returns.
+            pass
+
+        controllerVM.wait_until_succeeds(
+            "grep -qF 'Guest likely triple-faulted' /var/log/libvirt/ch/testvm.log", 60
+        )
+        controllerVM.succeed("pidof cloud-hypervisor")
+
+        wait_for_ssh(controllerVM)
+        self.assertNotEqual(
+            ssh(controllerVM, "cat /proc/sys/kernel/random/boot_id").strip(),
+            boot_id,
+            "The guest should have rebooted after the triple fault",
+        )
+
     def test_configured_queues_exceed_253(self):
         """
         We test that exceeding the Linux kernel limit of 253 file descriptors
@@ -1787,6 +1817,7 @@ def suite():
         LibvirtTests.test_bdf_valid_device_id_with_function_id,
         LibvirtTests.test_bdfs_implicitly_assigned_same_after_recreate,
         LibvirtTests.test_boot_not_enough_memory_16MiB,
+        LibvirtTests.test_boot_triple_fault,
         LibvirtTests.test_ch_endpoint_network_announcements,
         LibvirtTests.test_cirros_image,
         LibvirtTests.test_configured_queues_exceed_253,
