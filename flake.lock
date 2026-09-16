@@ -34,16 +34,16 @@
         "rust-overlay": "rust-overlay_2"
       },
       "locked": {
-        "lastModified": 1783675682,
-        "narHash": "sha256-ADyb8Su6n+POpPMtyV8MWrCYpScwG5srfywOb5GWSpM=",
+        "lastModified": 1787650062,
+        "narHash": "sha256-5Okj9hjg1pPswS5yfBeTXOTQlWbe4Prl+AL7h6V8WKs=",
         "owner": "cyberus-technology",
         "repo": "cloud-hypervisor",
-        "rev": "72c474df53a263c9b6b82436da492a51834599d4",
+        "rev": "354fa5fbede5e09c20912afcf53a024b6c128c1a",
         "type": "github"
       },
       "original": {
         "owner": "cyberus-technology",
-        "ref": "gardenlinux-release-26-07-14",
+        "ref": "gardenlinux-release-26-08-25",
         "repo": "cloud-hypervisor",
         "type": "github"
       }
@@ -148,17 +148,17 @@
     "libvirt-prev": {
       "flake": false,
       "locked": {
-        "lastModified": 1783680809,
-        "narHash": "sha256-PlJwkcw2w1mdLIdUcIIOfi7ux9vSlyqSr0mCtYws7cs=",
-        "ref": "refs/tags/gardenlinux-release-26-07-14",
-        "rev": "cb9793576c57c8aa96b016f4dd8466ad022ee242",
-        "revCount": 54443,
+        "lastModified": 1787662093,
+        "narHash": "sha256-mZjSxLMdNI2lEX5c7O+nmeDS2eeQ5gECRnUI1M+NZhs=",
+        "ref": "refs/tags/gardenlinux-release-26-08-25",
+        "rev": "c9187c162a4ef6b0f070e5c63150856b4ce4acd7",
+        "revCount": 54482,
         "submodules": true,
         "type": "git",
         "url": "https://github.com/cyberus-technology/libvirt"
       },
       "original": {
-        "ref": "refs/tags/gardenlinux-release-26-07-14",
+        "ref": "refs/tags/gardenlinux-release-26-08-25",
         "submodules": true,
         "type": "git",
         "url": "https://github.com/cyberus-technology/libvirt"
