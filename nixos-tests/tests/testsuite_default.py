@@ -13,6 +13,7 @@ import unittest
 try:
     from ..test_helper.test_helper import (  # type: ignore
         LibvirtTestsBase,
+        PciBdf,
         assert_domain_domstate,
         assert_nested_cirros_connectivity,
         capture_libvirt_events,
@@ -39,6 +40,7 @@ except Exception:
     if not TYPE_CHECKING:
         from test_helper import (
             LibvirtTestsBase,
+            PciBdf,
             assert_domain_domstate,
             assert_nested_cirros_connectivity,
             capture_libvirt_events,
@@ -992,7 +994,7 @@ class LibvirtTests(LibvirtTestsBase):  # type: ignore
         # The net device was attached persistently, so we expect the device to be there after a recreate, but not the
         # disk. We indeed expect it to be not there anymore and leave a hole in the assigned BDFs
         devices_before = pci_devices_by_bdf(controllerVM)
-        del devices_before["00:04.0"]
+        del devices_before[PciBdf(domain=0x0, bus=0x0, device=0x4, function=0x0)]
 
         # Transiently detach the devices. Net should re-appear when the VM is recreated.
 

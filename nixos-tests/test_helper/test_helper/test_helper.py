@@ -1,6 +1,7 @@
 import ipaddress
 import json
 import os
+import re
 import shlex
 import time
 import unittest
@@ -828,7 +829,90 @@ def reset_system_image(machine: QemuMachine) -> None:
     )
 
 
-def pci_devices_by_bdf(machine: QemuMachine) -> dict[str, str]:
+class PciBdf:
+    domain: int
+    bus: int
+    device: int
+    function: int
+
+    def __init__(self, domain: int, bus: int, device: int, function: int):
+        self.domain = domain
+        self.bus = bus
+        self.device = device
+        self.function = function
+
+    @classmethod
+    def from_str(cls, input: str) -> None | Self:
+        """
+        Creates a PciBdf from a string.
+
+        :param input: str to create the PciBdf from.
+        :return: PciBdf if conversion was successful, None otherwise.
+        """
+        match = PciBdf.bdf_re().match(input)
+        if match is not None:
+            return cls(
+                domain=int(match.group("domain"), 16),
+                bus=int(match.group("bus"), 16),
+                device=int(match.group("device"), 16),
+                function=int(match.group("function"), 16),
+            )
+        else:
+            return None
+
+    @classmethod
+    def bdf_re(cls) -> Pattern[str]:
+        """
+        Creates a regular expression that can be used to match PCI BDFs.
+
+        The returned regular expression allows to get the respective parts via group names:
+        * result.group('domain'): Substring denoting the PCI domain ID
+        * result.group('bus'): Substring denoting the PCI bus ID
+        * result.group('device'): Substring denoting the PCI device ID
+        * result.group('function'): Substring denoting the PCI function ID
+
+        :return: re that can be used to match a BDF in a string
+        """
+        return re.compile(
+            "(?P<domain>[0-9a-fA-F]{4}):(?P<bus>[0-9a-fA-F]{2}):(?P<device>[0-9a-fA-F]{2}).(?P<function>[0-9a-fA-F])"
+        )
+
+    def __repr__(self):
+        return f"{self.domain:04x}:{self.bus:02x}:{self.device:02x}.{self.function:01x}"
+
+    def __eq__(self, other):
+        if not isinstance(other, PciBdf):
+            return NotImplemented
+        return (
+            (self.domain == other.bus)
+            and (self.bus == other.bus)
+            and (self.device == other.device)
+            and (self.function == other.function)
+        )
+
+    def __lt__(self, other):
+        """
+        A BDF is less than another one if its lexical order is less.
+        """
+        return str(self) < str(other)
+
+    def __hash__(self):
+        return hash(
+            (
+                self.domain,
+                self.bus,
+                self.device,
+                self.function,
+            )
+        )
+
+
+def pci_devices_by_bdf(
+    machine: QemuMachine,
+    user: str = "root",
+    password: str = "root",
+    ip: str = "192.168.1.2",
+) -> dict[PciBdf, str]:
     """
     Creates a dict of all PCI devices addressable by their BDF in the VM.
 
@@ -836,17 +920,27 @@ def pci_devices_by_bdf(machine: QemuMachine) -> dict[str, str]:
     associated value.
 
     :param machine: Host machine of the nested VM
-    :return: BDF mapped to devices, example: {'00:00.0': '8086:0d57'}
+    :param user: user for SSH login
+    :param password: password for SSH login
+    :param ip: SSH host to log into
+    :return: BDF mapped to devices, example: {PciBdf.from_str('0000:00:00.0'): '8086:0d57'}
     :rtype: dict[str, str]
     """
     lines = ssh(
-        machine,
-        "lspci -n | awk '/^[0-9a-f]{2}:[0-9a-f]{2}\\.[0-9]/{bdf=$1}{class=$3} {print bdf \",\" class}'",
+        machine=machine,
+        cmd="lspci -nD",
+        user=user,
+        password=password,
+        ip=ip,
     )
     out = {}
     for line in lines.splitlines():
-        bdf, device_class = line.split(",")
-        out[bdf] = device_class
+        # It is possible that the device vendor and class field contains
+        # revision information. The result then looks like
+        # "0000:00:01.0 0180: 1af4:1042 (rev 01)", so we discard all but
+        # the first 3 parts.
+        bdf_str, _, vendor_class = line.split(" ")[:3]
+        out[PciBdf.from_str(bdf_str)] = vendor_class
     return out
 
 

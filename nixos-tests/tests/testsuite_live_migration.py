@@ -12,6 +12,7 @@ try:
     from ..test_helper.test_helper import (  # type: ignore
         CommandGuard,
         LibvirtTestsBase,
+        PciBdf,
         MAX_EXPECTED_WAIT_SEC,
         MigrationThrottleGuard,
         VIRTIO_BLOCK_DEVICE,
@@ -43,6 +44,7 @@ except Exception:
         from test_helper import (
             CommandGuard,
             LibvirtTestsBase,
+            PciBdf,
             MAX_EXPECTED_WAIT_SEC,
             MigrationThrottleGuard,
             VIRTIO_BLOCK_DEVICE,
@@ -1070,56 +1072,60 @@ class LibvirtTests(LibvirtTestsBase):  # type: ignore
         devices = pci_devices_by_bdf(controllerVM)
         # Implicitly added fixed to 0x01
         self.assertEqual(
-            devices["00:01.0"],
+            devices[PciBdf(domain=0x0, bus=0x0, device=0x1, function=0x0)],
             VIRTIO_ENTROPY_SOURCE,
-            "device type at BDF 00:01.0 should match",
+            "device type at BDF 0000:00:01.0 should match",
         )
         # Added by XML; dynamic BDF
         self.assertEqual(
-            devices["00:02.0"],
+            devices[PciBdf(domain=0x0, bus=0x0, device=0x2, function=0x0)],
             VIRTIO_NETWORK_DEVICE,
-            "device type at BDF 00:02.0 should match",
+            "device type at BDF 0000:00:02.0 should match",
         )
         # Add through XML
         self.assertEqual(
-            devices["00:03.0"],
+            devices[PciBdf(domain=0x0, bus=0x0, device=0x3, function=0x0)],
             VIRTIO_BLOCK_DEVICE,
-            "device type at BDF 00:03.0 should match",
+            "device type at BDF 0000:00:03.0 should match",
         )
         # Defined fixed BDF in XML; Hotplugged
         self.assertEqual(
-            devices["00:04.0"],
+            devices[PciBdf(domain=0x0, bus=0x0, device=0x4, function=0x0)],
             VIRTIO_NETWORK_DEVICE,
-            "device type at BDF 00:04.0 should match",
+            "device type at BDF 0000:00:04.0 should match",
         )
         # Hotplugged by this test (vdb)
         self.assertEqual(
-            devices["00:05.0"],
+            devices[PciBdf(domain=0x0, bus=0x0, device=0x5, function=0x0)],
             VIRTIO_BLOCK_DEVICE,
-            "device type at BDF 00:05.0 should match",
+            "device type at BDF 0000:00:05.0 should match",
         )
         # Hotplugged by this test (vdc)
         self.assertEqual(
-            devices["00:06.0"],
+            devices[PciBdf(domain=0x0, bus=0x0, device=0x6, function=0x0)],
             VIRTIO_BLOCK_DEVICE,
-            "device type at BDF 00:06.0 should match",
+            "device type at BDF 0000:00:06.0 should match",
         )
 
         # Check that we can reuse the same non-statically allocated BDF
         hotplug(controllerVM, "virsh detach-disk --domain testvm --target vdb")
 
         self.assertIsNone(
-            pci_devices_by_bdf(controllerVM).get("00:05.0"),
-            "no device should exist at BDF 00:05.0",
+            pci_devices_by_bdf(controllerVM).get(
+                PciBdf(domain=0x0, bus=0x0, device=0x5, function=0x0)
+            ),
+            "no device should exist at BDF 0000:00:05.0",
         )
         hotplug(
             controllerVM,
             "virsh attach-disk --domain testvm --target vdb --source /var/lib/libvirt/storage-pools/nfs-share/vdb.img",
         )
         self.assertEqual(
-            pci_devices_by_bdf(controllerVM).get("00:05.0"),
+            pci_devices_by_bdf(controllerVM).get(
+                PciBdf(domain=0x0, bus=0x0, device=0x5, function=0x0)
+            ),
             VIRTIO_BLOCK_DEVICE,
-            "device type at BDF 00:05.0 should match",
+            "device type at BDF 0000:00:05.0 should match",
         )
 
         # We free slot 4 and 5 ...
@@ -1129,12 +1135,16 @@ class LibvirtTests(LibvirtTestsBase):  # type: ignore
         )
         hotplug(controllerVM, "virsh detach-disk --domain testvm --target vdb")
         self.assertIsNone(
-            pci_devices_by_bdf(controllerVM).get("00:04.0"),
-            "no device should exist at BDF 00:04.0",
+            pci_devices_by_bdf(controllerVM).get(
+                PciBdf(domain=0x0, bus=0x0, device=0x4, function=0x0)
+            ),
+            "no device should exist at BDF 0000:00:04.0",
         )
         self.assertIsNone(
-            pci_devices_by_bdf(controllerVM).get("00:05.0"),
-            "no device should exist at BDF 00:05.0",
+            pci_devices_by_bdf(controllerVM).get(
+                PciBdf(domain=0x0, bus=0x0, device=0x5, function=0x0)
+            ),
+            "no device should exist at BDF 0000:00:05.0",
         )
         # ...and expect the same disk that was formerly attached non-statically to slot 5 now to pop up in slot 4
         # through implicit BDF allocation.
@@ -1143,9 +1153,11 @@ class LibvirtTests(LibvirtTestsBase):  # type: ignore
             "virsh attach-disk --domain testvm --target vdb --source /var/lib/libvirt/storage-pools/nfs-share/vdb.img",
         )
         self.assertEqual(
-            pci_devices_by_bdf(controllerVM).get("00:04.0"),
+            pci_devices_by_bdf(controllerVM).get(
+                PciBdf(domain=0x0, bus=0x0, device=0x4, function=0x0)
+            ),
             VIRTIO_BLOCK_DEVICE,
-            "device type at BDF 00:04.0 should match",
+            "device type at BDF 0000:00:04.0 should match",
         )
 
         # Check that BDFs stay the same after migration
@@ -1189,35 +1201,37 @@ class LibvirtTests(LibvirtTestsBase):  # type: ignore
 
         devices = pci_devices_by_bdf(controllerVM)
         self.assertEqual(
-            devices["00:01.0"],
+            devices[PciBdf(domain=0x0, bus=0x0, device=0x1, function=0x0)],
             VIRTIO_BLOCK_DEVICE,
-            "device type at BDF 00:01.0 should match",
+            "device type at BDF 0000:00:01.0 should match",
         )
         self.assertEqual(
-            devices["00:02.0"],
+            devices[PciBdf(domain=0x0, bus=0x0, device=0x2, function=0x0)],
             VIRTIO_NETWORK_DEVICE,
-            "device type at BDF 00:02.0 should match",
+            "device type at BDF 0000:00:02.0 should match",
         )
         self.assertIsNone(
-            devices.get("00:03.0"), "no device should exist at BDF 00:03.0"
+            devices.get(PciBdf(domain=0x0, bus=0x0, device=0x3, function=0x0)),
+            "no device should exist at BDF 0000:00:03.0",
         )
         self.assertEqual(
-            devices["00:04.0"],
+            devices[PciBdf(domain=0x0, bus=0x0, device=0x4, function=0x0)],
             VIRTIO_NETWORK_DEVICE,
-            "device type at BDF 00:04.0 should match",
+            "device type at BDF 0000:00:04.0 should match",
         )
         self.assertEqual(
-            devices["00:05.0"],
+            devices[PciBdf(domain=0x0, bus=0x0, device=0x5, function=0x0)],
             VIRTIO_ENTROPY_SOURCE,
-            "device type at BDF 00:05.0 should match",
+            "device type at BDF 0000:00:05.0 should match",
         )
         self.assertIsNone(
-            devices.get("00:06.0"), "no device should exist at BDF 00:06.0"
+            devices.get(PciBdf(domain=0x0, bus=0x0, device=0x6, function=0x0)),
+            "no device should exist at BDF 0000:00:06.0",
         )
         self.assertEqual(
-            devices["00:17.0"],
+            devices[PciBdf(domain=0x0, bus=0x0, device=0x17, function=0x0)],
             VIRTIO_BLOCK_DEVICE,
-            "device type at BDF 00:17.0 should match",
+            "device type at BDF 0000:00:17.0 should match",
         )
 
         # Check that BDF is freed and can be reallocated when de-/attaching a (entirely different) device
@@ -1227,12 +1241,16 @@ class LibvirtTests(LibvirtTestsBase):  # type: ignore
         )
         hotplug(controllerVM, "virsh detach-disk --domain testvm --target vdb")
         self.assertIsNone(
-            pci_devices_by_bdf(controllerVM).get("00:04.0"),
-            "no device should exist at BDF 00:04.0",
+            pci_devices_by_bdf(controllerVM).get(
+                PciBdf(domain=0x0, bus=0x0, device=0x4, function=0x0)
+            ),
+            "no device should exist at BDF 0000:00:04.0",
         )
         self.assertIsNone(
-            pci_devices_by_bdf(controllerVM).get("00:17.0"),
-            "no device should exist at BDF 00:17.0",
+            pci_devices_by_bdf(controllerVM).get(
+                PciBdf(domain=0x0, bus=0x0, device=0x17, function=0x0)
+            ),
+            "no device should exist at BDF 0000:00:17.0",
         )
         hotplug(
             controllerVM,
@@ -1240,9 +1258,11 @@ class LibvirtTests(LibvirtTestsBase):  # type: ignore
         )
         devices_before_livemig = pci_devices_by_bdf(controllerVM)
         self.assertEqual(
-            devices_before_livemig["00:04.0"],
+            devices_before_livemig[
+                PciBdf(domain=0x0, bus=0x0, device=0x4, function=0x0)
+            ],
             VIRTIO_BLOCK_DEVICE,
-            "device type at BDF 00:04.0 should match",
+            "device type at BDF 0000:00:04.0 should match",
         )
 
         # Adding to the same bdf twice fails

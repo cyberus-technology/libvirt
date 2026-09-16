@@ -1,6 +1,7 @@
 from .test_helper import (
     CommandGuard,
     LibvirtTestsBase,
+    PciBdf,
     MAX_EXPECTED_WAIT_SEC,
     MigrationThrottleGuard,
     VIRTIO_BLOCK_DEVICE,
@@ -46,6 +47,7 @@ from .test_helper import (
 __all__ = [
     "CommandGuard",
     "LibvirtTestsBase",
+    "PciBdf",
     "MAX_EXPECTED_WAIT_SEC",
     "MigrationThrottleGuard",
     "VIRTIO_BLOCK_DEVICE",
