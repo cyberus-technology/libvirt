@@ -1,3 +1,4 @@
+from typing import TYPE_CHECKING
 import shlex
 import string
 import textwrap
@@ -35,30 +36,31 @@ try:
         wait_until_succeed,
     )
 except Exception:
-    from test_helper import (
-        LibvirtTestsBase,
-        assert_domain_domstate,
-        assert_nested_cirros_connectivity,
-        capture_libvirt_events,
-        hotplug,
-        hotplug_fail,
-        initialComputeVMSetup,
-        initialControllerVMSetup,
-        number_of_devices,
-        number_of_network_devices,
-        parse_devices_from_dom_def,
-        pci_devices_by_bdf,
-        restart_virtchd,
-        setup_nested_cirros,
-        ssh,
-        start_net_capture,
-        stop_net_capture_and_assert_migration_announcements,
-        vcpu_affinity_checks,
-        vm_unresponsive,
-        wait_for_guest_pci_device_enumeration,
-        wait_for_ssh,
-        wait_until_succeed,
-    )
+    if not TYPE_CHECKING:
+        from test_helper import (
+            LibvirtTestsBase,
+            assert_domain_domstate,
+            assert_nested_cirros_connectivity,
+            capture_libvirt_events,
+            hotplug,
+            hotplug_fail,
+            initialComputeVMSetup,
+            initialControllerVMSetup,
+            number_of_devices,
+            number_of_network_devices,
+            parse_devices_from_dom_def,
+            pci_devices_by_bdf,
+            restart_virtchd,
+            setup_nested_cirros,
+            ssh,
+            start_net_capture,
+            stop_net_capture_and_assert_migration_announcements,
+            vcpu_affinity_checks,
+            vm_unresponsive,
+            wait_for_guest_pci_device_enumeration,
+            wait_for_ssh,
+            wait_until_succeed,
+        )
 
 # pyright: reportPossiblyUnboundVariable=false
 

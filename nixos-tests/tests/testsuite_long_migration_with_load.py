@@ -1,3 +1,6 @@
+from typing import TYPE_CHECKING
+import unittest
+
 # Following import statement allows for proper python IDE support and proper
 # nix build support. The duplicate listing of imported functions is a bit
 # unfortunate, but it seems to be the best compromise. This way the python IDE
@@ -12,14 +15,14 @@ try:
         wait_for_ssh,
     )
 except Exception:
-    from test_helper import (
-        LibvirtTestsBase,
-        initialComputeVMSetup,
-        initialControllerVMSetup,
-        start_stress_in_vm,
-        wait_for_ssh,
-    )
-import unittest
+    if not TYPE_CHECKING:
+        from test_helper import (
+            LibvirtTestsBase,
+            initialComputeVMSetup,
+            initialControllerVMSetup,
+            start_stress_in_vm,
+            wait_for_ssh,
+        )
 
 # pyright: reportPossiblyUnboundVariable=false
 

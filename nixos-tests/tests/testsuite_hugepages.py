@@ -1,3 +1,4 @@
+from typing import TYPE_CHECKING
 import unittest
 
 # Following import statement allows for proper python IDE support and proper
@@ -16,15 +17,16 @@ try:
         wait_for_ssh,
     )
 except Exception:
-    from test_helper import (
-        LibvirtTestsBase,
-        allocate_hugepages,
-        initialComputeVMSetup,
-        initialControllerVMSetup,
-        number_of_free_hugepages,
-        ssh,
-        wait_for_ssh,
-    )
+    if not TYPE_CHECKING:
+        from test_helper import (
+            LibvirtTestsBase,
+            allocate_hugepages,
+            initialComputeVMSetup,
+            initialControllerVMSetup,
+            number_of_free_hugepages,
+            ssh,
+            wait_for_ssh,
+        )
 
 # pyright: reportPossiblyUnboundVariable=false
 

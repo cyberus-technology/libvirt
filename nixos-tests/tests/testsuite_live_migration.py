@@ -1,4 +1,5 @@
 from functools import partial
+from typing import TYPE_CHECKING
 import time
 import unittest
 
@@ -38,35 +39,36 @@ try:
         wait_until_succeed,
     )
 except Exception:
-    from test_helper import (
-        CommandGuard,
-        LibvirtTestsBase,
-        MAX_EXPECTED_WAIT_SEC,
-        MigrationThrottleGuard,
-        VIRTIO_BLOCK_DEVICE,
-        VIRTIO_ENTROPY_SOURCE,
-        VIRTIO_NETWORK_DEVICE,
-        assert_domain_domstate,
-        capture_libvirt_events,
-        hotplug,
-        hotplug_fail,
-        initialComputeVMSetup,
-        initialControllerVMSetup,
-        measure_ms,
-        number_of_network_devices,
-        number_of_storage_devices,
-        pci_devices_by_bdf,
-        ssh,
-        start_net_capture,
-        start_stress_in_vm,
-        stop_net_capture_and_assert_migration_announcements,
-        stop_stress_in_vm,
-        vcpu_affinity_checks,
-        wait_for_ping,
-        wait_for_ssh,
-        wait_until_fail,
-        wait_until_succeed,
-    )
+    if not TYPE_CHECKING:
+        from test_helper import (
+            CommandGuard,
+            LibvirtTestsBase,
+            MAX_EXPECTED_WAIT_SEC,
+            MigrationThrottleGuard,
+            VIRTIO_BLOCK_DEVICE,
+            VIRTIO_ENTROPY_SOURCE,
+            VIRTIO_NETWORK_DEVICE,
+            assert_domain_domstate,
+            capture_libvirt_events,
+            hotplug,
+            hotplug_fail,
+            initialComputeVMSetup,
+            initialControllerVMSetup,
+            measure_ms,
+            number_of_network_devices,
+            number_of_storage_devices,
+            pci_devices_by_bdf,
+            ssh,
+            start_net_capture,
+            start_stress_in_vm,
+            stop_net_capture_and_assert_migration_announcements,
+            stop_stress_in_vm,
+            vcpu_affinity_checks,
+            wait_for_ping,
+            wait_for_ssh,
+            wait_until_fail,
+            wait_until_succeed,
+        )
 
 # pyright: reportPossiblyUnboundVariable=false
 
