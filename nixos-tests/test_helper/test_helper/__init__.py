@@ -1,4 +1,5 @@
 from .test_helper import (
+    AttachedDiskInfo,
     CommandGuard,
     LibvirtTestsBase,
     PciBdf,
@@ -11,6 +12,7 @@ from .test_helper import (
     assert_domain_domstate,
     assert_nested_cirros_connectivity,
     capture_libvirt_events,
+    get_attached_labeled_disks,
     hotplug,
     hotplug_fail,
     initialComputeVMSetup,
@@ -45,6 +47,7 @@ from .test_helper import (
 )
 
 __all__ = [
+    "AttachedDiskInfo",
     "CommandGuard",
     "LibvirtTestsBase",
     "PciBdf",
@@ -57,6 +60,7 @@ __all__ = [
     "assert_domain_domstate",
     "assert_nested_cirros_connectivity",
     "capture_libvirt_events",
+    "get_attached_labeled_disks",
     "hotplug",
     "hotplug_fail",
     "initialComputeVMSetup",

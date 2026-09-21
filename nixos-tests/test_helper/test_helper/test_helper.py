@@ -14,7 +14,7 @@ except ImportError:
     pass
 
 from test_driver.machine import QemuMachine  # type: ignore
-from typing import Any, Callable, Iterator, List, Literal, Self
+from typing import Any, Callable, Iterator, List, Literal, Pattern, Self
 
 # VIRTIO PCI constants
 VIRTIO_NETWORK_DEVICE = "1af4:1041"
@@ -877,6 +877,12 @@ class PciBdf:
             "(?P<domain>[0-9a-fA-F]{4}):(?P<bus>[0-9a-fA-F]{2}):(?P<device>[0-9a-fA-F]{2}).(?P<function>[0-9a-fA-F])"
         )
 
+    def attached_to_same_bus(self, other: "PciBdf") -> bool:
+        """
+        Returns true if this PciBdf is attached to the same bus on in the same domain as other.
+        """
+        return (other.bus == self.bus) and (other.domain == self.domain)
+
     def __repr__(self):
         return f"{self.domain:04x}:{self.bus:02x}:{self.device:02x}.{self.function:01x}"
 
@@ -1457,3 +1463,91 @@ def stop_net_capture_and_assert_migration_announcements(
 
         print(machine.succeed("journalctl -u systemd-networkd -b"))
         raise RuntimeError(msg)
+
+
+class AttachedDiskInfo:
+    def __init__(self, label: str, bdf: PciBdf, device: str, uuid: str) -> None:
+        self.label = label
+        self.bdf = bdf
+        self.device = device
+        self.uuid = uuid
+
+    def __repr__(self):
+        return f"AttachedDiskInfo: label: {self.label}, bdf: {self.bdf}, device: {self.device}, uuid: {self.uuid}"
+
+    def __eq__(self, other):
+        if not isinstance(other, AttachedDiskInfo):
+            return NotImplemented
+        return (
+            (self.label == other.label)
+            and (self.bdf == other.bdf)
+            and (self.device == other.device)
+        )
+
+
+def get_attached_labeled_disks(
+    machine: QemuMachine,
+    user: str = "root",
+    password: str = "root",
+    ip: str = "192.168.1.2",
+) -> List[AttachedDiskInfo]:
+    """
+    Returns a list containing information about attached disks.
+
+    Only disks will be listed that for which the information is available. E.g.
+    a boot partition without a label will not be enumerated by this function.
+
+    :param machine: VM host
+    :param user: user for SSH login
+    :param password: password for SSH login
+    :param ip: SSH host to log into
+    """
+    # We use sudo explicitly in the following command because when logging in to
+    # Cirros we have a normal user account.
+    result = []
+    blkid_output = ssh(
+        machine,
+        "sudo blkid -o export",
+        user,
+        password,
+        ip,
+    )
+
+    def parse_lsblk_export(input: str):
+        parse = re.compile(r"(?P<key>\w*)=(?P<value>[0-9A-Za-z\-/]*)")
+        result = {}
+        if input != "":
+            for line in input.splitlines():
+                match = parse.match(line)
+                if match is not None:
+                    result[match.group("key")] = match.group("value")
+                else:
+                    return None
+        else:
+            return None
+        return result
+
+    for disk_export in blkid_output.split("\n\n"):
+        disk = parse_lsblk_export(disk_export)
+        if disk is None:
+            continue
+        device = disk["DEVNAME"].split("/")[-1] if "DEVNAME" in disk.keys() else ""
+        label = disk["LABEL"] if "LABEL" in disk.keys() else ""
+        uuid = disk["UUID"] if "UUID" in disk.keys() else ""
+
+        mapping = ssh(
+            machine,
+            f"sudo readlink -f /sys/class/block/{device}",
+            user,
+            password,
+            ip,
+        )
+        for path_element in reversed(mapping.split("/")):
+            bdf = PciBdf.from_str(path_element)
+            if bdf is not None:
+                result.append(
+                    AttachedDiskInfo(label=label, bdf=bdf, device=device, uuid=uuid)
+                )
+                break
+
+    return result

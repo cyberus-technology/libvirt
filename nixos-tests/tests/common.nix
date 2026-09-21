@@ -86,6 +86,11 @@ let
         oemStrings = [ ];
       },
       cpuModel ? "",
+      # Whether to add an additional boot index to the disk labeled `vda`.
+      boot_index_vda ? 0,
+      # Whether to add an additional boot index to the disk labeled
+      # `vdc`. If set, automatically adds `vdc` as an additional disk.
+      boot_index_vdc ? 0,
     }:
     let
       defaultSmbios = {
@@ -240,7 +245,15 @@ let
           <type arch='x86_64'>hvm</type>
           ${smbiosModeXml}
           <kernel>/etc/CLOUDHV.fd</kernel>
-          <boot dev='hd'/>
+          ${
+            # Using `boot` with `boot_index` isn't allowed by libvirt.
+            if boot_index_vda > 0 || boot_index_vdc > 0 then
+              ""
+            else
+              "
+            <boot dev='hd'/>
+            "
+          }
         </os>
         ${sysinfoBlockXml}
         <clock offset='utc'/>
@@ -280,6 +293,7 @@ let
               else
                 ""
             }
+            ${if boot_index_vda > 0 then "<boot order='${builtins.toString boot_index_vda}'/> " else ""} 
           </disk>
           ${
             if !(builtins.isNull cloudInit) then
@@ -318,6 +332,22 @@ let
                   <log file="/var/log/libvirt/ch/testvm.log" append="off"/>
                 </serial>
               ''
+            else
+              ""
+          }
+          ${
+            # Assign a fixed BDF that would make the disk the last one to boot from. Using the NixOS
+            # image is intentional as it comes with a fw_cfg driver. Both, the availability of the
+            # driver and the BDF are requirements for the `test_boot_index` to work properly.
+            if boot_index_vdc > 0 then
+              "
+              <disk type='file' device='disk'>
+                <source file='/var/lib/libvirt/storage-pools/nfs-share/nixos.img'/>
+                <target dev='vdc' bus='virtio'/>
+                <address type='pci' domain='0x0000' bus='0x00' slot='0x1f' function='0x0'/>
+                <boot order='${builtins.toString boot_index_vdc}'/>
+              </disk>
+            "
             else
               ""
           }
@@ -865,6 +895,30 @@ in
           "C+" = {
             argument = "${pkgs.writeText "cirros-sapphire-rapids.xml" (virsh_ch_xml {
               cpuModel = "sapphire-rapids";
+            })}";
+          };
+        };
+        "/etc/domain-chv-boot-index-cirros-first.xml" = {
+          "C+" = {
+            argument = "${pkgs.writeText "domain-chv-boot-index-cirros-first.xml" (virsh_ch_xml {
+              # Disk image to use for vda. NixOS is statically used by vdc.
+              image = "/var/lib/libvirt/storage-pools/nfs-share/cirros.img";
+              # `boot index`s to use. Lower index reflects a higher priority.
+              boot_index_vda = 1; # Cirros
+              boot_index_vdc = 2; # NixOS
+
+            })}";
+          };
+        };
+        "/etc/domain-chv-boot-index-nixos-first.xml" = {
+          "C+" = {
+            argument = "${pkgs.writeText "domain-chv-boot-index-nixos-first.xml" (virsh_ch_xml {
+              # Disk image to use for vda. NixOS is statically used by vdc.
+              image = "/var/lib/libvirt/storage-pools/nfs-share/cirros.img";
+              # `boot index`s to use. Lower index reflects a higher priority.
+              boot_index_vda = 2; # Cirros
+              boot_index_vdc = 1; # NixOS
+
             })}";
           };
         };

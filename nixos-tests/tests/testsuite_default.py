@@ -17,6 +17,7 @@ try:
         assert_domain_domstate,
         assert_nested_cirros_connectivity,
         capture_libvirt_events,
+        get_attached_labeled_disks,
         hotplug,
         hotplug_fail,
         initialComputeVMSetup,
@@ -44,6 +45,7 @@ except Exception:
             assert_domain_domstate,
             assert_nested_cirros_connectivity,
             capture_libvirt_events,
+            get_attached_labeled_disks,
             hotplug,
             hotplug_fail,
             initialComputeVMSetup,
@@ -1824,6 +1826,252 @@ class LibvirtTests(LibvirtTestsBase):  # type: ignore
         finally:
             controllerVM.succeed(f"rm -f {source}")
 
+    def test_boot_index(self):
+        """
+        Test that libvirt `bootindex` settings are applied correctly.
+
+        The `bootindex` option is passed to CH, from which CH creates a
+        `fw_cfg` device and populates it with a `bootorder` entry. Next
+        in the chain is OVMF, which is responsible to read the
+        `bootorder` entry and respect the hints. Last in the chain is
+        the guest which we use to read from the `fw_cfg` device in this
+        test.
+
+        The whole tests performs 4 boots in a row:
+            1) Cirros as the main image
+            2) NixOS in an emulated rescue mode to show that boot order
+               hints are respected
+            3) A second "rescue mode"-style boot that uses a domain XML
+               identical to 2), expect for the boot indices that give
+               Cirros precedence this time.
+            4) We boot the main image again to show that this is still
+               possible and there is not sate left that prevents us from
+               doing so.
+        """
+
+        CIRROS_LABEL = "cirros-rootfs"
+        NIXOS_LABEL = "nixos"
+
+        def is_shutoff():
+            return (
+                controllerVM.execute('virsh domstate testvm | grep "shut off"')[0] == 0
+            )
+
+        def check_cirros_booted():
+            """
+            Check that NixOS was booted by:
+                * Connecting with the correct credentials
+                * Checking the VENDOR_NAME
+                * Asserting that all disks we expect to see are present
+                  with the correct disk labels
+
+            This function **does not** terminate the VM after all checks passed.
+            """
+            # The VM boot takes very long (due to DHCP on the default interface
+            # which doesn't use DHCP).
+            # The SSH credentials only work for Cirros, so we don't grep os-release.
+            wait_for_ssh(
+                controllerVM,
+                user="cirros",
+                password="gocubsgo",
+                ip="192.168.3.42",
+                # The VM boot is very slow as it tries to perform DHCP on all
+                # interfaces.
+                retries=350,
+            )
+            attached_disks = get_attached_labeled_disks(
+                controllerVM,
+                user="cirros",
+                password="gocubsgo",
+                ip="192.168.3.42",
+            )
+            cirros_labeled_disks = list(
+                filter(lambda d: d.label == CIRROS_LABEL, attached_disks)
+            )
+            self.assertEqual(
+                len(cirros_labeled_disks),
+                1,
+                "Expect exactly one disk labeled cirros",
+            )
+            self.assertEqual(
+                cirros_labeled_disks[0].device,
+                "vda1",
+                "The disk should be listed as vda",
+            )
+
+        def check_nixos_booted():
+            """
+            Check that NixOS was booted by:
+                * Connecting with the correct credentials
+                * Checking the VENDOR_NAME
+                * Asserting the correct fw_cfg entry
+                * Asserting that all disks we expect to see are present
+                  with the correct disk labels
+
+            This function terminates the VM after all tests succeed.
+            """
+            wait_for_ssh(controllerVM)
+            # Assert NixOS runs. As the Cirros image uses different credentials we
+            # actually might see a time out here if the wrong image was booted.
+            ssh_result: str = ssh(
+                controllerVM, "cat /etc/os-release | grep VENDOR_NAME"
+            )
+            self.assertEqual(
+                ssh_result,
+                "VENDOR_NAME=NixOS\n",
+                f"Should have booted NixOS, got {ssh_result}",
+            )
+            # Assert the correct boot order entry.
+            ssh_result: str = ssh(
+                controllerVM, "cat /sys/firmware/qemu_fw_cfg/by_name/bootorder/raw"
+            )
+            # The BDF is hardcoded so this assertion fails if `common.nix` is changed without updating
+            # this test.
+            self.assertIn(
+                "/pci@i0cf8/scsi@1f/disk@0,0",
+                ssh_result,
+                f"bootorder should contain the correct disk path, got {ssh_result}. You might check the\
+                    expected BDF if you changed the domain XML recently.",
+            )
+            # Assert that there is one disk with the NixOS label and one with the
+            # Cirros label connected.
+            attached_disks = get_attached_labeled_disks(
+                controllerVM,
+            )
+            # Assert that the boot and root partition of the cirros disk as well as the NixOS root
+            # partition are attached.
+            self.assertEqual(
+                len(attached_disks), 3, "There should be three labeled disks."
+            )
+            self.assertEqual(
+                len(list(filter(lambda d: NIXOS_LABEL in d.label, attached_disks))),
+                1,
+                "There should be one NixOS labeled disk.",
+            )
+            self.assertEqual(
+                len(list(filter(lambda d: CIRROS_LABEL in d.label, attached_disks))),
+                1,
+                "There should be one Cirros labeled disk.",
+            )
+            nixos_disk = list(filter(lambda d: NIXOS_LABEL in d.label, attached_disks))[
+                0
+            ]
+            cirros_disk = list(
+                filter(lambda d: CIRROS_LABEL in d.label, attached_disks)
+            )[0]
+            # Prevent false positives by failing if the natural boot order would give the NixOS disk
+            # precedence over the Cirros image.
+            self.assertTrue(
+                nixos_disk.bdf.attached_to_same_bus(cirros_disk.bdf),
+                "Expected both disks to be attached to the same PCI bus. This might be a bug. Did you change the XMLs?",
+            )
+            self.assertGreater(
+                nixos_disk.bdf.device,
+                cirros_disk.bdf.device,
+                "Detected a bug. The test is likely to yield a false positive because the BDF of the \
+                    Cirros disk is greater than that of the NixOS rescue image, which gives NixOS \
+                    precedence in the boot order.",
+            )
+            # Check the disk IDs
+            self.assertEqual(
+                nixos_disk.device,
+                "vdb",
+                "Expect that the NixOS image is the second disk in the system",
+            )
+            self.assertEqual(
+                cirros_disk.device,
+                "vda1",
+                "Expect that the disk ID of the cirros root file system did not change",
+            )
+            controllerVM.succeed("virsh shutdown testvm")
+            wait_until_succeed(is_shutoff)
+
+        def do_cirros_boot():
+            """
+            Helper to boot the Cirros only domain.
+
+            Key feature is that we check that the number of disks is as
+            we expect for a Cirros only boot.
+            """
+            controllerVM.succeed("virsh define /etc/domain-chv-cirros.xml")
+            controllerVM.succeed("virsh start testvm")
+            controllerVM.succeed(
+                "virsh attach-device testvm /etc/new_interface_type_network.xml"
+            )
+            check_cirros_booted()
+            attached_disks = get_attached_labeled_disks(
+                controllerVM,
+                user="cirros",
+                password="gocubsgo",
+                ip="192.168.3.42",
+            )
+            self.assertEqual(
+                len(attached_disks),
+                2,
+                "We expect the boot and the root partitions",
+            )
+            controllerVM.succeed("virsh shutdown testvm")
+            wait_until_succeed(is_shutoff)
+
+        def do_boot_with_boot_index(boot_cirros_first: bool):
+            """
+            We boot one of either domains whose disks have a `boot
+            index` assigned.
+
+            :param boot_cirros_first: Use the domain XML that assigns a
+                lower boot index (higher boot priority) to Cirros
+            """
+            if boot_cirros_first is True:
+                controllerVM.succeed(
+                    "virsh define /etc/domain-chv-boot-index-cirros-first.xml"
+                )
+            else:
+                controllerVM.succeed(
+                    "virsh define /etc/domain-chv-boot-index-nixos-first.xml"
+                )
+            controllerVM.succeed("virsh start testvm")
+            # While the first disk contains the Cirros image, we actually want to
+            # boot NixOS. In case the boot order override doesn't work, the guest
+            # will run Cirros. The result is that the ssh connection below fails.
+            if boot_cirros_first is True:
+                controllerVM.succeed(
+                    "virsh attach-device testvm /etc/new_interface_type_network.xml"
+                )
+                check_cirros_booted()
+                attached_disks = get_attached_labeled_disks(
+                    controllerVM,
+                    user="cirros",
+                    password="gocubsgo",
+                    ip="192.168.3.42",
+                )
+                # In contrast to the Cirros only boot we now also expect
+                # the NixOS disk to be present.
+                self.assertEqual(
+                    len(attached_disks),
+                    3,
+                    "We expect the boot and the root partitions + the NixOS partition.",
+                )
+                controllerVM.succeed("virsh shutdown testvm")
+                wait_until_succeed(is_shutoff)
+            else:
+                check_nixos_booted()
+
+        # First boot the machine as it would be a regular guest.
+        do_cirros_boot()
+        # First rescue boot. The disk from the first boot is attached
+        # but we boot NixOS instead of Cirros. We check that the Cirros
+        # disk is present. If the following boot is successful then we
+        # have proof that OpenStack's rescue workflow works.
+        do_boot_with_boot_index(boot_cirros_first=False)
+        # We do a second "rescue" like boot. This time we swap the boot
+        # order around, thus boot Cirros first and check that the NixOS
+        # disk is present.
+        do_boot_with_boot_index(boot_cirros_first=True)
+        # As a last test we check that we can still boot the original
+        # domain and that all devices have the same addresses as when we
+        # did the first boot.
+        do_cirros_boot()
+
 
 def suite():
     # Test cases sorted in alphabetical order.
@@ -1834,6 +2082,7 @@ def suite():
         LibvirtTests.test_bdf_invalid_device_id,
         LibvirtTests.test_bdf_valid_device_id_with_function_id,
         LibvirtTests.test_bdfs_implicitly_assigned_same_after_recreate,
+        LibvirtTests.test_boot_index,
         LibvirtTests.test_boot_not_enough_memory_16MiB,
         LibvirtTests.test_boot_not_enough_memory_32MiB,
         LibvirtTests.test_boot_triple_fault,
