@@ -1,5 +1,6 @@
 import os
 import sys
+import textwrap
 import time
 import unittest
 from pathlib import Path
@@ -20,6 +21,56 @@ def assert_tdx_guest_is_initialized(machine: LocalMachine) -> None:
     machine.ssh("test -c /dev/tdx_guest")
     # The TDX core support prints this line when it detects a Trust Domain.
     machine.ssh("dmesg --color=never | grep -F 'tdx: Guest detected'")
+
+
+def assert_tdx_guest_generates_quote(machine: LocalMachine) -> None:
+    """Checks that the guest obtains a non-empty quote from the host's Intel
+    Quote Generation Service (QGS).
+
+    The test only checks that a quote came back. Checking the signature and
+    the quote contents is the verifier's job.
+    """
+    output = machine.ssh(
+        textwrap.dedent("""
+        set -euo pipefail
+
+        if ! mountpoint -q /sys/kernel/config; then
+            mount -t configfs none /sys/kernel/config
+        fi
+
+        # configfs-tsm creates one directory per attestation report. Write the
+        # REPORTDATA to `inblob` to trigger quote generation. `outblob` then
+        # holds the provider-specific attestation blob.
+        report_dir=/sys/kernel/config/tsm/report
+        report="$report_dir/report0"
+        quote=/tmp/tdx-quote.bin
+
+        mkdir -p "$report"
+        trap 'rmdir "$report"' EXIT
+
+        provider=$(cat "$report/provider")
+        if [ "$provider" != tdx_guest ]; then
+            echo "unexpected TSM report provider: $provider" >&2
+            exit 1
+        fi
+
+        # The TDX guest driver requires exactly 64 bytes of REPORTDATA. Use a
+        # random nonce.
+        head -c 64 /dev/urandom > "$report/inblob"
+
+        cat "$report/outblob" > "$quote"
+
+        size=$(wc -c < "$quote")
+        if [ "$size" -eq 0 ]; then
+            echo "the guest returned an empty TD quote. Is the Intel Quote Generation Service running on the host and listening on /var/run/tdx-qgs/qgs.socket?" >&2
+            exit 1
+        fi
+
+        echo "TD quote size: $size bytes"
+        hexdump -C "$quote"
+        """).strip()
+    )
+    print(output)
 
 
 class TdxTestResult(unittest.TextTestResult):
@@ -87,6 +138,10 @@ class TdxTests(unittest.TestCase):
         if log_dir:
             self.machine.save_logs(Path(log_dir) / self._testMethodName / "tdx")
 
+    def test_tdx_guest_generates_quote(self) -> None:
+        """Verifies that the guest can obtain a TD quote from the host QGS."""
+        assert_tdx_guest_generates_quote(self.machine)
+
     def test_tdx_guest_is_initialized(self) -> None:
         """Verifies that the TDX guest is initialized."""
         assert_tdx_guest_is_initialized(self.machine)
@@ -104,6 +159,7 @@ class TdxTests(unittest.TestCase):
 
 def suite() -> unittest.TestSuite:
     testcases = [
+        TdxTests.test_tdx_guest_generates_quote,
         TdxTests.test_tdx_guest_is_initialized,
         TdxTests.test_tdx_guest_shuts_down,
         TdxTests.test_tdx_guest_survives_reboot,

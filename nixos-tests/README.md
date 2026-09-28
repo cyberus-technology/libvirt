@@ -117,6 +117,10 @@ runner requires TDX-enabled KVM, the persistent `tap15` interface, and the
 corresponding DHCP reservation on the host. Cloud Hypervisor is launched
 directly. The TDX test does not use a libvirt daemon or `virsh` configuration.
 
+The quote generation test also needs the Intel Quote Generation Service
+(`qgsd`) on the host, listening on `/var/run/tdx-qgs/qgs.socket`. Cloud
+Hypervisor forwards the guest's GetQuote requests to it.
+
 ### Obtaining debug logs
 
 To obtain debug logs from failing test cases automatically, set the
