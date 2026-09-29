@@ -58,6 +58,61 @@ let
       testScriptFile = ./testsuite_live_migration.py;
     };
 
+    prefault_keepalive = createTestSuite {
+      inherit enablePortForwarding;
+      testScriptFile = ./testsuite_prefault_keepalive.py;
+      # Use a patched receiver to delay prefaulting.
+      extraComputeConfig = [
+        (
+          { ... }:
+          {
+            nixpkgs.overlays = [
+              (_final: _prev: {
+                cloud-hypervisor = pkgs.cloud-hypervisor.overrideAttrs (old: {
+                  patches = (old.patches or [ ]) ++ [ ../patches/chv-prefault-delay.patch ];
+                });
+              })
+            ];
+          }
+        )
+      ];
+    };
+
+    prefault_keepalive_version_migration = createTestSuite {
+      inherit enablePortForwarding;
+      testScriptFile = ./testsuite_prefault_keepalive.py;
+      # Use a patched receiver to delay prefaulting and the previous version of the sender to ensure backwards compatibility.
+      extraComputeConfig = [
+        (
+          { ... }:
+          {
+            nixpkgs.overlays = [
+              (_final: _prev: {
+                cloud-hypervisor = pkgs.cloud-hypervisor.overrideAttrs (old: {
+                  patches = (old.patches or [ ]) ++ [ ../patches/chv-prefault-delay.patch ];
+                });
+              })
+            ];
+          }
+        )
+      ];
+      extraControllerConfig = [
+        (
+          { ... }:
+          {
+            nixpkgs.overlays = [
+              (_final: _prev: {
+                # Overwrite the default cloud-hypervisor version.
+                cloud-hypervisor = pkgs.cloud-hypervisor-prev;
+                # Overwrite the default libvirt version.
+                libvirt = pkgs.libvirt-prev;
+              })
+            ];
+          }
+        )
+      ];
+    };
+
     version_migration = createTestSuite {
       inherit enablePortForwarding;
       testScriptFile = ./testsuite_version_migration.py;

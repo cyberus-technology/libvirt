@@ -68,6 +68,11 @@ test attributes are available. Each attribute can be run via
   - default test suite containing most of the tests
 - `live_migration`
   - live migration tests that usually take longer to run
+- `prefault_keepalive`
+  - migrates a VM to a Cloud Hypervisor build patched to delay receiver prefaulting
+- `prefault_keepalive_version_migration`
+  - migrates a VM from the previous Cloud Hypervisor version to a Cloud Hypervisor
+    build patched to delay receiver prefaulting
 - `hugepage`
   - tests that require hugepages in the host VM to be available
 - `long_migration_with_load`

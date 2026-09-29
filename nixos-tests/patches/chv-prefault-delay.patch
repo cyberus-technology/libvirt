@@ -1,0 +1,11 @@
+diff --git a/vmm/src/memory_manager.rs b/vmm/src/memory_manager.rs
+--- a/vmm/src/memory_manager.rs
++++ b/vmm/src/memory_manager.rs
+@@ -1980,4 +1980,7 @@
+         // Prefault the region if needed, in parallel.
+         if prefault {
++            // Keep the migration control connection idle during prefaulting.
++            // The sleep duration must exceed any keepalive timeouts in sender and receiver.
++            thread::sleep(std::time::Duration::from_secs(60));
+             let page_size =
+                 Self::get_prefault_align_size(backing_file, hugepages, hugepage_size)? as usize;
