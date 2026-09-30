@@ -3164,7 +3164,7 @@ chDomainMigrateFinish3LocalFailure(char* dname, virCHDriver *driver)
     priv = vm->privateData;
 
     cleanup = g_new0(struct virCHMigrationCleanupOpaque, 1);
-    cleanup->thr = priv->migrationDstReceiveThr;
+    cleanup->thr = g_steal_pointer(&priv->migrationDstReceiveThr);
 
     DBG("Migration for VM %s was unsuccessful, killing CHV process", dname);
 

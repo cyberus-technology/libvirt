@@ -96,6 +96,7 @@ virCHDomainObjPrivateFree(void *data)
     virBitmapFree(priv->autoNodeset);
     virCgroupFree(priv->cgroup);
     virMutexDestroy(&priv->migrationStatsMutex);
+    g_free(priv->migrationDstReceiveThr);
     g_free(priv->pidfile);
     g_free(priv);
 }
