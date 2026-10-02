@@ -528,9 +528,10 @@ virCHProcessEvents(virCHMonitor *mon)
 
                 if ((obj = virJSONValueFromString(json_start))) {
                     if (virCHProcessEvent(mon, obj) < 0) {
-                        VIR_ERROR(_("%1$s: Failed to process JSON event doc: %2$s"),
-                                  vm->def->name, json_start);
-                        return -1;
+                        VIR_WARN("%s: Failed to process JSON event doc: %s",
+                                 vm->def->name, json_start);
+                        /* A handler failure does not invalidate the event stream. */
+                        virResetLastError();
                     }
                 } else {
                     VIR_ERROR(_("%1$s: Invalid JSON event doc: %2$s"),
