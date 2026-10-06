@@ -338,8 +338,8 @@ class LibvirtTests(LibvirtTestsBase):  # type: ignore
                     f"screen -dmS migrate virsh migrate --domain testvm --desturi ch+tcp://computeVM/session --persistent --live --p2p --parallel --parallel-connections {parallel}"
                 )
                 # We wait for the first iteration of sending memory
-                controllerVM.wait_until_succeeds(
-                    "grep -qF 'iter=0' /var/log/libvirt/ch/testvm.log", 60
+                events.wait_for_event(
+                    "event 'migration-iteration' for domain 'testvm': iteration: '0'"
                 )
 
                 # Can only abort outgoing live-migrations, not incoming
