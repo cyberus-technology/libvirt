@@ -46,6 +46,16 @@ nixpkgs.lib.nixosSystem {
         ];
         boot.loader.timeout = lib.mkForce 0;
 
+        # Drop installer content we don't need. A smaller image is faster to
+        # copy and to reset between test cases.
+        boot.initrd.services.lvm.enable = lib.mkForce false;
+        boot.initrd.systemd.tpm2.enable = false;
+        boot.swraid.enable = lib.mkForce false;
+        isoImage.grubTheme = null;
+        programs.git.enable = false;
+        system.extraDependencies = lib.mkForce [ ];
+        system.installer.channel.enable = false;
+
         # Set the log level to `KERN_DEBUG`. This increases the log output and
         # thus helps debugging.
         boot.consoleLogLevel = lib.mkForce 7;
