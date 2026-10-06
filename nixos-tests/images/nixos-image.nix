@@ -70,6 +70,7 @@ nixpkgs.lib.nixosSystem {
 
         environment.defaultPackages = [ ];
         environment.etc = {
+          "machine-id".text = "0123456789abcdef0123456789abcdef\n";
           "ssh/ssh_host_ed25519_key" = {
             mode = "0600";
             source = pkgs.writers.writeText "ssh_host_ed25519_key" ''
@@ -171,6 +172,10 @@ nixpkgs.lib.nixosSystem {
         system.switch.enable = false;
 
         systemd.services.mount-pstore.enable = false;
+        # Registers the store paths in the Nix database, which we don't need
+        # as Nix is disabled. It runs before sysinit.target and thus delays
+        # every boot.
+        systemd.services.register-nix-paths.enable = false;
         systemd.services.resolvconf.enable = false;
         # We use a dummy key for the test VM to shortcut the boot time.
         systemd.services.sshd-keygen.enable = false;
