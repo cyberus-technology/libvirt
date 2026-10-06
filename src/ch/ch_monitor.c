@@ -549,6 +549,10 @@ virCHMonitorBuildDiskJson(virJSONValue *disks, virDomainDiskDef *diskdef)
             if (virJSONValueObjectAppendBoolean(disk, "readonly", true) < 0)
                 return -1;
         }
+        if (diskdef->cachemode == VIR_DOMAIN_DISK_CACHE_DISABLE) {
+            if (virJSONValueObjectAppendBoolean(disk, "direct", true) < 0)
+                return -1;
+        }
         if (diskdef->queues > 1) {
             if (virJSONValueObjectAppendNumberInt(disk, "num_queues",
                                                   diskdef->queues) < 0)
