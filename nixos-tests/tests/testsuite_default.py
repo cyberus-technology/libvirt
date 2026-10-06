@@ -21,7 +21,6 @@ try:
         get_attached_labeled_disks,
         hotplug,
         hotplug_fail,
-        initialComputeVMSetup,
         initialControllerVMSetup,
         number_of_devices,
         number_of_network_devices,
@@ -49,7 +48,6 @@ except Exception:
             get_attached_labeled_disks,
             hotplug,
             hotplug_fail,
-            initialComputeVMSetup,
             initialControllerVMSetup,
             number_of_devices,
             number_of_network_devices,
@@ -75,9 +73,7 @@ except Exception:
 # in order to allow the IDE to lint the python code successfully.
 if "start_all" not in globals():
     from ..test_helper.test_helper.nixos_test_stubs import (  # type: ignore
-        computeVM,
         controllerVM,
-        start_all,
     )
 
 # Paths where we can find the libvirt domain configuration XML files
@@ -87,13 +83,13 @@ DOMAIN_DEF_TRANSIENT_PATH = "/var/run/libvirt/ch/testvm.xml"
 
 class LibvirtTests(LibvirtTestsBase):  # type: ignore
     def __init__(self, methodName):
-        super().__init__(methodName, controllerVM, computeVM)
+        super().__init__(methodName, controllerVM)
 
+    # None of the test cases need the computeVM, so we don't start it.
     @classmethod
     def setUpClass(cls):
-        start_all()
-        initialControllerVMSetup(controllerVM)
-        initialComputeVMSetup(computeVM)
+        controllerVM.start()
+        initialControllerVMSetup(controllerVM, with_compute_vm=False)
 
     def test_network_hotplug_transient_vm_restart(self):
         """

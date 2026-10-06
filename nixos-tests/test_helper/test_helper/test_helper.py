@@ -127,7 +127,9 @@ class LibvirtTestsBase(unittest.TestCase):
 
 
 def initialControllerVMSetup(
-    controllerVM: QemuMachine, target_os: Literal["linux", "windows"] = "linux"
+    controllerVM: QemuMachine,
+    target_os: Literal["linux", "windows"] = "linux",
+    with_compute_vm: bool = True,
 ) -> None:
     """
     This method configures the controllerVM initially, before the test
@@ -137,6 +139,8 @@ def initialControllerVMSetup(
     :param controllerVM: machine object of the controllerVM
     :param target_os: If "windows", prepare the NFS with the Windows
         Server image. Otherwise places the Linux images in the NFS.
+    :param with_compute_vm: Whether the test suite also uses the computeVM.
+        If so, we wait until the computeVM is reachable.
     :raises RuntimeError: If the machine object is not the controllerVM
     """
     if controllerVM.name != "controllerVM":
@@ -160,11 +164,12 @@ def initialControllerVMSetup(
 
     controllerVM.succeed("mkdir -p /var/lib/libvirt/storage-pools/nfs-share")
 
-    controllerVM.wait_until_succeeds(
-        "ssh -n -o BatchMode=yes -o UserKnownHostsFile=/dev/null "
-        "-o StrictHostKeyChecking=no computeVM true",
-        timeout=MAX_EXPECTED_WAIT_SEC,
-    )
+    if with_compute_vm:
+        controllerVM.wait_until_succeeds(
+            "ssh -n -o BatchMode=yes -o UserKnownHostsFile=/dev/null "
+            "-o StrictHostKeyChecking=no computeVM true",
+            timeout=MAX_EXPECTED_WAIT_SEC,
+        )
 
     controllerVM.succeed(
         'virsh pool-define-as --name "nfs-share" --type netfs --source-host "localhost" --source-path "nfs-root" --source-format "nfs" --target "/var/lib/libvirt/storage-pools/nfs-share"'
