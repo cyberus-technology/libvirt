@@ -1291,11 +1291,12 @@ class LibvirtTests(LibvirtTestsBase):  # type: ignore
         controllerVM.succeed("virsh define /etc/domain-chv.xml")
         controllerVM.succeed("virsh start testvm")
 
-        wait_for_ssh(controllerVM)
-
-        controllerVM.fail(
-            "virsh migrate --domain testvm --desturi ch+tcp://controllerVM/session --persistent --live --p2p --parallel --parallel-connections 4"
+        # The migration is rejected before the guest is involved, so we
+        # don't wait for the guest to boot.
+        out = controllerVM.fail(
+            "virsh migrate --domain testvm --desturi ch+tcp://controllerVM/session --persistent --live --p2p --parallel --parallel-connections 4 2>&1"
         )
+        self.assertIn("Cannot migrate to the same host", out)
 
     def test_live_migration_non_peer2peer_is_not_supported(self):
         """
@@ -1308,11 +1309,12 @@ class LibvirtTests(LibvirtTestsBase):  # type: ignore
         controllerVM.succeed("virsh define /etc/domain-chv.xml")
         controllerVM.succeed("virsh start testvm")
 
-        wait_for_ssh(controllerVM)
-
-        controllerVM.fail(
-            "virsh migrate --domain testvm --desturi ch+tcp://computeVM/session --persistent --live --parallel --parallel-connections 4"
+        # The migration is rejected before the guest is involved, so we
+        # don't wait for the guest to boot.
+        out = controllerVM.fail(
+            "virsh migrate --domain testvm --desturi ch+tcp://computeVM/session --persistent --live --parallel --parallel-connections 4 2>&1"
         )
+        self.assertIn("Only Peer2Peer migration is supported", out)
 
     def test_live_migration_during_boot(self):
         """

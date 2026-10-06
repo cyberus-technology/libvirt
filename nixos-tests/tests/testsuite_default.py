@@ -1793,8 +1793,6 @@ class LibvirtTests(LibvirtTestsBase):  # type: ignore
         controllerVM.succeed("virsh define /etc/domain-chv.xml")
         controllerVM.succeed("virsh start testvm")
 
-        wait_for_ssh(controllerVM)
-
         # The regex matches the expected timestamp and line number values.
         controllerVM.wait_until_succeeds(
             r"grep -Eq 'cloud-hypervisor: [0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]+Z: <main> INFO:cloud-hypervisor/src/main\.rs:[0-9]+ -- Cloud Hypervisor starting: build version:' "
