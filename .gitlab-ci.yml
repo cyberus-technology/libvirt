@@ -230,6 +230,18 @@ test:version_migration-tests:
   variables:
     TEST_ATTR: version_migration
 
+test:prefault_keepalive-tests:
+  extends:
+    - .test_nixos_tests
+  variables:
+    TEST_ATTR: prefault_keepalive
+
+test:prefault_keepalive_version_migration-tests:
+  extends:
+    - .test_nixos_tests
+  variables:
+    TEST_ATTR: prefault_keepalive_version_migration
+
 test:hugepage-tests:
   extends:
     - .test_nixos_tests
