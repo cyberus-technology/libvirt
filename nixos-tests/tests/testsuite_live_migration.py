@@ -387,14 +387,17 @@ class LibvirtTests(LibvirtTestsBase):  # type: ignore
             """
 
             start_stress_in_vm(src)
-            with MigrationThrottleGuard(controllerVM, computeVM):
+            with (
+                MigrationThrottleGuard(controllerVM, computeVM),
+                capture_libvirt_events(src) as events,
+            ):
                 # Start migration in background
                 src.succeed(
                     f"screen -dmS migrate virsh migrate --domain testvm --desturi ch+tcp://{dst.name}/session --persistent --live --p2p --parallel --parallel-connections 4"
                 )
                 # We wait for the first iteration of sending memory
-                src.wait_until_succeeds(
-                    "grep -qF 'iter=0' /var/log/libvirt/ch/testvm.log", 60
+                events.wait_for_event(
+                    "event 'migration-iteration' for domain 'testvm': iteration: '0'"
                 )
 
                 # Cancel migration + checks
