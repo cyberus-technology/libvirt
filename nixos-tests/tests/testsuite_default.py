@@ -1,4 +1,5 @@
 from typing import TYPE_CHECKING
+import json
 import shlex
 import string
 import textwrap
@@ -251,7 +252,7 @@ class LibvirtTests(LibvirtTestsBase):  # type: ignore
     def test_hotplug(self):
         """
         Tests device hot plugging with multiple devices of different types:
-        - attaching a disk (persistent)
+        - attaching a disk (persistent, cache=none)
         - attaching a network with type 'ethernet' (persistent)
         - attaching a network with type 'network' (transient)
         - attaching a network with type 'bridge' (transient)
@@ -270,8 +271,26 @@ class LibvirtTests(LibvirtTestsBase):  # type: ignore
 
         hotplug(
             controllerVM,
-            "virsh attach-disk --domain testvm --target vdb --persistent --source /tmp/disk.img",
+            "virsh attach-disk --domain testvm --target vdb --persistent --source /tmp/disk.img --cache none",
         )
+        # Only the disk with cache=none must use direct I/O.
+        infoJson = json.loads(
+            controllerVM.succeed(
+                "ch-remote --api-socket /run/libvirt/ch/testvm-socket info"
+            )
+        )
+        disks = infoJson["config"]["disks"]
+        self.assertTrue(
+            any(disk["path"] == "/tmp/disk.img" and disk["direct"] for disk in disks),
+            "the hotplugged disk should have direct=on",
+        )
+        self.assertTrue(
+            all(
+                not disk["direct"] for disk in disks if disk["path"] != "/tmp/disk.img"
+            ),
+            "none but the hotplugged disk should have direct=on",
+        )
+
         hotplug(
             controllerVM,
             "virsh attach-device --persistent testvm /etc/new_interface.xml",
