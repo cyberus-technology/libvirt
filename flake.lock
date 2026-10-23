@@ -48,6 +48,30 @@
         "type": "github"
       }
     },
+    "cloud-hypervisor-tdx": {
+      "inputs": {
+        "crane": "crane_3",
+        "dried-nix-flakes": "dried-nix-flakes_3",
+        "nixpkgs": [
+          "nixpkgs"
+        ],
+        "rust-overlay": "rust-overlay_3"
+      },
+      "locked": {
+        "lastModified": 1792582178,
+        "narHash": "sha256-Nu4X4G7PtpiWvS4vlFz3ifNH/bNvmU3cY8mwfM5lJ90=",
+        "owner": "olivereanderson",
+        "repo": "cloud-hypervisor",
+        "rev": "ea1f1aa6c7a2400b34d82179180f2aeb72c898f2",
+        "type": "github"
+      },
+      "original": {
+        "owner": "olivereanderson",
+        "ref": "port-intel-tdx-fixes",
+        "repo": "cloud-hypervisor",
+        "type": "github"
+      }
+    },
     "crane": {
       "locked": {
         "lastModified": 1793836618,
@@ -80,6 +104,22 @@
         "type": "github"
       }
     },
+    "crane_3": {
+      "locked": {
+        "lastModified": 1789760033,
+        "narHash": "sha256-jtT4yxZpR8seYnlCMMWSSPlFN92zO6ICuZ8pJrmi86k=",
+        "owner": "ipetkov",
+        "repo": "crane",
+        "rev": "73b980519cefc727a5f6cc8e5c0947a2f9be6edd",
+        "type": "github"
+      },
+      "original": {
+        "owner": "ipetkov",
+        "ref": "master",
+        "repo": "crane",
+        "type": "github"
+      }
+    },
     "dried-nix-flakes": {
       "locked": {
         "lastModified": 1756139350,
@@ -96,6 +136,21 @@
       }
     },
     "dried-nix-flakes_2": {
+      "locked": {
+        "lastModified": 1756139350,
+        "narHash": "sha256-pObQv94NclXVXjJV8sTiKwFes4fGEWpkNzDsXw5DqnY=",
+        "owner": "cyberus-technology",
+        "repo": "dried-nix-flakes",
+        "rev": "1b2ba62710c6c1d9eba0e8e3adc029cc2e9291a4",
+        "type": "github"
+      },
+      "original": {
+        "owner": "cyberus-technology",
+        "repo": "dried-nix-flakes",
+        "type": "github"
+      }
+    },
+    "dried-nix-flakes_3": {
       "locked": {
         "lastModified": 1756139350,
         "narHash": "sha256-pObQv94NclXVXjJV8sTiKwFes4fGEWpkNzDsXw5DqnY=",
@@ -184,6 +239,7 @@
       "inputs": {
         "cloud-hypervisor": "cloud-hypervisor",
         "cloud-hypervisor-prev": "cloud-hypervisor-prev",
+        "cloud-hypervisor-tdx": "cloud-hypervisor-tdx",
         "edk2-src": "edk2-src",
         "keycodemapdb": "keycodemapdb",
         "libvirt-prev": "libvirt-prev",
@@ -224,6 +280,27 @@
         "owner": "oxalica",
         "repo": "rust-overlay",
         "rev": "77a8263847fb02dc49dbe377278ef6b952f1c6bb",
+        "type": "github"
+      },
+      "original": {
+        "owner": "oxalica",
+        "repo": "rust-overlay",
+        "type": "github"
+      }
+    },
+    "rust-overlay_3": {
+      "inputs": {
+        "nixpkgs": [
+          "cloud-hypervisor-tdx",
+          "nixpkgs"
+        ]
+      },
+      "locked": {
+        "lastModified": 1790756160,
+        "narHash": "sha256-NPs4nNLxCpho3Ctj8O7t/bzmX0zR8r0zndKghAFEz5U=",
+        "owner": "oxalica",
+        "repo": "rust-overlay",
+        "rev": "ed3a19fd0439ed618ec5fe1e12f0ba69a8be38b5",
         "type": "github"
       },
       "original": {

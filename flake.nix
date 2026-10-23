@@ -9,6 +9,9 @@
     # Previous release of cloud-hypervisor for migration testing with different versions.
     cloud-hypervisor-prev.url = "github:cyberus-technology/cloud-hypervisor?ref=gardenlinux-release-26-11-04";
     cloud-hypervisor-prev.inputs.nixpkgs.follows = "nixpkgs";
+    # Intel TDX compatible cloud-hypervisor
+    cloud-hypervisor-tdx.url = "github:olivereanderson/cloud-hypervisor?ref=port-intel-tdx-fixes";
+    cloud-hypervisor-tdx.inputs.nixpkgs.follows = "nixpkgs";
     # Previous release of libvirt for migration testing with different versions.
     # Using the shorthand notation of "github:user/repo..." may lead to build errors
     # like "source-with-submodules> cp: cannot create regular file '[...]': Permission denied".
