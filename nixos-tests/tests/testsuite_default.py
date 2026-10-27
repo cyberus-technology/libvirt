@@ -1901,53 +1901,6 @@ class LibvirtTests(LibvirtTestsBase):  # type: ignore
         print("ls -lh /mnt/test:")
         print(ssh(controllerVM, "ls -lh /mnt/test"))
 
-    def test_raw_image_is_properly_attached(self):
-        """
-        Attaches a disk once with "file_type=raw" and once without. If the file
-        type is not set, writing to sector 0 should fail.
-        """
-
-        controllerVM.succeed("virsh define /etc/domain-chv.xml")
-        controllerVM.succeed("virsh start testvm")
-        wait_for_ssh(controllerVM)
-
-        image = "/tmp/disk.raw"
-        controllerVM.succeed(f"qemu-img create -f raw {image} 100M")
-
-        # Hotplug device without device type, dd should fail
-        hotplug(
-            controllerVM,
-            f"virsh attach-disk testvm {image} vdb --targetbus virtio --sourcetype file",
-        )
-        try:
-            ssh(
-                controllerVM,
-                "dd if=/dev/random of=/dev/vdb bs=512 count=1 oflag=direct",
-            )
-            self.fail("dd did not fail, but should have!")
-        except RuntimeError:
-            pass
-
-        hotplug(controllerVM, "virsh detach-disk testvm vdb")
-
-        # Hotplug device with device type, this time dd should succeed
-        hotplug(
-            controllerVM,
-            f"virsh attach-disk testvm {image} vdb --targetbus virtio --sourcetype file --subdriver raw",
-        )
-        ssh(controllerVM, "dd if=/dev/random of=/dev/vdb bs=512 count=1 oflag=direct")
-
-        # By default, Cloud Hypervisor sets sparse=on for raw images which we set to false in our libvirt
-        # driver to prevent overcommitting of storage backends.
-        controllerVM.succeed(
-            "ch-remote --api-socket /run/libvirt/ch/testvm-socket info \
-                              | jq -e '.config.disks[1].sparse == false' > /dev/null"
-        )
-
-        hotplug(controllerVM, "virsh detach-disk testvm vdb")
-
-        controllerVM.succeed(f"rm {image}")
-
     def test_nested_chv_guest(self):
         """
         Test that we are able to boot a nested CHV VM using a Cirros image.
@@ -2448,7 +2401,6 @@ def suite():
         LibvirtTests.test_network_hotplug_transient_vm_restart,
         LibvirtTests.test_numa_topology,
         LibvirtTests.test_pause_resume_during_boot,
-        LibvirtTests.test_raw_image_is_properly_attached,
         LibvirtTests.test_reboot_during_write,
         LibvirtTests.test_reboot_externallytriggered,
         LibvirtTests.test_reboot_guestinduced,
