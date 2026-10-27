@@ -87,7 +87,7 @@ def test_migration(
 
     hotplug(
         sender,
-        "virsh attach-disk --domain testvm --target vdb --persistent --source /var/lib/libvirt/storage-pools/nfs-share/disk.img",
+        "virsh attach-disk --domain testvm --target vdb --persistent --source /var/lib/libvirt/storage-pools/nfs-share/disk.img --subdriver raw",
     )
 
     # Assemble the migration command

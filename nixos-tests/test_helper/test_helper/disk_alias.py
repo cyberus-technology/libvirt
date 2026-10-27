@@ -36,7 +36,7 @@ def check_omitted_disk_alias_is_restored(
     serial_option = "" if expect_cookie else " --serial omitted-alias-volume"
     hotplug(
         controllerVM,
-        "virsh attach-disk testvm /var/lib/libvirt/storage-pools/nfs-share/disk.img vdb "
+        "virsh attach-disk testvm /var/lib/libvirt/storage-pools/nfs-share/disk.img vdb --subdriver raw "
         f"--alias ua-migration-volume{serial_option}",
     )
 
@@ -100,7 +100,7 @@ def check_live_migration_disk_alias(
     controllerVM.succeed("chmod 0666 /nfs-root/alias-disk.img")
     hotplug(
         controllerVM,
-        "virsh attach-disk --domain testvm --target vdb --persistent "
+        "virsh attach-disk --domain testvm --target vdb --persistent --subdriver raw "
         f"--source {disk_path} --serial {serial}",
     )
 
@@ -230,7 +230,7 @@ def check_disk_alias_recovery(
         hotplug(
             controllerVM,
             f"virsh attach-disk testvm /var/lib/libvirt/storage-pools/nfs-share/{target}.img "
-            f"{target} --serial {serial} --persistent",
+            f"{target} --serial {serial} --persistent --subdriver raw",
         )
     ch_disks = json.loads(controllerVM.succeed(info_command))["config"]["disks"]
     expected_aliases = {disk["path"]: disk["id"] for disk in ch_disks}

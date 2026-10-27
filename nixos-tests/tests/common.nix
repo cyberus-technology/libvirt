@@ -299,6 +299,7 @@ let
             if !(builtins.isNull cloudInit) then
               ''
                 <disk type='file' device='disk'>
+                  <driver type='raw'/>
                   <source file='${cloudInit}'/>
                   <target dev='vdb' bus='virtio'/>
                   <readonly/>
@@ -342,6 +343,7 @@ let
             if boot_index_vdc > 0 then
               "
               <disk type='file' device='disk'>
+                <driver type='raw'/>
                 <source file='/var/lib/libvirt/storage-pools/nfs-share/nixos.img'/>
                 <target dev='vdc' bus='virtio'/>
                 <address type='pci' domain='0x0000' bus='0x00' slot='0x1f' function='0x0'/>

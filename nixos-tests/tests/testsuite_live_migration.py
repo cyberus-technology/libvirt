@@ -182,7 +182,7 @@ class LibvirtTests(LibvirtTestsBase):  # type: ignore
         hotplug(computeVM, "virsh detach-device testvm /etc/new_interface.xml")
         hotplug(
             computeVM,
-            "virsh attach-disk --domain testvm --target vdb --persistent --source /var/lib/libvirt/storage-pools/nfs-share/disk.img",
+            "virsh attach-disk --domain testvm --target vdb --persistent --source /var/lib/libvirt/storage-pools/nfs-share/disk.img --subdriver raw",
         )
 
         num_devices_compute = number_of_network_devices(computeVM)
@@ -241,7 +241,7 @@ class LibvirtTests(LibvirtTestsBase):  # type: ignore
         controllerVM.succeed("chmod 0666 /nfs-root/disk.img")
         hotplug(
             controllerVM,
-            "virsh attach-disk --domain testvm --target vdb --persistent --source /var/lib/libvirt/storage-pools/nfs-share/disk.img",
+            "virsh attach-disk --domain testvm --target vdb --persistent --source /var/lib/libvirt/storage-pools/nfs-share/disk.img --subdriver raw",
         )
 
         # If there was no traffic on one of the interfaces, Linux may omit the GARP
@@ -474,7 +474,7 @@ class LibvirtTests(LibvirtTestsBase):  # type: ignore
 
         hotplug(
             controllerVM,
-            "virsh attach-disk --domain testvm --target vdb --persistent --source /var/lib/libvirt/storage-pools/nfs-share/disk1.img",
+            "virsh attach-disk --domain testvm --target vdb --persistent --source /var/lib/libvirt/storage-pools/nfs-share/disk1.img --subdriver raw",
         )
 
         controllerVM.succeed(
@@ -490,7 +490,7 @@ class LibvirtTests(LibvirtTestsBase):  # type: ignore
 
         hotplug(
             computeVM,
-            "virsh attach-disk --domain testvm --target vdb --persistent --source /var/lib/libvirt/storage-pools/nfs-share/disk1.img",
+            "virsh attach-disk --domain testvm --target vdb --persistent --source /var/lib/libvirt/storage-pools/nfs-share/disk1.img --subdriver raw",
         )
 
     def test_live_migration_with_hotplug(self):
@@ -1082,14 +1082,14 @@ class LibvirtTests(LibvirtTestsBase):  # type: ignore
         )
         hotplug(
             controllerVM,
-            "virsh attach-disk --domain testvm --target vdb --source /var/lib/libvirt/storage-pools/nfs-share/vdb.img",
+            "virsh attach-disk --domain testvm --target vdb --source /var/lib/libvirt/storage-pools/nfs-share/vdb.img --subdriver raw",
         )
         controllerVM.succeed(
             "qemu-img create -f raw /var/lib/libvirt/storage-pools/nfs-share/vdc.img 5M"
         )
         hotplug(
             controllerVM,
-            "virsh attach-disk --domain testvm --target vdc --source /var/lib/libvirt/storage-pools/nfs-share/vdc.img",
+            "virsh attach-disk --domain testvm --target vdc --source /var/lib/libvirt/storage-pools/nfs-share/vdc.img --subdriver raw",
         )
 
         devices = pci_devices_by_bdf(controllerVM)
@@ -1141,7 +1141,7 @@ class LibvirtTests(LibvirtTestsBase):  # type: ignore
         )
         hotplug(
             controllerVM,
-            "virsh attach-disk --domain testvm --target vdb --source /var/lib/libvirt/storage-pools/nfs-share/vdb.img",
+            "virsh attach-disk --domain testvm --target vdb --source /var/lib/libvirt/storage-pools/nfs-share/vdb.img --subdriver raw",
         )
         self.assertEqual(
             pci_devices_by_bdf(controllerVM).get(
@@ -1173,7 +1173,7 @@ class LibvirtTests(LibvirtTestsBase):  # type: ignore
         # through implicit BDF allocation.
         hotplug(
             controllerVM,
-            "virsh attach-disk --domain testvm --target vdb --source /var/lib/libvirt/storage-pools/nfs-share/vdb.img",
+            "virsh attach-disk --domain testvm --target vdb --source /var/lib/libvirt/storage-pools/nfs-share/vdb.img --subdriver raw",
         )
         self.assertEqual(
             pci_devices_by_bdf(controllerVM).get(
@@ -1219,7 +1219,7 @@ class LibvirtTests(LibvirtTestsBase):  # type: ignore
         )
         hotplug(
             controllerVM,
-            "virsh attach-disk --domain testvm --target vdb --source /var/lib/libvirt/storage-pools/nfs-share/cirros.img --address pci:0.0.17.0",
+            "virsh attach-disk --domain testvm --target vdb --source /var/lib/libvirt/storage-pools/nfs-share/cirros.img --address pci:0.0.17.0 --subdriver raw",
         )
 
         devices = pci_devices_by_bdf(controllerVM)
@@ -1277,7 +1277,7 @@ class LibvirtTests(LibvirtTestsBase):  # type: ignore
         )
         hotplug(
             controllerVM,
-            "virsh attach-disk --domain testvm --target vdb --source /var/lib/libvirt/storage-pools/nfs-share/cirros.img --address pci:0.0.04.0",
+            "virsh attach-disk --domain testvm --target vdb --source /var/lib/libvirt/storage-pools/nfs-share/cirros.img --address pci:0.0.04.0 --subdriver raw",
         )
         devices_before_livemig = pci_devices_by_bdf(controllerVM)
         self.assertEqual(

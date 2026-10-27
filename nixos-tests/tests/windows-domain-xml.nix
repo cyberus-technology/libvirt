@@ -45,6 +45,7 @@ let
         <devices>
           <emulator>cloud-hypervisor</emulator>
           <disk type='file' device='disk'>
+            <driver type='raw'/>
             <source file='${image}'/>
             <target dev='vda' bus='virtio'/>
           </disk>

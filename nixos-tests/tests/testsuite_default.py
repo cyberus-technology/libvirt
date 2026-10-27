@@ -586,7 +586,7 @@ class LibvirtTests(LibvirtTestsBase):  # type: ignore
 
         hotplug(
             controllerVM,
-            "virsh attach-disk --domain testvm --target vdb --persistent --source /tmp/disk.img --cache none",
+            "virsh attach-disk --domain testvm --target vdb --persistent --source /tmp/disk.img --cache none --subdriver raw",
         )
         # Only the disk with cache=none must use direct I/O.
         infoJson = json.loads(
@@ -1133,7 +1133,7 @@ class LibvirtTests(LibvirtTestsBase):  # type: ignore
         controllerVM.succeed("qemu-img create -f raw /tmp/disk.img 100M")
         hotplug(
             controllerVM,
-            "virsh attach-disk --domain testvm --target vdb --persistent --source /tmp/disk.img",
+            "virsh attach-disk --domain testvm --target vdb --persistent --source /tmp/disk.img --subdriver raw",
         )
         disk_size_guest = ssh(
             controllerVM, "lsblk --raw -b /dev/vdb | awk '{print $4}' | tail -n1"
@@ -1235,7 +1235,7 @@ class LibvirtTests(LibvirtTestsBase):  # type: ignore
 
         hotplug(
             controllerVM,
-            "virsh attach-disk --domain testvm --target vdb --source /tmp/disk.img --mode readonly",
+            "virsh attach-disk --domain testvm --target vdb --source /tmp/disk.img --mode readonly --subdriver raw",
         )
 
         # Check for shared read lock
@@ -1250,7 +1250,7 @@ class LibvirtTests(LibvirtTestsBase):  # type: ignore
 
         hotplug(
             controllerVM,
-            "virsh attach-disk --domain testvm --target vdb --source /tmp/disk.img",
+            "virsh attach-disk --domain testvm --target vdb --source /tmp/disk.img --subdriver raw",
         )
 
         # Check for exclusive write lock
@@ -1284,7 +1284,7 @@ class LibvirtTests(LibvirtTestsBase):  # type: ignore
         controllerVM.succeed("qemu-img create -f qcow2 /tmp/disk.img 100M")
         hotplug(
             controllerVM,
-            "virsh attach-disk --domain testvm --target vdb --persistent --source /tmp/disk.img",
+            "virsh attach-disk --domain testvm --target vdb --persistent --source /tmp/disk.img --subdriver qcow2",
         )
         disk_size_guest = ssh(
             controllerVM, "lsblk --raw -b /dev/vdb | awk '{print $4}' | tail -n1"
@@ -1320,7 +1320,7 @@ class LibvirtTests(LibvirtTestsBase):  # type: ignore
         # Attach to implicit BDF 0:04.0, transient
         hotplug(
             controllerVM,
-            "virsh attach-disk --domain testvm --target vdb --source /var/lib/libvirt/storage-pools/nfs-share/vdb.img",
+            "virsh attach-disk --domain testvm --target vdb --source /var/lib/libvirt/storage-pools/nfs-share/vdb.img --subdriver raw",
         )
         # Attach to implicit BDF 0:05.0, persistent
         hotplug(
@@ -1387,7 +1387,7 @@ class LibvirtTests(LibvirtTestsBase):  # type: ignore
         )
         hotplug(
             controllerVM,
-            "virsh attach-disk --domain testvm --target vdb --source /var/lib/libvirt/storage-pools/nfs-share/vdb.img --persistent",
+            "virsh attach-disk --domain testvm --target vdb --source /var/lib/libvirt/storage-pools/nfs-share/vdb.img --persistent --subdriver raw",
         )
         # Check that vdb is added to the same PCI slot in both definitions
         devices_persistent_vdb_added = parse_devices_from_dom_def(
@@ -1474,7 +1474,7 @@ class LibvirtTests(LibvirtTestsBase):  # type: ignore
         )
         hotplug(
             controllerVM,
-            "virsh attach-disk --domain testvm --target vdb --source /var/lib/libvirt/storage-pools/nfs-share/vdb.img",
+            "virsh attach-disk --domain testvm --target vdb --source /var/lib/libvirt/storage-pools/nfs-share/vdb.img --subdriver raw",
         )
         # Following the expected semantics, we now have a disk device in the transient definition that is missing in
         # the persistent one. We need to find its BDF in the transient definition and check that there is no match
@@ -1508,7 +1508,7 @@ class LibvirtTests(LibvirtTestsBase):  # type: ignore
         )
         hotplug(
             controllerVM,
-            "virsh attach-disk --domain testvm --persistent --target vdc --source /var/lib/libvirt/storage-pools/nfs-share/vdc.img",
+            "virsh attach-disk --domain testvm --persistent --target vdc --source /var/lib/libvirt/storage-pools/nfs-share/vdc.img --subdriver raw",
         )
 
         # So now look into the config
@@ -1595,7 +1595,7 @@ class LibvirtTests(LibvirtTestsBase):  # type: ignore
         # ID 32. This should fail.
         hotplug_fail(
             controllerVM,
-            "virsh attach-disk --domain testvm --target vdb --source /var/lib/libvirt/storage-pools/nfs-share/vdb.img --persistent --address pci:0.0.20.0",
+            "virsh attach-disk --domain testvm --target vdb --source /var/lib/libvirt/storage-pools/nfs-share/vdb.img --persistent --address pci:0.0.20.0 --subdriver raw",
         )
         wait_for_guest_pci_device_enumeration(controllerVM, num_before_expected_failure)
 
@@ -1630,7 +1630,7 @@ class LibvirtTests(LibvirtTestsBase):  # type: ignore
         )
         hotplug_fail(
             controllerVM,
-            "virsh attach-disk --domain testvm --target vdb --source /var/lib/libvirt/storage-pools/nfs-share/vdb.img --persistent --address pci:0.0.1f.5",
+            "virsh attach-disk --domain testvm --target vdb --source /var/lib/libvirt/storage-pools/nfs-share/vdb.img --persistent --address pci:0.0.1f.5 --subdriver raw",
         )
         # Even though we only land here if the command above failed, we
         # should still ensure that no new devices magically appeared.
@@ -1989,7 +1989,7 @@ class LibvirtTests(LibvirtTestsBase):  # type: ignore
             controllerVM.succeed(f"qemu-img create -f raw /tmp/disk{i}.img 1M")
             hotplug(
                 controllerVM,
-                f"virsh attach-disk --domain testvm --target vd{string.ascii_lowercase[i]} --persistent --source /tmp/disk{i}.img",
+                f"virsh attach-disk --domain testvm --target vd{string.ascii_lowercase[i]} --persistent --source /tmp/disk{i}.img --subdriver raw",
             )
 
         controllerVM.succeed("cp /var/lib/libvirt/ch/testvm.xml /tmp/domain.xml")
@@ -2138,7 +2138,7 @@ class LibvirtTests(LibvirtTestsBase):  # type: ignore
                 <disk type='file' device='disk'>
                     <source file='{source}'/>
                     <target dev='vdb' bus='virtio'/>
-                    <driver queues='2'/>
+                    <driver type='raw' queues='2'/>
                 </disk>
                 EOF
                 """).strip()
