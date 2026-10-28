@@ -2085,14 +2085,33 @@ int virCHMonitorMigrationReceive(virCHMonitor *mon,
     }
 
     if (vmdef->numa && virDomainNumaGetNodeCount(vmdef->numa)) {
-        virJSONValue *zones_value = virJSONValueObjectGet(mem_zones, "zones");
+        virJSONValue *zones = virJSONValueObjectGetArray(mem_zones, "zones");
+        g_autoptr(virJSONValue) updates = virJSONValueNewArray();
+
         DBG("Append numa data to request");
-        // Create a copy of the object so we don't mess with the numa member of args
-        if (zones_value) {
-            zones_value = virJSONValueCopy(zones_value);
+        if (!zones) {
+            rc = -1;
+            goto err;
         }
-        if (!zones_value || virJSONValueObjectAppend(content, "zones", &zones_value) != 0) {
-            DBG("virJSONValueObjectAppend failed for zones");
+
+        for (i = 0; i < virJSONValueArraySize(zones); i++) {
+            virJSONValue *zone = virJSONValueArrayGet(zones, i);
+            const char *id = virJSONValueObjectGetString(zone, "id");
+            g_autoptr(virJSONValue) update = virJSONValueNewObject();
+            unsigned long long host_node;
+
+            if (!id ||
+                virJSONValueObjectAppendString(update, "id", id) < 0 ||
+                virJSONValueObjectGetNumberUlong(zone, "host_numa_node", &host_node) != 0 ||
+                virJSONValueObjectAppendNumberUlong(update, "host_numa_node", host_node) < 0 ||
+                virJSONValueArrayAppend(updates, &update) < 0) {
+                rc = -1;
+                goto err;
+            }
+        }
+
+        if (virJSONValueObjectAppend(content, "zone_updates", &updates) < 0) {
+            DBG("virJSONValueObjectAppend failed for zone_updates");
             rc = -1;
             goto err;
         }
