@@ -134,6 +134,9 @@ virCHMonitorBuildCPUJson(virJSONValue *content, virDomainDef *vmdef)
             return -1;
         if (virJSONValueObjectAppendNumberInt(cpus, "max_vcpus", vmdef->maxvcpus) < 0)
             return -1;
+        /* Preserve nested virtualization now that CH defaults it to off. */
+        if (virJSONValueObjectAppendBoolean(cpus, "nested", true) < 0)
+            return -1;
         if (virCHMonitorBuildCPUTopologyJson(topology, vmdef) == 0) {
             DBG("Using CPU topology: %d:%d:%d:%d", vmdef->cpu->sockets, vmdef->cpu->dies, vmdef->cpu->cores, vmdef->cpu->threads);
             if (virJSONValueObjectAppend(cpus, "topology", &topology) < 0)
