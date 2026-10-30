@@ -956,7 +956,7 @@ class LibvirtTests(LibvirtTestsBase):  # type: ignore
             # shutdown happens too fast.
             ssh(
                 controllerVM,
-                "\"nohup sh -c 'sleep 5 && shutdown now' >/dev/null 2>&1 &\"",
+                "nohup sh -c 'sleep 5 && shutdown now' >/dev/null 2>&1 &",
             )
 
             wait_until_succeed(is_shutoff)
@@ -996,9 +996,7 @@ class LibvirtTests(LibvirtTestsBase):  # type: ignore
         content = "[Login]\nHandlePowerKey=ignore\n"
         ssh(
             controllerVM,
-            shlex.quote(
-                f"printf '{content}' > /run/systemd/logind.conf.d/ignore-power-key.conf"
-            ),
+            f"printf '{content}' > /run/systemd/logind.conf.d/ignore-power-key.conf",
         )
         ssh(controllerVM, "systemctl restart systemd-logind")
 
@@ -1951,9 +1949,7 @@ class LibvirtTests(LibvirtTestsBase):  # type: ignore
         # Wait until dd has written data and is still running.
         ssh(
             controllerVM,
-            shlex.quote(
-                "until test -s /mnt/test && pgrep -x dd >/dev/null; do sleep 0.1; done"
-            ),
+            "until test -s /mnt/test && pgrep -x dd >/dev/null; do sleep 0.1; done",
         )
 
         controllerVM.succeed("virsh shutdown testvm")
@@ -2083,7 +2079,7 @@ class LibvirtTests(LibvirtTestsBase):  # type: ignore
         wait_for_ssh(controllerVM)
 
         boot_id = ssh(controllerVM, "cat /proc/sys/kernel/random/boot_id").strip()
-        ssh(controllerVM, shlex.quote("echo triple > /sys/kernel/reboot/type"))
+        ssh(controllerVM, "echo triple > /sys/kernel/reboot/type")
 
         try:
             ssh(controllerVM, "systemctl reboot")

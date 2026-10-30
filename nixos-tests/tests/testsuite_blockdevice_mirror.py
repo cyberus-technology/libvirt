@@ -579,7 +579,7 @@ class LibvirtTests(LibvirtTestsBase):  # type: ignore
 
         ssh(
             controllerVM,
-            f"\"sh -c 'printf %s {marker} | dd of=/dev/vdb bs=1 seek={marker_offset} conv=notrunc,fsync status=none'\"",
+            f"printf %s {marker} | dd of=/dev/vdb bs=1 seek={marker_offset} conv=notrunc,fsync status=none",
         )
 
         for path in (source, destination):
@@ -607,7 +607,7 @@ class LibvirtTests(LibvirtTestsBase):  # type: ignore
 
         ssh(
             controllerVM,
-            f"\"sh -c 'printf %s {marker} | dd of=/dev/vdb bs=1 seek={marker_offset} conv=notrunc,fsync status=none'\"",
+            f"printf %s {marker} | dd of=/dev/vdb bs=1 seek={marker_offset} conv=notrunc,fsync status=none",
         )
         self.waitForMirrorReady(copyPath=destination)
         self.pivotAndVerifyMirror(copyPath=destination)
