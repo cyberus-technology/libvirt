@@ -4620,6 +4620,7 @@ chDomainMigrateFinish3(virConnectPtr dconn,
     virDomainObj *vm = NULL;
     virDomainPtr dom = NULL;
     virDomainDef *vmdef = NULL;
+    virDomainDef *persistentDefToRepair = NULL;
     virCHDomainObjPrivate *priv = NULL;
     g_autoptr(virCHDriverConfig) cfg = virCHDriverGetConfig(driver);
 
@@ -4685,16 +4686,35 @@ chDomainMigrateFinish3(virConnectPtr dconn,
             DBG("Could not update console info. Consider that non-fatal.");
         }
 
+        if (flags & VIR_MIGRATE_PERSIST_DEST) {
+            bool newPersistentDef = !vm->newDef;
+
+            vm->persistent = 1;
+            if (!(vmdef = virDomainObjGetPersistentDef(driver->xmlopt, vm, NULL)))
+                goto error;
+            if (newPersistentDef)
+                persistentDefToRepair = vmdef;
+        }
+
+        /* CH restores disk IDs from its migration stream, independently of
+         * the destination XML. Always reconcile before saving either
+         * definition: old sources omit disk cookies, and even new cookies
+         * can contain aliases from an already corrupted source.
+         * The guest has already moved: a repair failure must not roll back
+         * the migration or terminate the running destination VM. */
+        if (chDomainReconcileDiskAliases(vm, persistentDefToRepair) < 0) {
+            VIR_WARN("DISK ALIAS REPAIR FAILED after migration of domain '%s': %s. "
+                     "The VM remains running; disk operations require attention!",
+                     vm->def->name, virGetLastErrorMessage());
+            virResetLastError();
+        }
+
         if (virDomainObjSave(vm, driver->xmlopt, cfg->stateDir) < 0) {
             DBG("Failed to save status on vm %s", vm->def->name);
         }
 
         if (flags & VIR_MIGRATE_PERSIST_DEST) {
             DBG("Persisting domain at destination");
-            vm->persistent = 1;
-            if (!(vmdef = virDomainObjGetPersistentDef(driver->xmlopt, vm, NULL)))
-                goto error;
-
             if (virDomainDefSave(vmdef, driver->xmlopt, cfg->configDir) < 0)
                 goto error;
         }

@@ -48,8 +48,6 @@
 
 #define VIR_FROM_THIS VIR_FROM_CH
 
-#define VIRTIO_BLK_ID_BYTES 20
-
 VIR_LOG_INIT("ch.ch_monitor");
 
 VIR_ENUM_IMPL(virCHMigrationProgressOngoingPhase,
