@@ -10,6 +10,9 @@ import unittest
 try:
     from ..test_helper.test_helper import (  # type: ignore
         LibvirtTestsBase,
+        check_disk_alias_recovery,
+        check_live_migration_disk_alias,
+        check_omitted_disk_alias,
         hotplug,
         initialComputeVMSetup,
         initialControllerVMSetup,
@@ -19,6 +22,9 @@ except Exception:
     if not TYPE_CHECKING:
         from test_helper import (
             LibvirtTestsBase,
+            check_disk_alias_recovery,
+            check_live_migration_disk_alias,
+            check_omitted_disk_alias,
             hotplug,
             initialComputeVMSetup,
             initialControllerVMSetup,
@@ -108,6 +114,26 @@ class LibvirtTests(LibvirtTestsBase):  # type: ignore
         initialControllerVMSetup(controllerVM)
         initialComputeVMSetup(computeVM)
 
+    def test_live_migration_with_unchanged_disk_alias(self):
+        """An unaffected old-source disk retains its ID without repair warnings."""
+        check_live_migration_disk_alias(self, change_alias=False)
+
+    def test_live_migration_with_changed_disk_alias(self):
+        """Ignore Nova's replacement alias when migrating from old libvirt."""
+        check_live_migration_disk_alias(self, change_alias=True)
+
+    def test_live_migration_preserves_omitted_disk_alias(self):
+        """Restore omitted aliases without disk IDs in the old migration cookie."""
+        check_omitted_disk_alias(self)
+
+    def test_live_migration_repairs_corrupted_disk_aliases(self):
+        """Repair aliases received from an already corrupted old source."""
+        check_disk_alias_recovery(self)
+
+    def test_live_migration_disk_alias_repair_failure_keeps_guest_running(self):
+        """Ambiguous serials must not roll back a completed migration."""
+        check_disk_alias_recovery(self, ambiguous_serials=True)
+
     def test_migrate_single_connection_no_tls(self):
         """Migration with a single connection and no TLS."""
         test_migration(
@@ -139,6 +165,11 @@ class LibvirtTests(LibvirtTestsBase):  # type: ignore
 def suite():
     # Test cases sorted in alphabetical order.
     testcases = [
+        LibvirtTests.test_live_migration_disk_alias_repair_failure_keeps_guest_running,
+        LibvirtTests.test_live_migration_preserves_omitted_disk_alias,
+        LibvirtTests.test_live_migration_repairs_corrupted_disk_aliases,
+        LibvirtTests.test_live_migration_with_changed_disk_alias,
+        LibvirtTests.test_live_migration_with_unchanged_disk_alias,
         LibvirtTests.test_migrate_multiple_connections_no_tls,
         LibvirtTests.test_migrate_multiple_connections_with_tls,
         LibvirtTests.test_migrate_single_connection_no_tls,

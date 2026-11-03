@@ -66,7 +66,18 @@ from .test_helper import (
     wait_until_succeed,
 )
 
+from .disk_alias import (
+    check_disk_alias_recovery,
+    check_live_migration_disk_alias,
+    check_omitted_disk_alias,
+    guest_boot_id,
+)
+
 __all__ = [
+    "check_disk_alias_recovery",
+    "check_live_migration_disk_alias",
+    "check_omitted_disk_alias",
+    "guest_boot_id",
     "DOMMEMSTAT_FIELDS",
     "DOMSTATS_FIELDS",
     "MAX_EXPECTED_WAIT_SEC",
