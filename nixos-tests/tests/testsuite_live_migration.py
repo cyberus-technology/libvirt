@@ -1,7 +1,10 @@
-from functools import partial
-from typing import TYPE_CHECKING
+import json
+import shlex
 import time
 import unittest
+import xml.etree.ElementTree as ET
+from functools import partial
+from typing import TYPE_CHECKING
 
 # Following import statement allows for proper python IDE support and proper
 # nix build support. The duplicate listing of imported functions is a bit
@@ -433,6 +436,150 @@ class LibvirtTests(LibvirtTestsBase):  # type: ignore
 
         migrate_cancel_migrate(controllerVM, computeVM)
         migrate_cancel_migrate(computeVM, controllerVM)
+
+    def test_live_migration_preserves_omitted_disk_alias(self):
+        """Restore omitted aliases from the cookie without requiring a serial."""
+        controllerVM.succeed("virsh define /etc/domain-chv.xml")
+        controllerVM.succeed("virsh start testvm")
+        wait_for_ssh(controllerVM)
+        controllerVM.succeed("qemu-img create -f raw /nfs-root/disk.img 100M")
+        controllerVM.succeed("chmod 0666 /nfs-root/disk.img")
+        hotplug(
+            controllerVM,
+            "virsh attach-disk testvm /var/lib/libvirt/storage-pools/nfs-share/disk.img vdb "
+            "--alias ua-migration-volume",
+        )
+
+        xml = ET.fromstring(controllerVM.succeed("virsh dumpxml testvm"))
+        devices = xml.find("devices")
+        assert devices is not None
+        disks = devices.findall("disk")
+        for disk in disks:
+            alias = disk.find("alias")
+            assert alias is not None
+            disk.remove(alias)
+            devices.remove(disk)
+        # The cookie must identify disks by target, not XML ordering.
+        devices.extend(reversed(disks))
+        controllerVM.succeed(
+            f"printf %s {shlex.quote(ET.tostring(xml, encoding='unicode'))} > /tmp/alias-migration.xml"
+        )
+        controllerVM.succeed(
+            "virsh migrate testvm ch+tcp://computeVM/session --persistent --live --p2p "
+            "--xml /tmp/alias-migration.xml"
+        )
+        wait_for_ssh(computeVM)
+        computeVM.succeed("systemctl restart virtchd")
+        xml = ET.fromstring(computeVM.succeed("virsh dumpxml testvm"))
+        info = json.loads(
+            computeVM.succeed(
+                "ch-remote --api-socket /run/libvirt/ch/testvm-socket info"
+            )
+        )
+        ch_disks = {disk["path"]: disk["id"] for disk in info["config"]["disks"]}
+        for disk in xml.findall("./devices/disk"):
+            source = disk.find("source")
+            alias = disk.find("alias")
+            assert source is not None and alias is not None
+            self.assertEqual(alias.get("name"), ch_disks[source.get("file")])
+        self.assertIn("ua-migration-volume", ch_disks.values())
+        hotplug(computeVM, "virsh detach-disk testvm vdb")
+        self.assertEqual(number_of_storage_devices(computeVM), 1)
+        computeVM.succeed(
+            "ch-remote --api-socket /run/libvirt/ch/testvm-socket info "
+            "| jq -e 'all(.config.disks[]; .id != \"ua-migration-volume\")'"
+        )
+
+
+    def test_live_migration_with_changed_disk_alias(self):
+        """Ignore Nova's replacement alias and preserve the source disk ID."""
+        serial = "01234567-89ab-cdef-0123-456789abcdef"
+        new_alias = "ua-nova-migrated-disk"
+        disk_path = "/var/lib/libvirt/storage-pools/nfs-share/alias-disk.img"
+        disk_xpath = "devices/disk/target[@dev='vdb']/.."
+        info_command = "ch-remote --api-socket /run/libvirt/ch/testvm-socket info"
+
+        controllerVM.succeed("virsh define /etc/domain-chv.xml")
+        controllerVM.succeed("virsh start testvm")
+        wait_for_ssh(controllerVM)
+        original_disk_count = number_of_storage_devices(controllerVM)
+
+        controllerVM.succeed("qemu-img create -f raw /nfs-root/alias-disk.img 10M")
+        controllerVM.succeed("chmod 0666 /nfs-root/alias-disk.img")
+        hotplug(
+            controllerVM,
+            "virsh attach-disk --domain testvm --target vdb --persistent "
+            f"--source {disk_path} --serial {serial}",
+        )
+
+        xml = ET.fromstring(controllerVM.succeed("virsh dumpxml testvm"))
+        alias = xml.find(f"{disk_xpath}/alias")
+        assert alias is not None
+        old_alias = alias.attrib["name"]
+        self.assertTrue(old_alias.startswith("virtio-disk"))
+        self.assertEqual(xml.findtext(f"{disk_xpath}/serial"), serial)
+
+        boot_id = guest_boot_id(controllerVM)
+        # Nova supplies a replacement alias, which must be ignored because CH
+        # restores the source ID from its migration stream.
+        alias.set("name", new_alias)
+        destination_xml = shlex.quote(ET.tostring(xml, encoding="unicode"))
+        controllerVM.succeed(
+            f"printf '%s' {destination_xml} > /tmp/domain-changed-disk-alias.xml"
+        )
+        controllerVM.succeed(
+            "virsh migrate --domain testvm --desturi ch+tcp://computeVM/session "
+            "--persistent --live --p2p --xml /tmp/domain-changed-disk-alias.xml"
+        )
+        wait_for_ssh(computeVM)
+
+        migrated_xml = ET.fromstring(computeVM.succeed("virsh dumpxml testvm"))
+        migrated_alias = migrated_xml.find(f"{disk_xpath}/alias")
+        assert migrated_alias is not None
+        self.assertEqual(migrated_alias.attrib["name"], old_alias)
+        self.assertEqual(migrated_xml.findtext(f"{disk_xpath}/serial"), serial)
+        disks = json.loads(computeVM.succeed(info_command))["config"]["disks"]
+        migrated_disks = [disk for disk in disks if disk["path"] == disk_path]
+        self.assertEqual(len(migrated_disks), 1)
+        self.assertEqual(migrated_disks[0]["id"], old_alias)
+        self.assertEqual(migrated_disks[0]["serial"], serial[:20])
+        self.assertEqual(number_of_storage_devices(computeVM), original_disk_count + 1)
+
+        warning = (
+            "DISK ALIAS OVERRIDE: domain 'testvm', disk 'vdb': ignoring "
+            f"requested migration alias '{new_alias}'; preserving source alias '{old_alias}'"
+        )
+        wait_until_succeed(
+            lambda: warning in self.get_journal_current_test(computeVM, self)
+        )
+        self.assertNotIn(
+            "DISK ALIAS REPAIRED", self.get_journal_current_test(computeVM, self)
+        )
+        computeVM.succeed("systemctl restart virtchd")
+        restarted_xml = ET.fromstring(computeVM.succeed("virsh dumpxml testvm"))
+        restarted_alias = restarted_xml.find(f"{disk_xpath}/alias")
+        assert restarted_alias is not None
+        self.assertEqual(restarted_alias.attrib["name"], old_alias)
+        self.assertEqual(guest_boot_id(computeVM), boot_id)
+
+        hotplug(
+            computeVM,
+            "virsh detach-disk --domain testvm --target vdb --persistent",
+        )
+        self.assertEqual(number_of_storage_devices(computeVM), original_disk_count)
+        for flags in ("", "--inactive"):
+            remaining_xml = ET.fromstring(
+                computeVM.succeed(f"virsh dumpxml testvm {flags}")
+            )
+            self.assertIsNone(remaining_xml.find(disk_xpath))
+
+        remaining_disks = json.loads(computeVM.succeed(info_command))["config"]["disks"]
+        self.assertEqual(
+            {disk["id"] for disk in remaining_disks},
+            {disk["id"] for disk in disks if disk["id"] != old_alias},
+        )
+        wait_for_ssh(computeVM)
+
 
     def test_live_migration_with_detach_and_attach_of_the_same_device_after_migration(
         self,
@@ -1630,12 +1777,14 @@ def suite():
         LibvirtTests.test_live_migration_network_lost,
         LibvirtTests.test_live_migration_non_peer2peer_is_not_supported,
         LibvirtTests.test_live_migration_parallel_connections,
+        LibvirtTests.test_live_migration_preserves_omitted_disk_alias,
         LibvirtTests.test_live_migration_print_versions,
         LibvirtTests.test_live_migration_statistics,
         LibvirtTests.test_live_migration_tls,
         LibvirtTests.test_live_migration_tls_without_certificates,
         LibvirtTests.test_live_migration_to_self_is_rejected,
         LibvirtTests.test_live_migration_virsh_non_blocking,
+        LibvirtTests.test_live_migration_with_changed_disk_alias,
         LibvirtTests.test_live_migration_with_detach_and_attach_of_the_same_device_after_migration,
         LibvirtTests.test_live_migration_with_guest_reboot,
         LibvirtTests.test_live_migration_with_guest_shutdown,
