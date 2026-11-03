@@ -10,6 +10,12 @@ struct _chMigrationCookieNetData {
     char *alias;
 };
 
+typedef struct _chMigrationCookieDiskData chMigrationCookieDiskData;
+struct _chMigrationCookieDiskData {
+    char *target;
+    char *alias;
+};
+
 typedef struct _chMigrationCookie chMigrationCookie;
 struct _chMigrationCookie {
 
@@ -18,6 +24,11 @@ struct _chMigrationCookie {
     int nnets;
 
     chMigrationCookieNetData *net;
+
+    /* Distinguish older cookies from a source with no disks. */
+    bool hasDiskAliases;
+    size_t ndisks;
+    chMigrationCookieDiskData *disks;
 };
 
 chMigrationCookie *
@@ -33,3 +44,7 @@ chMigrationCookieXMLFormat(virBuffer *buf,
 
 chMigrationCookie *
 chMigrationCookieParse(const char *cookiein, int cookieinlen);
+
+int
+chMigrationCookieApplyDiskAliases(const chMigrationCookie *migration_cookie,
+                                  virDomainDef *def);

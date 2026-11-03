@@ -3856,6 +3856,11 @@ chDomainMigratePrepare3(virConnectPtr dconn,
         }
     }
 
+    if (chMigrationCookieApplyDiskAliases(migration_cookie, def) < 0) {
+        rc = -1;
+        goto err_cleanup_port_alloc;
+    }
+
     if (!(vm = virDomainObjListAdd(driver->domains, &def,
                                    driver->xmlopt,
                                    VIR_DOMAIN_OBJ_LIST_ADD_LIVE |
