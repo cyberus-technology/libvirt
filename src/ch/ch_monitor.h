@@ -53,6 +53,8 @@
 
 #define VIRCH_THREAD_NAME_LEN   16
 
+#define VIRTIO_BLK_ID_BYTES 20
+
 
 typedef enum {
     virCHThreadTypeEmulator,

@@ -11,3 +11,6 @@ chAssignDeviceNetAlias(virDomainDef *def, virDomainNetDef *net);
 
 int
 chAssignDeviceAliases(virDomainDef *def);
+
+int
+chDomainReconcileDiskAliases(virDomainObj *vm, virDomainDef *persistentDef);
