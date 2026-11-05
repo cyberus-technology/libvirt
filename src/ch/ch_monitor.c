@@ -589,22 +589,17 @@ virCHMonitorBuildDiskJson(virJSONValue *disks, virDomainDiskDef *diskdef)
         if (diskdef->src->format == VIR_STORAGE_FILE_RAW) {
             if (virJSONValueObjectAppendString(disk, "image_type", "Raw") < 0)
                 return -1;
-
-            // By default, Cloud Hypervisor sets sparse=true for raw images.
-            // We set to false in here to prevent overcommitting of storage backends.
-            if (virJSONValueObjectAppendBoolean(disk, "sparse", false) < 0)
-                return -1;
         }
 
         if (diskdef->src->format == VIR_STORAGE_FILE_QCOW2) {
             if (virJSONValueObjectAppendString(disk, "image_type", "Qcow2") < 0)
                 return -1;
-
-            // By default, Cloud Hypervisor sets sparse=true for raw images.
-            // We set to false in here to prevent overcommitting of storage backends.
-            if (virJSONValueObjectAppendBoolean(disk, "sparse", false) < 0)
-                return -1;
         }
+
+        // By default, Cloud Hypervisor sets sparse=true for all images types.
+        // We set it to false in here to prevent overcommitting of storage backends.
+        if (virJSONValueObjectAppendBoolean(disk, "sparse", false) < 0)
+          return -1;
 
         if (virJSONValueArrayAppend(disks, &disk) < 0)
             return -1;
