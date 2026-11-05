@@ -746,6 +746,12 @@ virCHMonitorBuildNetJson(virDomainNetDef *net,
                                        virMacAddrFormat(&net->mac, macaddr)) < 0)
         return -1;
 
+    // Cloud-Hypervisor disables network offload by default.
+    if (virJSONValueObjectAppendBoolean(net_json, "offload_csum", true) < 0 ||
+        virJSONValueObjectAppendBoolean(net_json, "offload_tso", true) < 0 ||
+        virJSONValueObjectAppendBoolean(net_json, "offload_ufo", true) < 0)
+        return -1;
+
     if (net->virtio != NULL) {
         if (net->virtio->iommu == VIR_TRISTATE_SWITCH_ON) {
             if (virJSONValueObjectAppendBoolean(net_json, "iommu", true) < 0)
