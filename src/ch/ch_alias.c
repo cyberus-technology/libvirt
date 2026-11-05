@@ -133,8 +133,10 @@ chDiskAliasMatchesAddress(virDomainDiskDef *disk, virJSONValue *chDisk)
     unsigned int slot;
     unsigned int segment;
 
+    /* Fall back to bdf_device while it is being phased out. */
     if (disk->info.type != VIR_DOMAIN_DEVICE_ADDRESS_TYPE_PCI ||
-        virJSONValueObjectGetNumberUint(chDisk, "bdf_device", &slot) < 0 ||
+        (virJSONValueObjectGetNumberUint(chDisk, "pci_device_id", &slot) < 0 &&
+         virJSONValueObjectGetNumberUint(chDisk, "bdf_device", &slot) < 0) ||
         virJSONValueObjectGetNumberUint(chDisk, "pci_segment", &segment) < 0)
         return false;
 

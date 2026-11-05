@@ -561,7 +561,7 @@ virCHMonitorBuildDiskJson(virJSONValue *disks, virDomainDiskDef *diskdef)
         }
 
         if (diskdef->info.type == VIR_DOMAIN_DEVICE_ADDRESS_TYPE_PCI) {
-            if (virJSONValueObjectAppendNumberInt(disk, "bdf_device", diskdef->info.addr.pci.slot) < 0) {
+            if (virJSONValueObjectAppendNumberInt(disk, "pci_device_id", diskdef->info.addr.pci.slot) < 0) {
                 virReportError(VIR_ERR_INTERNAL_ERROR,
                            ("Failed to add slot number to JSON for disk with alias '%s'"),
                            diskdef->info.alias);
@@ -669,7 +669,7 @@ virCHMonitorBuildRngJson(virJSONValue *content, virDomainDef *vmdef)
 
         // We already know that we have a VIRTIO device from above
         if (vmdef->rngs[0]->info.type == VIR_DOMAIN_DEVICE_ADDRESS_TYPE_PCI) {
-            if (virJSONValueObjectAppendNumberInt(rng, "bdf_device", vmdef->rngs[0]->info.addr.pci.slot) < 0) {
+            if (virJSONValueObjectAppendNumberInt(rng, "pci_device_id", vmdef->rngs[0]->info.addr.pci.slot) < 0) {
                 virReportError(VIR_ERR_INTERNAL_ERROR,
                             ("Failed to add slot number to JSON for RNG device with alias '%s'"),
                             vmdef->rngs[0]->info.alias);
@@ -788,7 +788,7 @@ virCHMonitorBuildNetJson(virDomainNetDef *net,
     }
 
     if (net->info.type == VIR_DOMAIN_DEVICE_ADDRESS_TYPE_PCI) {
-        if (virJSONValueObjectAppendNumberInt(net_json, "bdf_device", net->info.addr.pci.slot) < 0)
+        if (virJSONValueObjectAppendNumberInt(net_json, "pci_device_id", net->info.addr.pci.slot) < 0)
             return -1;
     }
 
