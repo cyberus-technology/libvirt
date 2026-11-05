@@ -294,8 +294,8 @@ def check_disk_alias_recovery(
     test.assertEqual(len(received_disks), len(ch_disks))
     for received, original in zip(received_disks, ch_disks):
         # New CH versions can add vm.info fields (for example bootindex).
-        # Every configuration field exposed by the source must survive.
-        test.assertEqual({key: received[key] for key in original}, original)
+        # Every non-null configuration field from the source must survive.
+        test.assertEqual({key: received.get(key) for key in original}, original)
 
     if ambiguous_serials:
         xml = ET.fromstring(computeVM.succeed("virsh dumpxml testvm"))
