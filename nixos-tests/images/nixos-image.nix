@@ -93,6 +93,7 @@ nixpkgs.lib.nixosSystem {
           cloud-hypervisor
           dmidecode
           dnsmasq
+          ethtool
           iproute2
           msr
           screen

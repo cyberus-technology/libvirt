@@ -410,6 +410,41 @@ class LibvirtTests(LibvirtTestsBase):  # type: ignore
             f"/proc={reference} KiB, tolerance={tolerance_kib} KiB",
         )
 
+    def test_network_offloads(self):
+        """Check default offloads in CH and the guest's negotiated features."""
+        controllerVM.succeed("virsh define /etc/domain-chv.xml")
+        controllerVM.succeed("virsh start testvm")
+        wait_for_ssh(controllerVM)
+
+        info = json.loads(
+            controllerVM.succeed(
+                "ch-remote --api-socket /run/libvirt/ch/testvm-socket info"
+            )
+        )
+        networks = info["config"]["net"]
+        self.assertEqual(len(networks), 1)
+        network = networks[0]
+        for option in ("offload_csum", "offload_tso", "offload_ufo"):
+            self.assertIs(network[option], True, f"CH must enable {option}")
+
+        links = json.loads(ssh(controllerVM, "ip -j link show"))
+        interfaces = [
+            link["ifname"] for link in links if link.get("address") == network["mac"]
+        ]
+        self.assertEqual(len(interfaces), 1)
+        features = ssh(controllerVM, f"ethtool -k {shlex.quote(interfaces[0])}")
+        for feature in (
+            "rx-checksumming",
+            "tx-checksum-ip-generic",
+            "tx-tcp-segmentation",
+            "tx-tcp6-segmentation",
+        ):
+            self.assertRegex(
+                features,
+                rf"(?m)^\s*{re.escape(feature)}: on(?:\s|$)",
+                f"Guest must enable {feature}",
+            )
+
     def test_network_hotplug_transient_vm_restart(self):
         """
         Test whether we can attach a network device without the --persistent
@@ -2399,6 +2434,7 @@ def suite():
         LibvirtTests.test_network_hotplug_persistent_transient_detach_vm_restart,
         LibvirtTests.test_network_hotplug_persistent_vm_restart,
         LibvirtTests.test_network_hotplug_transient_vm_restart,
+        LibvirtTests.test_network_offloads,
         LibvirtTests.test_numa_topology,
         LibvirtTests.test_pause_resume_during_boot,
         LibvirtTests.test_reboot_during_write,
