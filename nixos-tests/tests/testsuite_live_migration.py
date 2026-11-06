@@ -1668,6 +1668,7 @@ def suite():
         LibvirtTests.test_live_migration_with_serial_tcp,
         LibvirtTests.test_live_migration_with_unchanged_disk_alias,
         LibvirtTests.test_live_migration_with_vcpu_pinning,
+        LibvirtTests.test_live_migration_without_serial,
     ]
 
     suite = unittest.TestSuite()
