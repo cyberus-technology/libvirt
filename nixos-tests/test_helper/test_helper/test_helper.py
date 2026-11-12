@@ -256,11 +256,12 @@ def initialControllerVMSetup(
     controllerVM.succeed("mkdir -p /var/lib/libvirt/storage-pools/nfs-share")
 
     if with_compute_vm:
-        controllerVM.wait_until_succeeds(
-            "ssh -n -o BatchMode=yes -o UserKnownHostsFile=/dev/null "
-            "-o StrictHostKeyChecking=no computeVM true",
-            timeout=MAX_EXPECTED_WAIT_SEC,
-        )
+        with _note_on_failure("SSH from controllerVM to computeVM"):
+            controllerVM.wait_until_succeeds(
+                "ssh -n -o BatchMode=yes -o UserKnownHostsFile=/dev/null "
+                "-o StrictHostKeyChecking=no computeVM true",
+                timeout=MAX_EXPECTED_WAIT_SEC,
+            )
 
     controllerVM.succeed(
         'virsh pool-define-as --name "nfs-share" --type netfs --source-host "localhost" --source-path "nfs-root" --source-format "nfs" --target "/var/lib/libvirt/storage-pools/nfs-share"'
@@ -285,11 +286,12 @@ def initialComputeVMSetup(computeVM: QemuMachine) -> None:
     computeVM.wait_for_unit("multi-user.target")
     computeVM.succeed("mkdir -p /var/lib/libvirt/storage-pools/nfs-share")
 
-    computeVM.wait_until_succeeds(
-        "ssh -n -o BatchMode=yes -o UserKnownHostsFile=/dev/null "
-        "-o StrictHostKeyChecking=no controllerVM true",
-        timeout=MAX_EXPECTED_WAIT_SEC,
-    )
+    with _note_on_failure("SSH from computeVM to controllerVM"):
+        computeVM.wait_until_succeeds(
+            "ssh -n -o BatchMode=yes -o UserKnownHostsFile=/dev/null "
+            "-o StrictHostKeyChecking=no controllerVM true",
+            timeout=MAX_EXPECTED_WAIT_SEC,
+        )
 
     computeVM.succeed(
         'virsh pool-define-as --name "nfs-share" --type netfs --source-host "controllerVM" --source-path "nfs-root" --source-format "nfs" --target "/var/lib/libvirt/storage-pools/nfs-share"'
@@ -650,6 +652,20 @@ def measure_ms(func: Callable[[], Any]) -> float:
     start = time.time()
     func()
     return (time.time() - start) * 1000
+
+
+@contextmanager
+def _note_on_failure(ctx: str) -> Iterator[None]:
+    """
+    Adds ctx as a note to a failed assertion, such as a timeout of the NixOS
+    test driver's `wait_until_succeeds()`, whose error doesn't name what it
+    waited for.
+    """
+    try:
+        yield
+    except AssertionError as e:
+        e.add_note(f"waiting for: {ctx}")
+        raise
 
 
 def wait_until_succeed(func: Callable[[], bool], ctx: str, retries: int = 600) -> None:
@@ -1492,10 +1508,11 @@ class _LibvirtEventCapture:
 
     def wait_for_event(self, event: str) -> None:
         """Waits until the specified event appears in the capture log."""
-        self.machine.wait_until_succeeds(
-            f"grep -F {shlex.quote(event)} {shlex.quote(self.event_log_path)}",
-            timeout=MAX_EXPECTED_WAIT_SEC,
-        )
+        with _note_on_failure(f"libvirt event {event!r}"):
+            self.machine.wait_until_succeeds(
+                f"grep -F {shlex.quote(event)} {shlex.quote(self.event_log_path)}",
+                timeout=MAX_EXPECTED_WAIT_SEC,
+            )
 
     def assert_no_event(self, event: str) -> None:
         """Fails if the specified event appears in the capture log."""
@@ -1533,9 +1550,10 @@ def start_net_capture(machine: QemuMachine):
     machine.succeed(
         "systemd-run --unit tcpdump-mig-l2 -- bash -lc 'tcpdump -i any -w /tmp/l2.pcap \"(arp or rarp)\" 2> /tmp/l2.log'"
     )
-    machine.wait_until_succeeds(
-        "grep -q 'listening on any' /tmp/l2.log", timeout=MAX_EXPECTED_WAIT_SEC
-    )
+    with _note_on_failure("tcpdump listening"):
+        machine.wait_until_succeeds(
+            "grep -q 'listening on any' /tmp/l2.log", timeout=MAX_EXPECTED_WAIT_SEC
+        )
 
 
 def stop_net_capture_and_assert_migration_announcements(
