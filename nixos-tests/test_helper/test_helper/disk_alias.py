@@ -150,7 +150,8 @@ def check_live_migration_disk_alias(
                 f"incorrect libvirt alias '{new_alias}' with Cloud Hypervisor disk ID '{old_alias}'"
             )
         wait_until_succeed(
-            lambda: warning in test.get_journal_current_test(computeVM, test)
+            lambda: warning in test.get_journal_current_test(computeVM, test),
+            ctx="disk alias warning in journal",
         )
     if expect_cookie or not change_alias:
         test.assertNotIn(
@@ -174,7 +175,8 @@ def check_live_migration_disk_alias(
         lambda: (
             ssh(computeVM, "blockdev --getsize64 /dev/vdb").strip()
             == str(20 * 1024 * 1024)
-        )
+        ),
+        ctx="guest sees resized /dev/vdb",
     )
     computeVM.succeed("systemctl restart virtchd")
     restarted_xml = ET.fromstring(computeVM.succeed("virsh dumpxml testvm"))
@@ -341,7 +343,8 @@ def check_disk_alias_recovery(
         lambda: (
             ssh(computeVM, "blockdev --getsize64 /dev/vdb").strip()
             == str(20 * 1024 * 1024)
-        )
+        ),
+        ctx="guest sees resized /dev/vdb",
     )
     test.assertEqual(guest_boot_id(computeVM), boot_id)
     for target in targets:

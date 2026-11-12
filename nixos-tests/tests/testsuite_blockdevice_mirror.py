@@ -116,7 +116,9 @@ class LibvirtTests(LibvirtTestsBase):  # type: ignore
                 in out
             )
 
-        wait_until_succeed(lambda: check_blockjob())
+        wait_until_succeed(
+            lambda: check_blockjob(), ctx=f"block mirror of {device} ready"
+        )
 
     def pivotAndVerifyMirror(
         self,
@@ -191,7 +193,7 @@ class LibvirtTests(LibvirtTestsBase):  # type: ignore
             except RuntimeError:
                 return True
 
-        wait_until_succeed(guest_is_offline)
+        wait_until_succeed(guest_is_offline, ctx="guest offline")
         self.assertDomainRunning()
 
     def assertDomainRunning(self):
@@ -269,7 +271,8 @@ class LibvirtTests(LibvirtTestsBase):  # type: ignore
         controllerVM.succeed("virsh blockjob --abort testvm vdb")
         self.start_fio()
         wait_until_succeed(
-            lambda: controllerVM.execute("cmp /tmp/disk.img /tmp/copy.img")[0] == 1
+            lambda: controllerVM.execute("cmp /tmp/disk.img /tmp/copy.img")[0] == 1,
+            ctx="source and copy differ",
         )
         self.stop_fio()
         self.assertEqual(copy_hash, controllerVM.succeed("md5sum /tmp/copy.img"))
@@ -291,7 +294,8 @@ class LibvirtTests(LibvirtTestsBase):  # type: ignore
                 lambda: (
                     "No current block job"
                     in controllerVM.execute("virsh blockjob --info testvm vdb")[1]
-                )
+                ),
+                ctx="no block job on vdb",
             )
             controllerVM.succeed(
                 f"df --output=avail {destination_dir} | grep -E '^[[:space:]]*0$'"
@@ -304,7 +308,10 @@ class LibvirtTests(LibvirtTestsBase):  # type: ignore
             self.assertNotIn(
                 destination_dir, out, "failed destination should not be in XML"
             )
-            wait_until_succeed(lambda: not self.is_ofd_locked(path=destination))
+            wait_until_succeed(
+                lambda: not self.is_ofd_locked(path=destination),
+                ctx=f"{destination} unlocked",
+            )
 
             # Check that the source disk is still usable in the guest
             ssh(
@@ -340,7 +347,8 @@ class LibvirtTests(LibvirtTestsBase):  # type: ignore
                 f"screen -dmS {lock_screen} flock --fcntl --start 100 --length 1 {destination} sleep 60"
             )
             wait_until_succeed(
-                lambda: self.is_ofd_locked(process="flock", path=destination)
+                lambda: self.is_ofd_locked(process="flock", path=destination),
+                ctx=f"{destination} locked by flock",
             )
 
             controllerVM.fail(
@@ -350,7 +358,8 @@ class LibvirtTests(LibvirtTestsBase):  # type: ignore
 
             controllerVM.succeed(f"screen -S {lock_screen} -X quit")
             wait_until_succeed(
-                lambda: not self.is_ofd_locked(process="flock", path=destination)
+                lambda: not self.is_ofd_locked(process="flock", path=destination),
+                ctx=f"{destination} unlocked by flock",
             )
 
             self.startStorageMigration(
@@ -517,12 +526,12 @@ class LibvirtTests(LibvirtTestsBase):  # type: ignore
         self.setupDevice()
         self.start_fio(output=fio_output)
 
-        wait_until_succeed(lambda: self.fioHasStarted(fio_output))
+        wait_until_succeed(lambda: self.fioHasStarted(fio_output), ctx="fio started")
         self.startStorageMigration(initializeSource=False)
-        wait_until_succeed(is_locked)
+        wait_until_succeed(is_locked, ctx="copy locked")
 
         controllerVM.succeed("virsh blockjob --abort testvm vdb")
-        wait_until_succeed(lambda: not is_locked())
+        wait_until_succeed(lambda: not is_locked(), ctx="copy unlocked")
 
     def test_block_copy_retains_destination_lock_after_pivot(self):
         """The pivoted destination stays exclusively locked as the active disk."""
@@ -532,7 +541,9 @@ class LibvirtTests(LibvirtTestsBase):  # type: ignore
         self.pivotAndVerifyMirror()
 
         self.assertDomainRunning()
-        wait_until_succeed(lambda: self.is_ofd_locked(path="/tmp/copy.img"))
+        wait_until_succeed(
+            lambda: self.is_ofd_locked(path="/tmp/copy.img"), ctx="copy locked"
+        )
 
     def test_block_copy_guest_poweroff(self):
         """Guest poweroff is postponed until a block copy is pivoted."""
@@ -544,7 +555,8 @@ class LibvirtTests(LibvirtTestsBase):  # type: ignore
         self.assertDomainRunning()
         self.pivotAndVerifyMirror()
         wait_until_succeed(
-            lambda: "shut off" in controllerVM.execute("virsh domstate testvm 2>&1")[1]
+            lambda: "shut off" in controllerVM.execute("virsh domstate testvm 2>&1")[1],
+            ctx="testvm shut off",
         )
 
     def test_block_copy_prevents_reboot(self):
@@ -708,7 +720,8 @@ class LibvirtTests(LibvirtTestsBase):  # type: ignore
 
         controllerVM.succeed("virsh shutdown testvm")
         wait_until_succeed(
-            lambda: "shut off" in controllerVM.execute("virsh domstate testvm 2>&1")[1]
+            lambda: "shut off" in controllerVM.execute("virsh domstate testvm 2>&1")[1],
+            ctx="testvm shut off",
         )
 
         try:
@@ -771,7 +784,7 @@ class LibvirtTests(LibvirtTestsBase):  # type: ignore
         self.setupDevice(sizeMb=diskSize)
         ssh(controllerVM, f"rm -f {fio_output}")
         self.start_fio(output=fio_output)
-        wait_until_succeed(lambda: self.fioHasStarted(fio_output))
+        wait_until_succeed(lambda: self.fioHasStarted(fio_output), ctx="fio started")
 
         # Start the workload before blockcopy to slow down the copy process
         self.startStorageMigration(initializeSource=False, sizeMb=diskSize)
@@ -854,7 +867,8 @@ class LibvirtTests(LibvirtTestsBase):  # type: ignore
                     controllerVM, f"grep -q 'IOPS=' {fio_output} && echo yes || echo no"
                 ).strip()
                 == "yes"
-            )
+            ),
+            ctx="fio reports IOPS",
         )
         progress_before_abort = int(
             ssh(controllerVM, f"grep -c 'IOPS=' {fio_output}").strip()
@@ -866,7 +880,8 @@ class LibvirtTests(LibvirtTestsBase):  # type: ignore
             lambda: (
                 int(ssh(controllerVM, f"grep -c 'IOPS=' {fio_output}").strip())
                 > progress_before_abort
-            )
+            ),
+            ctx="fio made progress",
         )
         self.stop_fio()
 
@@ -971,7 +986,7 @@ class LibvirtTests(LibvirtTestsBase):  # type: ignore
         fio_output = "/tmp/fio-multiqueue.log"
         ssh(controllerVM, f"rm -f {fio_output}")
         self.start_fio(numjobs=4, output=fio_output)
-        wait_until_succeed(lambda: self.fioHasStarted(fio_output))
+        wait_until_succeed(lambda: self.fioHasStarted(fio_output), ctx="fio started")
 
         # Start copying only after all fio workers are issuing writes, so the
         # workload overlaps the copy rather than merely the ready state.

@@ -118,13 +118,16 @@ def wait_for_guest_boot_id_change(
         except Exception:
             return False
 
-    wait_until_succeed(boot_id_changed, retries=retries)
+    wait_until_succeed(boot_id_changed, retries=retries, ctx="guest boot ID changed")
 
 
 def wait_for_migration_screen_to_finish(
     machine: QemuMachine, screen_name: str = "migrate"
 ) -> None:
-    wait_until_succeed(lambda: screen_disappeared(machine, screen_name))
+    wait_until_succeed(
+        lambda: screen_disappeared(machine, screen_name),
+        ctx=f"screen {screen_name!r} finished",
+    )
 
 
 class LibvirtTests(LibvirtTestsBase):  # type: ignore
@@ -714,7 +717,8 @@ class LibvirtTests(LibvirtTestsBase):  # type: ignore
         wait_until_succeed(
             lambda: (
                 computeVM.execute("virsh domstate testvm | grep -q 'shut off'")[0] == 0
-            )
+            ),
+            ctx="testvm shut off on computeVM",
         )
 
         assert_domain_domstate(controllerVM, "shut off")
@@ -777,7 +781,8 @@ class LibvirtTests(LibvirtTestsBase):  # type: ignore
             lambda: (
                 controllerVM.execute("virsh domstate testvm | grep -q 'shut off'")[0]
                 == 0
-            )
+            ),
+            ctx="testvm shut off on controllerVM",
         )
 
         assert_domain_domstate(controllerVM, "shut off")
@@ -860,8 +865,13 @@ class LibvirtTests(LibvirtTestsBase):  # type: ignore
             status, _ = vm.execute("virsh list | grep testvm > /dev/null")
             return status == 0
 
-        wait_until_fail(lambda: check_virsh_list(controllerVM))
-        wait_until_fail(lambda: check_virsh_list(computeVM))
+        wait_until_fail(
+            lambda: check_virsh_list(controllerVM),
+            ctx="testvm listed on controllerVM",
+        )
+        wait_until_fail(
+            lambda: check_virsh_list(computeVM), ctx="testvm listed on computeVM"
+        )
 
     def test_live_migration_tls(self):
         """
@@ -1371,9 +1381,12 @@ class LibvirtTests(LibvirtTestsBase):  # type: ignore
                     "screen -dmS migrate virsh migrate --domain testvm --desturi ch+tcp://computeVM/session --persistent --live --p2p --parallel --parallel-connections 4"
                 )
 
-                wait_until_succeed(screen_disappeared)
+                wait_until_succeed(screen_disappeared, ctx="migration finished")
 
-                wait_until_succeed(lambda: domain_is_running(computeVM))
+                wait_until_succeed(
+                    lambda: domain_is_running(computeVM),
+                    ctx="testvm running on computeVM",
+                )
                 wait_for_ssh(computeVM)
                 assert_domain_domstate(controllerVM, "shut off")
 
@@ -1410,7 +1423,10 @@ class LibvirtTests(LibvirtTestsBase):  # type: ignore
         ssh(controllerVM, "systemd-run --on-active=2s --unit=test-reboot reboot")
 
         wait_for_migration_screen_to_finish(controllerVM)
-        wait_until_succeed(lambda: domain_is_running(computeVM))
+        wait_until_succeed(
+            lambda: domain_is_running(computeVM),
+            ctx="testvm running on computeVM",
+        )
         wait_for_guest_boot_id_change(computeVM, old_boot_id)
         wait_for_ssh(computeVM)
 

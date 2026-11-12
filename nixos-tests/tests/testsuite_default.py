@@ -961,7 +961,7 @@ class LibvirtTests(LibvirtTestsBase):  # type: ignore
                 "nohup sh -c 'sleep 5 && shutdown now' >/dev/null 2>&1 &",
             )
 
-            wait_until_succeed(is_shutoff)
+            wait_until_succeed(is_shutoff, ctx="testvm shut off")
             events.wait_for_event(
                 "event 'lifecycle' for domain 'testvm': Shutdown Finished after guest request",
             )
@@ -976,7 +976,7 @@ class LibvirtTests(LibvirtTestsBase):  # type: ignore
 
         with capture_libvirt_events(controllerVM) as events:
             controllerVM.succeed("virsh shutdown testvm")
-            wait_until_succeed(is_shutoff)
+            wait_until_succeed(is_shutoff, ctx="testvm shut off")
             events.wait_for_event(
                 "event 'lifecycle' for domain 'testvm': Shutdown Finished after host request",
             )
@@ -1014,7 +1014,7 @@ class LibvirtTests(LibvirtTestsBase):  # type: ignore
 
         with capture_libvirt_events(controllerVM) as events:
             controllerVM.succeed("virsh destroy testvm")
-            wait_until_succeed(is_shutoff)
+            wait_until_succeed(is_shutoff, ctx="testvm shut off")
             events.wait_for_event(
                 "event 'lifecycle' for domain 'testvm': Stopped Destroyed",
             )
@@ -1072,7 +1072,7 @@ class LibvirtTests(LibvirtTestsBase):  # type: ignore
             )
             return status == 0
 
-        wait_until_succeed(prompt)
+        wait_until_succeed(prompt, ctx="NixOS welcome in serial log file")
 
         controllerVM.succeed(
             textwrap.dedent("""
@@ -1892,7 +1892,11 @@ class LibvirtTests(LibvirtTestsBase):  # type: ignore
             pass
 
         # Check VM is actually rebooting
-        wait_until_succeed(lambda: vm_unresponsive(controllerVM), retries=20)
+        wait_until_succeed(
+            lambda: vm_unresponsive(controllerVM),
+            retries=20,
+            ctx="guest unresponsive (reboot)",
+        )
 
         # Wait for reboot to finish
         wait_for_ssh(controllerVM)
@@ -1915,7 +1919,11 @@ class LibvirtTests(LibvirtTestsBase):  # type: ignore
         controllerVM.succeed("virsh reboot testvm")
 
         # Check VM is actually rebooting
-        wait_until_succeed(lambda: vm_unresponsive(controllerVM), retries=20)
+        wait_until_succeed(
+            lambda: vm_unresponsive(controllerVM),
+            retries=20,
+            ctx="guest unresponsive (reboot)",
+        )
 
         # Wait for reboot to finish
         wait_for_ssh(controllerVM)
@@ -2334,7 +2342,7 @@ class LibvirtTests(LibvirtTestsBase):  # type: ignore
                 "Expect that the disk ID of the cirros root file system did not change",
             )
             controllerVM.succeed("virsh shutdown testvm")
-            wait_until_succeed(is_shutoff)
+            wait_until_succeed(is_shutoff, ctx="testvm shut off")
 
         def do_cirros_boot():
             """
@@ -2361,7 +2369,7 @@ class LibvirtTests(LibvirtTestsBase):  # type: ignore
                 "We expect the boot and the root partitions",
             )
             controllerVM.succeed("virsh shutdown testvm")
-            wait_until_succeed(is_shutoff)
+            wait_until_succeed(is_shutoff, ctx="testvm shut off")
 
         def do_boot_with_boot_index(boot_cirros_first: bool):
             """
@@ -2402,7 +2410,7 @@ class LibvirtTests(LibvirtTestsBase):  # type: ignore
                     "We expect the boot and the root partitions + the NixOS partition.",
                 )
                 controllerVM.succeed("virsh shutdown testvm")
-                wait_until_succeed(is_shutoff)
+                wait_until_succeed(is_shutoff, ctx="testvm shut off")
             else:
                 check_nixos_booted()
 

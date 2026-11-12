@@ -319,6 +319,7 @@ def _kill_cloud_hypervisor(machine: QemuMachine) -> bool:
     wait_until_succeed(
         lambda: machine.execute("pidof cloud-hypervisor")[0] != 0,
         retries=CLOUD_HYPERVISOR_EXIT_RETRIES,
+        ctx="cloud-hypervisor exited",
     )
     return True
 
@@ -651,17 +652,15 @@ def measure_ms(func: Callable[[], Any]) -> float:
     return (time.time() - start) * 1000
 
 
-def wait_until_succeed(
-    func: Callable[[], bool], retries: int = 600, ctx: str | None = None
-) -> None:
+def wait_until_succeed(func: Callable[[], bool], ctx: str, retries: int = 600) -> None:
     """
     Waits for the command to succeed.
     After each failure, it waits 100ms.
 
     :param func: Function that is expected to succeed. It must not throw
            exceptions but translate its exceptions to True/False.
-    :param retries: Amount of retries.
     :param ctx: Short description of the awaited condition for the error.
+    :param retries: Amount of retries.
     """
     for _i in range(retries):
         if func():
@@ -672,18 +671,16 @@ def wait_until_succeed(
     )
 
 
-def wait_until_fail(
-    func: Callable[[], bool], retries: int = 600, ctx: str | None = None
-) -> None:
+def wait_until_fail(func: Callable[[], bool], ctx: str, retries: int = 600) -> None:
     """
     Waits for the command to fail.
     After each success, it waits 100ms.
 
     :param fxunc: Function that is expected to fail. It must not throw
            exceptions but translate its exceptions to True/False.
-    :param retries: Amount of retries.
     :param ctx: Short description of the condition that should go away, for
            the error.
+    :param retries: Amount of retries.
     """
     for i in range(retries):
         if not func():
@@ -717,7 +714,9 @@ def wait_for_host_shares_ipv4_network(
 
     try:
         wait_until_succeed(
-            lambda: ip_in_local_192_168_net24(machine, ip), retries=retries
+            lambda: ip_in_local_192_168_net24(machine, ip),
+            retries=retries,
+            ctx=f"host IP in the /24 network of {ip}",
         )
     except RuntimeError as e:
         _, output = machine.execute("ip a")
@@ -1074,7 +1073,11 @@ def wait_for_guest_pci_device_enumeration(machine: QemuMachine, new_count: int) 
     :return:
     """
     # retries=20 => max 2s => we expect hotplug events to be relatively quick
-    wait_until_succeed(lambda: number_of_devices(machine) == new_count, 20)
+    wait_until_succeed(
+        lambda: number_of_devices(machine) == new_count,
+        retries=20,
+        ctx=f"{new_count} PCI devices in guest",
+    )
 
 
 def number_of_free_hugepages(machine: QemuMachine) -> int:
@@ -1104,7 +1107,11 @@ def allocate_hugepages(machine: QemuMachine, nr_hugepages: int) -> None:
 
     # To make sure that allocating the hugepages doesn't just take a moment,
     # we check few times.
-    wait_until_succeed(lambda: number_of_free_hugepages(machine) == nr_hugepages, 10)
+    wait_until_succeed(
+        lambda: number_of_free_hugepages(machine) == nr_hugepages,
+        retries=10,
+        ctx=f"{nr_hugepages} free hugepages",
+    )
 
 
 def get_local_192_168_net24_networks(
@@ -1405,6 +1412,7 @@ def setup_nested_cirros(machine: QemuMachine) -> None:
         wait_until_succeed(
             nested_guest_available,
             retries=100,
+            ctx="nested cloud-hypervisor API reachable",
         )
     except RuntimeError as e:
         ch_log = ssh(machine, "cat /tmp/nested-cirros.log || true")
@@ -1435,7 +1443,7 @@ def assert_nested_cirros_connectivity(machine: QemuMachine) -> None:
             pass
         return False
 
-    wait_until_succeed(login)
+    wait_until_succeed(login, ctx="nested guest pingable")
 
 
 def start_stress_in_vm(machine: QemuMachine):
