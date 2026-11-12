@@ -651,7 +651,9 @@ def measure_ms(func: Callable[[], Any]) -> float:
     return (time.time() - start) * 1000
 
 
-def wait_until_succeed(func: Callable[[], bool], retries: int = 600) -> None:
+def wait_until_succeed(
+    func: Callable[[], bool], retries: int = 600, ctx: str | None = None
+) -> None:
     """
     Waits for the command to succeed.
     After each failure, it waits 100ms.
@@ -659,28 +661,37 @@ def wait_until_succeed(func: Callable[[], bool], retries: int = 600) -> None:
     :param func: Function that is expected to succeed. It must not throw
            exceptions but translate its exceptions to True/False.
     :param retries: Amount of retries.
+    :param ctx: Short description of the awaited condition for the error.
     """
     for _i in range(retries):
         if func():
             return
         time.sleep(0.1)
-    raise RuntimeError("function didn't succeed")
+    raise RuntimeError(
+        f"Timed out waiting for condition to become true: {ctx or '<unknown context>'}"
+    )
 
 
-def wait_until_fail(func: Callable[[], bool], retries: int = 600) -> None:
+def wait_until_fail(
+    func: Callable[[], bool], retries: int = 600, ctx: str | None = None
+) -> None:
     """
     Waits for the command to fail.
     After each success, it waits 100ms.
 
-    :param func: Function that is expected to fail. It must not throw
+    :param fxunc: Function that is expected to fail. It must not throw
            exceptions but translate its exceptions to True/False.
     :param retries: Amount of retries.
+    :param ctx: Short description of the condition that should go away, for
+           the error.
     """
     for i in range(retries):
         if not func():
             return
         time.sleep(0.1)
-    raise RuntimeError("function didn't fail")
+    raise RuntimeError(
+        f"Timed out waiting for condition to become false: {ctx or '<unknown context>'}"
+    )
 
 
 def wait_for_host_shares_ipv4_network(
