@@ -1141,8 +1141,7 @@ def get_local_192_168_net24_networks(
 
     :param machine: BaseMachine to execute the SSH command on.
     """
-    status, result = machine.execute("ip -j a")
-    assert status == 0
+    result = machine.succeed("ip -j a")
 
     interfaces: list[dict[str, object]] = json.loads(result)
     networks: List[ipaddress.IPv4Network] = []
@@ -1820,7 +1819,9 @@ def get_vcpu_wait(machine: QemuMachine, pid: int, tid: int) -> int:
     )
     status, output = machine.execute(command)
     if status != 0:
-        raise RuntimeError("Could not retrieve vcpu wait")
+        raise RuntimeError(
+            f"Could not retrieve vcpu wait from /proc/{pid}/task/{tid}/sched"
+        )
 
     value = parse_statistics(output).get("wait_ms")
     if value is None:

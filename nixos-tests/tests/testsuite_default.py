@@ -303,7 +303,7 @@ class LibvirtTests(LibvirtTestsBase):  # type: ignore
 
         vcpuinfo = controllerVM.succeed("virsh vcpuinfo testvm")
         affinity = re.search(r"^CPU Affinity:\s*(\S.*)$", vcpuinfo, re.MULTILINE)
-        assert affinity is not None
+        assert affinity is not None, f"no CPU Affinity in vcpuinfo:\n{vcpuinfo}"
         host_affinity = get_vcpu_affinity(controllerVM, pid, vcpu_tid)
         reported_affinity = {
             # Libvirt reports a y for every allowed pCPU where the vCPU can run
