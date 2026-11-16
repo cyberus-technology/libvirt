@@ -202,6 +202,16 @@ def check_live_migration_disk_alias(
     wait_for_ssh(computeVM)
 
 
+# TODO: Remove this function once prev is based on CH v54.
+def normalize_disk_config(disk: dict) -> dict:
+    disk = disk.copy()
+    # Fall back to bdf_device while it is being phased out.
+    if "pci_device_id" not in disk and "bdf_device" in disk:
+        disk["pci_device_id"] = disk["bdf_device"]
+    disk.pop("bdf_device", None)
+    return disk
+
+
 def check_disk_alias_recovery(
     test: LibvirtTestsBase,
     ambiguous_serials: bool = False,
@@ -293,8 +303,9 @@ def check_disk_alias_recovery(
     received_disks = json.loads(computeVM.succeed(info_command))["config"]["disks"]
     test.assertEqual(len(received_disks), len(ch_disks))
     for received, original in zip(received_disks, ch_disks):
-        # New CH versions can add vm.info fields (for example bootindex).
-        # Every non-null configuration field from the source must survive.
+        received = normalize_disk_config(received)
+        original = normalize_disk_config(original)
+        # New CH versions can add fields or omit null fields.
         test.assertEqual({key: received.get(key) for key in original}, original)
 
     if ambiguous_serials:
