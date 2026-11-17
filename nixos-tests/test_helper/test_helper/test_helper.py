@@ -150,11 +150,13 @@ class LibvirtTestsBase(unittest.TestCase):
         self.test_start_time = time.time()
 
     def tearDown(self):
-        if self.controllerVM:
-            teardownTestControllerVM(self.controllerVM, self)
-
+        # Stop compute guests before controller teardown restores the shared
+        # disk images. Migrated guests may still be writing to those images.
         if self.computeVM:
             teardownTestComputeVM(self.computeVM, self)
+
+        if self.controllerVM:
+            teardownTestControllerVM(self.controllerVM, self)
 
         duration_s = int(time.time() - self.test_start_time)
         print(f"\n\nRan test {self._testMethodName} in {duration_s}s\n\n")
