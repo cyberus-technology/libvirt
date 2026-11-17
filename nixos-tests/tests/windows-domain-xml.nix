@@ -56,8 +56,11 @@ let
             <driver queues='1'/>
             <address type='pci' domain='0x0000' bus='0x00' slot='0x02' function='0x0'/>
           </interface>
-          <serial type='pty'>
+          <serial type='tcp'>
+            <source mode="bind" host="127.0.0.1" service="2222" tls="no"/>
+            <protocol type="raw"/>
             <target port='0'/>
+            <log file="/tmp/vm_serial.log" append="off"/>
           </serial>
         </devices>
       </domain>

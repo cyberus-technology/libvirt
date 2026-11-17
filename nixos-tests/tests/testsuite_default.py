@@ -205,7 +205,8 @@ class LibvirtTests(LibvirtTestsBase):  # type: ignore
     def test_statistics_multiple_domains(self):
         """domstats must return statistics for every running domain without hanging."""
         # Give the second domain its own disk and UUID. It does not need a
-        # network interface, which would otherwise reuse testvm's TAP device.
+        # network interface, which would otherwise reuse testvm's TAP device,
+        # or a serial, which would otherwise reuse testvm's TCP port and log.
         second_disk = "/var/lib/libvirt/storage-pools/nfs-share/nixos-second.img"
         self.addCleanup(controllerVM.succeed, f"rm -f {second_disk} /tmp/second.xml")
         controllerVM.succeed(f"cp /etc/nixos.img {second_disk}")
@@ -218,6 +219,7 @@ class LibvirtTests(LibvirtTestsBase):  # type: ignore
             "-e '/<memory /s/>.*</>524288</' "
             "-e '/<currentMemory /s/>.*</>524288</' "
             r"-e '/<interface /,/<\/interface>/d' "
+            r"-e '/<serial /,/<\/serial>/d' "
             "/etc/domain-chv.xml > /tmp/second.xml"
         )
         controllerVM.succeed("virsh define /etc/domain-chv.xml")
@@ -1066,7 +1068,7 @@ class LibvirtTests(LibvirtTestsBase):  # type: ignore
         # Check that we log to file in addition to the TCP socket
         def prompt():
             status, _ = controllerVM.execute(
-                "grep -q 'Welcome to NixOS' /var/log/libvirt/ch/testvm.log"
+                "grep -q 'Welcome to NixOS' /tmp/vm_serial.log"
             )
             return status == 0
 
@@ -1100,7 +1102,7 @@ class LibvirtTests(LibvirtTestsBase):  # type: ignore
         This is done with a PTY configured as a serial backend.
         """
 
-        controllerVM.succeed("virsh define /etc/domain-chv.xml")
+        controllerVM.succeed("virsh define /etc/domain-chv-serial-pty.xml")
         controllerVM.succeed("virsh start testvm")
 
         controllerVM.succeed(

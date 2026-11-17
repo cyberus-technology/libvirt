@@ -59,7 +59,10 @@ let
       numa ? false,
       hugepages ? false,
       prefault ? false,
-      serial ? "pty",
+      # TCP by default because it is the only serial backend for which the
+      # ch driver also writes a log file. This keeps the guest console
+      # interactive and records it for debugging, e.g. boot hangs.
+      serial ? "tcp",
       memoryMiB ? 2048,
       vcpuCount ? (if numa then 4 else 2),
       diskQueues ? 1,
@@ -330,7 +333,7 @@ let
                   <source mode="bind" host="127.0.0.1" service="2222" tls="no"/>
                   <protocol type="raw"/>
                   <target port='0'/>
-                  <log file="/var/log/libvirt/ch/testvm.log" append="off"/>
+                  <log file="/tmp/vm_serial.log" append="off"/>
                 </serial>
               ''
             else
@@ -716,6 +719,13 @@ in
           "C+" = {
             argument = "${pkgs.writeText "domain.xml" (virsh_ch_xml {
               serial = "";
+            })}";
+          };
+        };
+        "/etc/domain-chv-serial-pty.xml" = {
+          "C+" = {
+            argument = "${pkgs.writeText "domain.xml" (virsh_ch_xml {
+              serial = "pty";
             })}";
           };
         };
