@@ -419,7 +419,7 @@ def tearDownCommands(test: unittest.TestCase) -> List[str]:
         f"mv /var/log/libvirt/ch/testvm.log /var/log/libvirt/ch/{test._testMethodName}_vmm.log || true",
         # libvirt bug: can't cope with new or truncated log files
         # f"mv /var/log/libvirt/libvirtd.log /var/log/libvirt/{timestamp}_{self._testMethodName}_libvirtd.log",
-        f"mv /var/log/vm_serial.log /var/log/{test._testMethodName}_vm-serial.log || true",
+        f"mv /tmp/vm_serial.log /var/log/{test._testMethodName}_vm-serial.log || true",
         # Various cleanup commands to be executed on all machines
         "rm -f /tmp/*.expect",
     ]
