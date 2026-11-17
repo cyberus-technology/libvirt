@@ -115,24 +115,24 @@ class LibvirtTests(LibvirtTestsBase):  # type: ignore
         initialComputeVMSetup(computeVM)
 
     def test_live_migration_with_unchanged_disk_alias(self):
-        """An unaffected old-source disk retains its ID without repair warnings."""
-        check_live_migration_disk_alias(self, change_alias=False)
+        """An unaffected disk retains its ID without repair warnings."""
+        check_live_migration_disk_alias(self, change_alias=False, expect_cookie=True)
 
     def test_live_migration_with_changed_disk_alias(self):
-        """Ignore Nova's replacement alias when migrating from old libvirt."""
-        check_live_migration_disk_alias(self, change_alias=True)
+        """Ignore Nova's replacement alias and preserve the source disk ID."""
+        check_live_migration_disk_alias(self, change_alias=True, expect_cookie=True)
 
     def test_live_migration_preserves_omitted_disk_alias(self):
-        """Restore omitted aliases without disk IDs in the old migration cookie."""
-        check_omitted_disk_alias_is_restored(self)
+        """Restore omitted aliases from the cookie without requiring a serial."""
+        check_omitted_disk_alias_is_restored(self, expect_cookie=True)
 
     def test_live_migration_repairs_corrupted_disk_aliases(self):
-        """Repair aliases received from an already corrupted old source."""
-        check_disk_alias_recovery(self)
+        """Repair corrupted aliases even after applying a stale disk cookie."""
+        check_disk_alias_recovery(self, expect_cookie=True)
 
     def test_live_migration_disk_alias_repair_failure_keeps_guest_running(self):
         """Ambiguous serials must not roll back a completed migration."""
-        check_disk_alias_recovery(self, ambiguous_serials=True)
+        check_disk_alias_recovery(self, ambiguous_serials=True, expect_cookie=True)
 
     def test_migrate_single_connection_no_tls(self):
         """Migration with a single connection and no TLS."""
