@@ -4800,6 +4800,7 @@ chDomainAttachDeviceLive(virDomainObj *vm,
         disks = virJSONValueNewArray();
         if (virCHMonitorBuildDiskJson(disks, dev->data.disk) < 0) {
             DBG("Attach disk failed");
+            chDomainReleaseDeviceAddress(vm, &dev->data.disk->info);
             break;
         }
         payload = virJSONValueToString(virJSONValueArrayGet(disks, 0), false);
@@ -4810,6 +4811,7 @@ chDomainAttachDeviceLive(virDomainObj *vm,
 
         if (!response) {
             DBG("Attach disk failed. Invalid CH response.");
+            chDomainReleaseDeviceAddress(vm, &dev->data.disk->info);
             break;
         }
 
