@@ -599,6 +599,38 @@ class LibvirtTests(LibvirtTestsBase):  # type: ignore
             "number of network devices should match",
         )
 
+    def test_failed_disk_hotplug_releases_pci_slot(self):
+        """
+        Failed disk attachments must not exhaust the live PCI allocator.
+        """
+        controllerVM.succeed("virsh define /etc/domain-chv.xml")
+        controllerVM.succeed("virsh start testvm")
+        wait_for_ssh(controllerVM)
+
+        disk_path = "/tmp/disk.raw"
+        attach = (
+            "virsh attach-disk testvm "
+            f"{disk_path} vdb --targetbus virtio "
+            "--persistent --subdriver raw 2>&1"
+        )
+        original_xml = controllerVM.succeed("virsh dumpxml testvm")
+
+        # The backing file is missing. Retry more times than the 31 usable
+        # PCI slots to expose reservations leaked on failed attachment.
+        # The number 31 comes from the following fact: cloud-hypervisor
+        # with a single pci segment has exactly one bus. One bus can hold
+        # up to 32 devices. Device zero is always the host bridge, thus,
+        # we have 31 remaining slots.
+        for _ in range(32):
+            controllerVM.fail(attach)
+
+        self.assertEqual(controllerVM.succeed("virsh dumpxml testvm"), original_xml)
+
+        # Fix the missing file without restarting the guest or virtchd.
+        # The attachment must succeed and the guest must see the new device.
+        controllerVM.succeed(f"qemu-img create -f raw {shlex.quote(disk_path)} 100M")
+        hotplug(controllerVM, attach)
+
     def test_hotplug(self):
         """
         Tests device hot plugging with multiple devices of different types:
@@ -2415,6 +2447,7 @@ def suite():
         LibvirtTests.test_disk_resize_raw,
         LibvirtTests.test_domain_with_many_devices_without_explicit_bdf,
         LibvirtTests.test_event_handler_teardown_on_virtchd_restart,
+        LibvirtTests.test_failed_disk_hotplug_releases_pci_slot,
         LibvirtTests.test_hotplug,
         LibvirtTests.test_libvirt_default_net_prefix_triggers_desynchronizing,
         LibvirtTests.test_libvirt_event_stop_failed,
