@@ -123,21 +123,25 @@ nixpkgs.lib.nixosSystem {
             eth1337 = {
               matchConfig.MACAddress = "52:54:00:e5:b8:01";
               address = [ "192.168.1.2/24" ];
+              networkConfig.ConfigureWithoutCarrier = true;
               linkConfig.RequiredForOnline = "no";
             };
             eth1338 = {
               matchConfig.MACAddress = "52:54:00:e5:b8:02";
               address = [ "192.168.2.2/24" ];
+              networkConfig.ConfigureWithoutCarrier = true;
               linkConfig.RequiredForOnline = "no";
             };
             eth1339 = {
               matchConfig.MACAddress = "52:54:00:e5:b8:03";
               address = [ "192.168.3.2/24" ];
+              networkConfig.ConfigureWithoutCarrier = true;
               linkConfig.RequiredForOnline = "no";
             };
             eth1340 = {
               matchConfig.MACAddress = "52:54:00:e5:b8:04";
               address = [ "192.168.4.2/24" ];
+              networkConfig.ConfigureWithoutCarrier = true;
               linkConfig.RequiredForOnline = "no";
             };
           };
