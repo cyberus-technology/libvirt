@@ -361,6 +361,8 @@ virCHProcessEvent(virCHMonitor *mon,
     case VIR_CH_EVENT_VM_REBOOTING:
         VIR_WITH_OBJECT_LOCK_GUARD(vm) {
             CH_DOMAIN_PRIVATE(vm)->shutdownInitiatedByHost = false;
+            // A reboot postponed during migration replaces the resume.
+            CH_DOMAIN_PRIVATE(vm)->runningReason = VIR_DOMAIN_RUNNING_UNKNOWN;
         }
         break;
 
@@ -419,8 +421,11 @@ virCHProcessEvent(virCHMonitor *mon,
         virDomainEventResumedDetailType eventDetail =  VIR_DOMAIN_EVENT_RESUMED_UNPAUSED;
 
         VIR_WITH_OBJECT_LOCK_GUARD(vm) {
-            if (vm->job && vm->job->asyncJob == VIR_ASYNC_JOB_MIGRATION_IN)
+            virCHDomainObjPrivate *priv = CH_DOMAIN_PRIVATE(vm);
+
+            if (priv->runningReason == VIR_DOMAIN_RUNNING_MIGRATED)
                 eventDetail = VIR_DOMAIN_EVENT_RESUMED_MIGRATED;
+            priv->runningReason = VIR_DOMAIN_RUNNING_UNKNOWN;
         }
 
         virCHEventEmitLifecycle(vm, VIR_DOMAIN_EVENT_RESUMED, eventDetail);

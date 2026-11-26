@@ -56,6 +56,10 @@ struct _virCHDomainObjPrivate {
      * VMM shutdown.
      */
     bool shutdownInitiatedByHost;
+    /* Reason for the next CH-initiated resume, consumed by the vm:resumed
+     * handler.
+     */
+    virDomainRunningReason runningReason;
     virDomainPCIAddressSet *pciAddrSet;
 
     /**

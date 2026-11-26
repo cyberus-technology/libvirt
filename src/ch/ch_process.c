@@ -982,6 +982,7 @@ virCHProcessPrepareDomain(virDomainObj *vm)
 
     g_atomic_int_set(&priv->shutdown_done, 0);
     priv->shutdownInitiatedByHost = false;
+    priv->runningReason = VIR_DOMAIN_RUNNING_UNKNOWN;
 
     // Attach all devices from the config to the PCI bus
     if (chAssignPciAddresses(vm->def, vm)) {

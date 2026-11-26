@@ -3912,6 +3912,8 @@ chDomainMigratePrepare3(virConnectPtr dconn,
     // Caution: We have cyclic dependency between args and priv!
     priv->args = args;
     args->priv = priv;
+    // CH resumes the guest on its own. Set before any vm:resumed can arrive.
+    priv->runningReason = VIR_DOMAIN_RUNNING_MIGRATED;
 
     args->cells = NULL;
     args->driver = driver;
